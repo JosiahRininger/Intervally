@@ -1,0 +1,140 @@
+//
+//  AppDelegate.swift
+//  Intervally
+//
+
+import WatchKit
+import os
+
+/// Owns the app's long-lived services.
+///
+/// They live here rather than in the SwiftUI `App` because the delegate is the one object
+/// guaranteed to exist when the system relaunches the app in the background to hand back a
+/// workout session — at which point no view has appeared, so a coordinator built lazily by
+/// a view would not exist yet, and the recovered session would be left running with nobody
+/// to claim it.
+@MainActor
+final class AppDelegate: NSObject, WKApplicationDelegate {
+
+    let store = WorkoutStore()
+    /// Intervally Pro. Created with the delegate, so a background workout recovery has the
+    /// cached answer before its first boundary taps.
+    let pro = ProStore()
+    private(set) lazy var coordinator = RunCoordinator(
+        store: store,
+        pro: pro,
+        // Read at every boundary, so a new choice in Settings, or Pro lapsing mid-run, takes
+        // effect at the next interval change without rebuilding anything.
+        haptics: HapticPlayer(strength: { [pro] in
+            TapStrength.effective(stored: .stored(in: SharedDefaults.suite), isPro: pro.isPro)
+        })
+    )
+
+    #if DEBUG
+    /// The live delegate, for the opt-in manual StoreKit QA test (`ManualQAStoreKit`),
+    /// which has to start the store the unit-test host skipped.
+    static weak var current: AppDelegate?
+    #endif
+
+    override init() {
+        super.init()
+        #if DEBUG
+        Self.current = self
+        applyQAPreset()
+        applyQAPro()
+        #endif
+        // Also runs on a background workout-recovery relaunch, which is when a transaction
+        // that finished while the app was away (an Ask to Buy approval, a refund) arrives.
+        if !Self.isUnitTestHost() { pro.start() }
+    }
+
+    /// True inside the unit-test host, where the real store must not run: it would finish
+    /// the test session's transactions and rewrite the cached flag behind the tests' backs.
+    /// The scheme's test action sets `INTERVALLY_UNIT_TESTS`; `XCTestConfigurationFilePath`
+    /// covers a run where the scheme's variables don't reach the watchOS host. Always false
+    /// in Release.
+    nonisolated static func isUnitTestHost(
+        _ environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        #if DEBUG
+        environment["INTERVALLY_UNIT_TESTS"] != nil || environment["XCTestConfigurationFilePath"] != nil
+        #else
+        false
+        #endif
+    }
+
+    private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "app")
+
+    func handle(_ backgroundTasks: Set<WKRefreshBackgroundTask>) {
+        for task in backgroundTasks {
+            switch task {
+            case let snapshot as WKSnapshotRefreshBackgroundTask:
+                snapshot.setTaskCompleted(
+                    restoredDefaultState: true,
+                    estimatedSnapshotExpiration: .distantFuture,
+                    userInfo: nil
+                )
+            default:
+                task.setTaskCompletedWithSnapshot(false)
+            }
+        }
+    }
+
+    #if DEBUG
+    /// QA hook for layout edge cases:
+    /// `simctl launch <udid> <bundle> -qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]`
+    /// — e.g. `-qaPreset 120,5,20,10,300,300` — rewrites the selected preset, in seconds,
+    /// instead of thirty taps on a crown. Debug builds only.
+    private func applyQAPreset() {
+        guard let spec = UserDefaults.standard.string(forKey: "qaPreset"),
+              let workout = Self.applying(qaPreset: spec, to: store.selected) else { return }
+        store.update(workout)
+        log.info("QA preset applied: \(spec, privacy: .public)")
+    }
+
+    /// `workout` with a `-qaPreset` spec applied, clamped. Nil unless the spec is three or
+    /// more comma-separated integers: one stray character would otherwise shift every later
+    /// field into the wrong slot.
+    nonisolated static func applying(qaPreset spec: String, to workout: IntervalWorkout) -> IntervalWorkout? {
+        let parsed = spec.split(separator: ",", omittingEmptySubsequences: false)
+            .map { Int($0.trimmingCharacters(in: .whitespaces)) }
+        guard parsed.count >= 3, !parsed.contains(nil) else { return nil }
+        let numbers = parsed.compactMap { $0 }
+        var copy = workout
+        copy.workSeconds = numbers[0]
+        copy.restSeconds = numbers[1]
+        copy.rounds = numbers[2]
+        if numbers.count >= 4 { copy.prepareSeconds = numbers[3] }
+        if numbers.count >= 5 { copy.warmupSeconds = numbers[4] }
+        if numbers.count >= 6 { copy.cooldownSeconds = numbers[5] }
+        return copy.clamped
+    }
+
+    /// QA hook for the paywall and the Pro features: `-qaPro pro` or `-qaPro free` pins the
+    /// entitlement for this launch, whatever StoreKit says. Debug builds only — in Release
+    /// it would be a hidden unlock (Guidelines 2.3.1(a) and 3.1.1).
+    private func applyQAPro() {
+        guard let spec = UserDefaults.standard.string(forKey: "qaPro"),
+              let isPro = Self.qaProOverride(spec) else { return }
+        pro.overrideForQA(isPro)
+        log.info("QA Pro override applied: \(spec, privacy: .public)")
+    }
+
+    /// The entitlement a `-qaPro` value pins, or nil for anything but "pro" or "free", so a
+    /// typo leaves StoreKit in charge rather than silently picking a side.
+    nonisolated static func qaProOverride(_ spec: String) -> Bool? {
+        switch spec.trimmingCharacters(in: .whitespaces).lowercased() {
+        case "pro": true
+        case "free": false
+        default: nil
+        }
+    }
+    #endif
+
+    /// The system kept a workout session alive across the app's termination and is offering
+    /// it back. Claim it: resume the run if it can be resumed, or save and end it if not.
+    func handleActiveWorkoutRecovery() {
+        log.info("system offered an active workout for recovery")
+        coordinator.recoverWorkoutSession()
+    }
+}

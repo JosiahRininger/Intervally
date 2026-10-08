@@ -1,11 +1,26 @@
-disabled_rules: # rule identifiers to exclude from running
-- trailing_whitespace
-- identifier_name
-- line_length
-- cyclomatic_complexity
-- large_tuple
-- force_try
+# Run with: swiftlint  (brew install swiftlint)
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - cyclomatic_complexity
+  - large_tuple
+  - todo
 
-excluded: # paths to ignore during linting. Takes precedence over `included`.
-- Carthage
-- Pods
+opt_in_rules:
+  # The legacy code force-unwrapped inside `if x != nil` checks and indexed an array
+  # that could be empty, which crashed the settings screen.
+  - force_unwrapping
+  - empty_count
+  - closure_spacing
+  - explicit_init
+  - first_where
+  - redundant_nil_coalescing
+  - unneeded_parentheses_in_closure_argument
+
+excluded:
+  - .build
+  - DerivedData
+
+identifier_name:
+  min_length: 2
+  allowed_symbols: ["_"]
