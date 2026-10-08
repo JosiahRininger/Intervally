@@ -7,8 +7,8 @@ cooldown phases, and stronger taps.
 
 ## Tech stack
 
-watchOS 26 · Swift 6 (strict concurrency) · SwiftUI · Observation · HealthKit · WidgetKit ·
-App Intents · StoreKit 2 · XcodeGen
+watchOS 26 + iOS 26 companion · Swift 6 (strict concurrency) · SwiftUI · Observation ·
+HealthKit · WidgetKit · App Intents · StoreKit 2 · XcodeGen
 
 ## Getting started
 
@@ -20,7 +20,16 @@ xcodegen generate
 
 ```bash
 xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.2'
+xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
+
+The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
+bundle ID `com.josiahrininger.intervally` and the App Store record; the watch app is
+`….watchkitapp` and its widget `….watchkitapp.widget`. The watch app still installs and runs
+without the iPhone app (`WKRunsIndependentlyOfCompanionApp`). Archive the `IntervallyPhone`
+scheme only: its archive carries the watch app at `IntervallyPhone.app/Watch/Intervally.app`.
+`CompanionBundleTests` (watch) and `EmbeddedWatchAppTests` (iPhone) pin the bundle rules a
+Simulator build never checks.
 
 ## How the timer survives backgrounding
 
@@ -107,7 +116,11 @@ closes whatever sheet or pushed screen was left open (`RootNavigation`).
 test bundle only, and the scheme's Run action uses it for local purchases.
 `ProStoreStoreKitTests` drives the real `ProStore` against it with `SKTestSession`, in one
 serialized suite because a process has a single StoreKit test environment, and the app's own
-store never starts in the test host (`INTERVALLY_UNIT_TESTS`). Debug builds accept
+store never starts in either test host (`INTERVALLY_UNIT_TESTS`). That suite is disabled for
+now: once the watch app has an iPhone companion, the watchOS simulator serves its StoreKit as
+the iPhone app's and Xcode 26.2's test service refuses the session (the reason is in the
+suite), and the iOS 26.3 simulator refuses an `SKTestSession` from the iPhone test host
+("not installed for development"). Debug builds accept
 `-qaPro pro` or `-qaPro free` to pin the entitlement for one launch, and
 `-qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]` to rewrite the selected preset;
 neither exists in Release.
@@ -119,13 +132,17 @@ to check before promising Pro at launch.
 ## Layout
 
 ```
-Shared/     model compiled into both the app and the widget
+Core/       model compiled into the iPhone app, the watch app and the widget
   IntervalWorkout.swift    settings (lead-in, warmup, work/rest/rounds, cooldown), clamped
   IntervalPlan.swift       immutable expanded schedule + pure position(atElapsed:)
-  RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
   WorkoutStore.swift       presets and in-flight run persistence
+  SharedDefaults.swift     the App Group on the watch; the app's own defaults on iPhone
+  UnitTestHost.swift       keeps the real ProStore off in either test host
+Shared/     watch app and widget only
+  RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
   StartWorkoutIntent.swift App Intents + Siri phrases
-Sources/
+Phone/                     the iPhone companion: App/, Workouts/, Resources/
+Sources/                   the watch app (Pro/ and Views/ProgressRing.swift also build for iPhone)
   App/                     @main App + WKApplicationDelegate
   Model/TimerEngine.swift  anchor-based run state machine
   Pro/                     Intervally Pro: the free tier's limits and ProGating, and
@@ -138,7 +155,8 @@ Sources/
                            shared dial geometry
 StoreKit/                  local StoreKit configuration (test bundle and Run action only)
 Widget/                    Smart Stack complication + Control Center control
-Tests/                     Swift Testing — 357 tests
+Tests/                     Swift Testing, watch app
+PhoneTests/                Swift Testing, iPhone app
 ```
 
 ## Design notes

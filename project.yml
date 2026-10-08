@@ -2,6 +2,8 @@ name: Intervally
 options:
   bundleIdPrefix: com.josiahrininger
   deploymentTarget:
+    # Costs nobody: watchOS 26 already needs an iPhone 11 or later on iOS 26.
+    iOS: "26.0"
     watchOS: "26.0"
   createIntermediateGroups: true
   groupSortPosition: top
@@ -11,18 +13,73 @@ settings:
     SWIFT_VERSION: "6.0"
     SWIFT_STRICT_CONCURRENCY: complete
     DEVELOPMENT_TEAM: BPW45ZHW4H
+    # One version for every bundle: the embedded watch app and its widget must carry the same
+    # CFBundleShortVersionString and CFBundleVersion as the iPhone app. Never override per target.
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_EMIT_LOC_STRINGS: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     GENERATE_INFOPLIST_FILE: NO
+    # The root bundle ID. The App Store Connect record and the Pro In-App Purchase hang off it;
+    # every other bundle ID is a dotted child of it (installd enforces the prefix).
+    APP_BUNDLE_ID: com.josiahrininger.intervally
 
 targets:
+  # The iPhone app. App Store builds are archived from this target only; the archive carries
+  # the watch app at IntervallyPhone.app/Watch/Intervally.app.
+  IntervallyPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Phone
+      - path: Core
+      - path: Sources/Pro
+      - path: Sources/Views/ProgressRing.swift
+    dependencies:
+      # "Embed Watch Content" into $(CONTENTS_FOLDER_PATH)/Watch. embed defaults to true for an
+      # app dependency; spelled out so nobody turns it off.
+      - target: Intervally
+        embed: true
+    info:
+      path: Supporting/IntervallyPhone-Info.plist
+      properties:
+        CFBundleDisplayName: Intervally
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSRequiresIPhoneOS: true
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        # Every phase colour and its contrast was measured on black (Theme.swift).
+        UIUserInterfaceStyle: Dark
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSHealthShareUsageDescription: >-
+          Intervally shows the interval workouts your Apple Watch saved to Health, with each
+          interval and your heart rate.
+    entitlements:
+      path: Supporting/IntervallyPhone.entitlements
+      properties:
+        # Read-only History. No App Group: a group container never crosses devices.
+        com.apple.developer.healthkit: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        # iPhone only (no iPad screenshot set). iPad still runs it in compatibility mode,
+        # which the app handles (WCSession.isSupported() == false).
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  # The watch app. Installs and runs with or without the iPhone app.
   Intervally:
     type: application
     platform: watchOS
     sources:
       - path: Sources
+      - path: Core
       - path: Shared
       - path: Supporting/PrivacyInfo.xcprivacy
     dependencies:
@@ -34,7 +91,10 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
-        WKWatchOnly: true
+        # Replaces WKWatchOnly, which must go: installd rejects an iPhone app that embeds a
+        # watch-only app, and WatchConnectivity has a watchOnlyApp error (7019).
+        WKCompanionAppBundleIdentifier: $(APP_BUNDLE_ID)
+        WKRunsIndependentlyOfCompanionApp: true
         # workout-processing is what actually keeps the app executing (and haptics
         # firing) with the wrist down; physical-therapy backs the extended-runtime
         # fallback used when Health access is declined.
@@ -63,13 +123,15 @@ targets:
       properties:
         com.apple.developer.healthkit: true
         com.apple.developer.usernotifications.time-sensitive: true
+        # Per device: shared with the widget on the watch, never with the iPhone.
         com.apple.security.application-groups:
           - group.com.josiahrininger.intervally
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.josiahrininger.intervally
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).watchkitapp
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        SKIP_INSTALL: NO
+        # Embedded now, so it must not also install into the archive on its own (TN3110).
+        SKIP_INSTALL: YES
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         INFOPLIST_KEY_CFBundleDisplayName: Intervally
 
@@ -78,6 +140,7 @@ targets:
     platform: watchOS
     sources:
       - path: Widget
+      - path: Core
       - path: Shared
       - path: Supporting/PrivacyInfo.xcprivacy
     info:
@@ -95,8 +158,9 @@ targets:
           - group.com.josiahrininger.intervally
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.josiahrininger.intervally.widget
-        SKIP_INSTALL: NO
+        # Must be a dotted child of the watch app's ID, not the iPhone app's (build error otherwise).
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).watchkitapp.widget
+        SKIP_INSTALL: YES
 
   IntervallyTests:
     type: bundle.unit-test
@@ -117,18 +181,55 @@ targets:
       - target: Intervally
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.josiahrininger.intervally.tests
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).watchkitapp.tests
         GENERATE_INFOPLIST_FILE: YES
         # StoreKitTest's own header (SKTestTransaction.h) uses an API it deprecates, and
         # Xcode adds the platform test frameworks as non-system paths, so clang reports
         # it on every build. Header parsing only: Swift's deprecation warnings still apply.
         OTHER_SWIFT_FLAGS: $(inherited) -Xcc -Wno-deprecated-declarations
 
+  IntervallyPhoneTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PhoneTests
+      # SKTestSession loads it by URL; test bundle only, as for the watch.
+      - path: StoreKit
+        buildPhase: resources
+    dependencies:
+      - target: IntervallyPhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).tests
+        GENERATE_INFOPLIST_FILE: YES
+        # Same StoreKitTest header warning as the watch tests.
+        OTHER_SWIFT_FLAGS: $(inherited) -Xcc -Wno-deprecated-declarations
+
 schemes:
+  # Ship scheme: Product > Archive here, and only here.
+  IntervallyPhone:
+    build:
+      targets:
+        IntervallyPhone: all
+    test:
+      targets:
+        - IntervallyPhoneTests
+      gatherCoverageData: true
+      # Tells the app it is the unit-test host, so its ProStore stays off (UnitTestHost).
+      environmentVariables:
+        INTERVALLY_UNIT_TESTS: "1"
+    run:
+      config: Debug
+      # Local StoreKit testing for Xcode's Run action only, as on the watch.
+      storeKitConfiguration: StoreKit/Intervally.storekit
+    archive:
+      config: Release
+  # Watch development and the watch unit tests (README command unchanged). Never archived on
+  # its own: a watch-only archive can't carry the purchase.
   Intervally:
     build:
       targets:
-        Intervally: all
+        Intervally: [running, testing, profiling, analyzing]
     test:
       targets:
         - IntervallyTests

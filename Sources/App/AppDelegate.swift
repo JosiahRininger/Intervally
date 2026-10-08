@@ -48,19 +48,13 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
         if !Self.isUnitTestHost() { pro.start() }
     }
 
-    /// True inside the unit-test host, where the real store must not run: it would finish
-    /// the test session's transactions and rewrite the cached flag behind the tests' backs.
-    /// The scheme's test action sets `INTERVALLY_UNIT_TESTS`; `XCTestConfigurationFilePath`
-    /// covers a run where the scheme's variables don't reach the watchOS host. Always false
-    /// in Release.
+    /// True inside the unit-test host, where the real store must not run. The rule lives in
+    /// `UnitTestHost`, shared with the iPhone app; this forwarder keeps the watch's call
+    /// sites and tests as they were. Always false in Release.
     nonisolated static func isUnitTestHost(
         _ environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
-        #if DEBUG
-        environment["INTERVALLY_UNIT_TESTS"] != nil || environment["XCTestConfigurationFilePath"] != nil
-        #else
-        false
-        #endif
+        UnitTestHost.isActive(in: environment)
     }
 
     private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "app")

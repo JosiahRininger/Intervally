@@ -15,7 +15,19 @@ import StoreKitTest
 /// single test environment, so two suites running at once would clear each other's
 /// transactions. The app's own store never starts in the test host (see
 /// `UnitTestHostTests`), so nothing else finishes these transactions behind the tests' backs.
-@Suite("ProStore against StoreKit", .serialized)
+@Suite(
+    "ProStore against StoreKit",
+    .serialized,
+    .disabled("""
+        Can't run since the watch app became the companion of an iPhone app (2026-10-08). \
+        storekitd serves a companion watch app's StoreKit as its iPhone app's: it rewrites \
+        com.josiahrininger.intervally.watchkitapp to com.josiahrininger.intervally, and Xcode \
+        26.2's StoreKit test service then fails every session buy and purchase with \
+        ASOctaneSupportXPCService.ConfigurationError, paired or not. Any other ID suffix leaves \
+        the session and the app's StoreKit client on different IDs. The packaging check (S12) \
+        moved to CompanionBundleTests; the scripted rules stay in ProStoreTests.
+        """)
+)
 @MainActor
 struct ProStoreStoreKitTests {
 

@@ -48,7 +48,9 @@
 		<string>workout-processing</string>
 		<string>physical-therapy</string>
 	</array>
-	<key>WKWatchOnly</key>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>$(APP_BUNDLE_ID)</string>
+	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
 </dict>
 </plist>

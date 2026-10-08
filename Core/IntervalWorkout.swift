@@ -147,4 +147,22 @@ extension IntervalWorkout {
         parts.append("\(rounds)×")
         return parts.joined(separator: " · ")
     }
+
+    /// What VoiceOver reads for the whole preset, in the order it runs — the watch's dial and
+    /// the iPhone's preset cards alike. A bookend is named only when it is on, as the ring
+    /// only draws it then.
+    var spokenSummary: String {
+        var parts: [String] = []
+        if warmupSeconds > 0 {
+            parts.append("\(DurationFormat.spoken(warmupSeconds)) warmup")
+        }
+        parts.append("\(DurationFormat.spoken(workSeconds)) work")
+        parts.append(restSeconds > 0 ? "\(DurationFormat.spoken(restSeconds)) rest" : "no rest")
+        parts.append(DurationFormat.rounds(rounds))
+        if cooldownSeconds > 0 {
+            parts.append("\(DurationFormat.spoken(cooldownSeconds)) cooldown")
+        }
+        parts.append("total \(DurationFormat.spoken(totalSeconds))")
+        return "\(name). " + parts.joined(separator: ", ")
+    }
 }

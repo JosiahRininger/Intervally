@@ -78,21 +78,10 @@ struct SetupView: View {
 }
 
 extension SetupView {
-    /// What VoiceOver reads for the dial: the workout in the order it runs. A bookend is
-    /// named only when it is on, as the ring only draws it then.
+    /// What VoiceOver reads for the dial. The wording lives in Core
+    /// (`IntervalWorkout.spokenSummary`), shared with the iPhone's preset cards.
     nonisolated static func dialAccessibilityLabel(for workout: IntervalWorkout) -> String {
-        var parts: [String] = []
-        if workout.warmupSeconds > 0 {
-            parts.append("\(DurationFormat.spoken(workout.warmupSeconds)) warmup")
-        }
-        parts.append("\(DurationFormat.spoken(workout.workSeconds)) work")
-        parts.append(workout.restSeconds > 0 ? "\(DurationFormat.spoken(workout.restSeconds)) rest" : "no rest")
-        parts.append(DurationFormat.rounds(workout.rounds))
-        if workout.cooldownSeconds > 0 {
-            parts.append("\(DurationFormat.spoken(workout.cooldownSeconds)) cooldown")
-        }
-        parts.append("total \(DurationFormat.spoken(workout.totalSeconds))")
-        return "\(workout.name). " + parts.joined(separator: ", ")
+        workout.spokenSummary
     }
 
     /// The Settings button's glyph: a gear, or a bell once notifications are declined. The
