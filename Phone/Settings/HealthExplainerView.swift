@@ -23,7 +23,7 @@ struct HealthReadItem: Identifiable {
         ),
         HealthReadItem(
             type: HKQuantityType(.heartRate), systemImage: "heart",
-            title: "Heart Rate", detail: "Your average and highest during each session and each interval."
+            title: "Heart Rate", detail: "Your average and highest for each session, and your average for each interval."
         ),
         HealthReadItem(
             type: HKQuantityType(.activeEnergyBurned), systemImage: "flame",

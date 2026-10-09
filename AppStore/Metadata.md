@@ -111,7 +111,7 @@ Workouts run on Apple Watch. Intervally is a timer, not a medical device. Check 
 ## Keywords (100)
 
 ```
-hiit,tabata,emom,workout,circuit,boxing,crossfit,training,rounds,rest,gym,stopwatch,countdown,amrap
+hiit,tabata,emom,workout,circuit,boxing,training,rounds,rest,gym,countdown,amrap,cardio,sprint,yoga
 ```
 (99) — omits words already in the name/subtitle (interval, timer, watch), which Apple indexes anyway.
 
@@ -225,13 +225,15 @@ into these files at the same size. To retake them, in a Debug build:
 
 ### Apple Watch — 416 × 496, `AppStore/Screenshots/Watch/`
 
-The Apple Watch Series 46mm size, uploaded on the version page's Apple Watch tab. The
-watch's screens haven't changed since these were taken.
+The Apple Watch Series 46mm size, uploaded on the version page's Apple Watch tab. Taken
+from the 1.0 build on a paired Series 11 (46mm) simulator: Classic, free, a real run with
+Health and notifications allowed. The simulator's red "iPhone not connected" glyph beside
+the clock is painted out; nothing else is edited.
 
 | File | Shows |
 |---|---|
 | `1-setup.png` | The workout as a dial: its shape as a segmented ring, total time, Start |
-| `2-work.png` | Work phase: blue ring running down, large countdown, round dots, live heart rate |
+| `2-work.png` | Work phase: blue ring running down, large countdown, round dots, live heart rate in the corner |
 | `3-rest.png` | Rest phase: green ring — the colour language that makes a glance enough |
 | `4-complete.png` | Summary: the ring closes white, total time, "Saved" to Health |
 

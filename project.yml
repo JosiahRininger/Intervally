@@ -59,8 +59,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSHealthShareUsageDescription: >-
-          Intervally shows the interval workouts your Apple Watch saved to Health, with each
-          interval and your heart rate.
+          Intervally shows the interval workouts your Apple Watch saved to Health: each
+          interval, your heart rate, and the active energy you burned.
         # The iPhone never writes to Health (HealthHistory.shareTypes is empty), but it links
         # the authorization call that can, and App Store Connect's purpose-string check reads
         # the binary, not the call's arguments (ITMS-90683). True of the app as Health lists
@@ -127,9 +127,9 @@ targets:
             CFBundleURLSchemes:
               - intervally
         NSHealthShareUsageDescription: >-
-          Intervally reads your heart rate during a workout so it can show it alongside
-          your intervals, and your interval workouts so Intervally on iPhone can show your
-          history.
+          Intervally reads your heart rate and active energy during a workout to show them
+          alongside your intervals, and your interval workouts so Intervally on iPhone can
+          show your history.
         NSHealthUpdateUsageDescription: >-
           Intervally saves your interval sessions to Health as workouts, so they count
           toward your activity rings.

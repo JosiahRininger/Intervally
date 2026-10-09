@@ -34,7 +34,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Intervally reads your heart rate during a workout so it can show it alongside your intervals, and your interval workouts so Intervally on iPhone can show your history.</string>
+	<string>Intervally reads your heart rate and active energy during a workout to show them alongside your intervals, and your interval workouts so Intervally on iPhone can show your history.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Intervally saves your interval sessions to Health as workouts, so they count toward your activity rings.</string>
 	<key>UIBackgroundModes</key>
