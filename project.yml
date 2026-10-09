@@ -34,6 +34,8 @@ targets:
       - path: Phone
       - path: Core
       - path: Sources/Pro
+      # WatchConnectivity sync; the watch app gets it through Sources.
+      - path: Sources/Sync
       - path: Sources/Views/ProgressRing.swift
     dependencies:
       # "Embed Watch Content" into $(CONTENTS_FOLDER_PATH)/Watch. embed defaults to true for an
@@ -167,6 +169,8 @@ targets:
     platform: watchOS
     sources:
       - path: Tests
+      # Sync runs on both devices, so its tests run in both bundles.
+      - path: SyncTests
       # The StoreKit configuration is a resource of the test bundle only, where
       # SKTestSession loads it by URL. Never list it under Sources, Shared or Widget:
       # XcodeGen would copy it into the app or the widget.
@@ -193,6 +197,7 @@ targets:
     platform: iOS
     sources:
       - path: PhoneTests
+      - path: SyncTests
       # SKTestSession loads it by URL; test bundle only, as for the watch.
       - path: StoreKit
         buildPhase: resources

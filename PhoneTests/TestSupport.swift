@@ -25,3 +25,16 @@ func makeTestDefaults(_ name: String = UUID().uuidString) -> UserDefaults {
     defaults.removePersistentDomain(forName: name)
     return defaults
 }
+
+/// Polls `condition` every 20 ms until it holds or `timeout` passes. For work that lands on
+/// its own schedule, such as a hop to the main actor from a delegate queue.
+@MainActor
+@discardableResult
+func waitUntil(within timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while !condition() {
+        guard ContinuousClock.now < deadline else { return false }
+        try? await Task.sleep(for: .milliseconds(20))
+    }
+    return true
+}

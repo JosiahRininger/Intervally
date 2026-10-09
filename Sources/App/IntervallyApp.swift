@@ -15,6 +15,7 @@ import SwiftUI
 @main
 struct IntervallyApp: App {
     @WKApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -25,6 +26,11 @@ struct IntervallyApp: App {
                 .environment(delegate.store)
                 .environment(delegate.coordinator)
                 .environment(delegate.pro)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            // Lowering the wrist suspends the app soon after; send an edit made just before
+            // rather than leave it waiting out the debounce until the next launch.
+            if phase != .active { delegate.sync.flush() }
         }
     }
 }

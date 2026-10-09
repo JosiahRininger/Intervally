@@ -146,12 +146,17 @@ Core/       model compiled into the iPhone app, the watch app and the widget
 Shared/     watch app and widget only
   RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
   StartWorkoutIntent.swift App Intents + Siri phrases
-Phone/                     the iPhone companion: App/, Workouts/, Resources/
-Sources/                   the watch app (Pro/ and Views/ProgressRing.swift also build for iPhone)
-  App/                     @main App + WKApplicationDelegate
+Phone/                     the iPhone companion: App/, Workouts/, Components/, Resources/
+Sources/                   the watch app (Pro/, Sync/ and Views/ProgressRing.swift also build
+                           for iPhone)
+  App/                     @main App + WKApplicationDelegate; ConnectivityWakes holds a
+                           WatchConnectivity background wake until sync has merged it
   Model/TimerEngine.swift  anchor-based run state machine
   Pro/                     Intervally Pro: the free tier's limits and ProGating, and
                            ProStore, the app's only StoreKit code
+  Sync/                    WatchSync: the presets over WatchConnectivity, one application
+                           context each way, merged and never replaced; SyncTransport wraps
+                           WCSession so the tests can stand in for it
   Session/                 workout session, extended runtime, notifications, haptics
     HapticPlayer.swift     plays a boundary's taps, repeats included, and cancels them
     RunDependencies.swift  the protocols RunCoordinator is built against, so its tier and
@@ -162,6 +167,7 @@ StoreKit/                  local StoreKit configuration (test bundle and Run act
 Widget/                    Smart Stack complication + Control Center control
 Tests/                     Swift Testing, watch app
 PhoneTests/                Swift Testing, iPhone app
+SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
 ```
 
 ## Design notes

@@ -338,4 +338,9 @@ enum SyncWire {
         else { return nil }
         return try? JSONDecoder().decode(SyncDocument.self, from: json)
     }
+
+    /// When the sender sent `context`, by its clock. Nil for anything that doesn't say.
+    static func sentAt(from context: [String: Any]) -> Date? {
+        context[sentAtKey] as? Date
+    }
 }

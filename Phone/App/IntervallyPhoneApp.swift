@@ -22,9 +22,13 @@ struct IntervallyPhoneApp: App {
             WorkoutsView()
                 .environment(services.store)
                 .environment(services.pro)
+                .environment(services.sync)
         }
         .onChange(of: scenePhase) { _, phase in
-            guard phase == .active else { return }
+            guard phase == .active else {
+                services.handleBackground()
+                return
+            }
             Task { await services.handleForeground() }
         }
     }

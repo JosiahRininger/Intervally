@@ -4,6 +4,7 @@
 //
 
 import WatchKit
+import WidgetKit
 import os
 
 /// Owns the app's long-lived services.
@@ -29,6 +30,11 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
             TapStrength.effective(stored: .stored(in: SharedDefaults.suite), isPro: pro.isPro)
         })
     )
+    /// Keeps the presets in step with the iPhone. Started with the delegate, so a background
+    /// wake that brought a context finds someone to merge it.
+    private(set) lazy var sync = WatchSync(store: store)
+    /// WatchConnectivity wakes, held until sync has merged what they brought.
+    private lazy var connectivityWakes = ConnectivityWakes(activity: { [weak self] in self?.sync.activity ?? .inactive })
 
     #if DEBUG
     /// The live delegate, for the opt-in manual StoreKit QA test (`ManualQAStoreKit`),
@@ -45,7 +51,26 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
         #endif
         // Also runs on a background workout-recovery relaunch, which is when a transaction
         // that finished while the app was away (an Ask to Buy approval, a refund) arrives.
-        if !Self.isUnitTestHost() { pro.start() }
+        if !Self.isUnitTestHost() {
+            pro.start()
+            startSync()
+        }
+    }
+
+    private func startSync() {
+        sync.onRemoteApplied = { [log] result in
+            // Only the selected preset is on the face; anything else would spend widget budget.
+            guard Self.reloadsComplication(after: result) else { return }
+            WidgetCenter.shared.reloadAllTimelines()
+            log.info("complication reloaded: the iPhone changed the selected preset")
+        }
+        sync.onStateChange = { [weak self] in self?.connectivityWakes.reevaluate() }
+        sync.activate()
+    }
+
+    /// Whether a merge from the iPhone changed what the complication's idle face offers.
+    nonisolated static func reloadsComplication(after result: WorkoutStore.MergeResult) -> Bool {
+        result.selectedPresetChanged
     }
 
     /// True inside the unit-test host, where the real store must not run. The rule lives in
@@ -68,6 +93,8 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
                     estimatedSnapshotExpiration: .distantFuture,
                     userInfo: nil
                 )
+            case let connectivity as WKWatchConnectivityRefreshBackgroundTask:
+                connectivityWakes.hold(connectivity)
             default:
                 task.setTaskCompletedWithSnapshot(false)
             }
