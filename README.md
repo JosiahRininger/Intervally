@@ -113,17 +113,26 @@ summary, or from Siri, Control Center or the complication: a start from any of t
 closes whatever sheet or pushed screen was left open (`RootNavigation`).
 
 `StoreKit/Intervally.storekit` mirrors the App Store Connect record. It is a resource of the
-test bundle only, and the scheme's Run action uses it for local purchases.
-`ProStoreStoreKitTests` drives the real `ProStore` against it with `SKTestSession`, in one
-serialized suite because a process has a single StoreKit test environment, and the app's own
-store never starts in either test host (`INTERVALLY_UNIT_TESTS`). That suite is disabled for
-now: once the watch app has an iPhone companion, the watchOS simulator serves its StoreKit as
-the iPhone app's and Xcode 26.2's test service refuses the session (the reason is in the
-suite), and the iOS 26.3 simulator refuses an `SKTestSession` from the iPhone test host
-("not installed for development"). Debug builds accept
-`-qaPro pro` or `-qaPro free` to pin the entitlement for one launch, and
-`-qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]` to rewrite the selected preset;
-neither exists in Release.
+test bundles only, and both schemes' Run actions use it for local purchases. The app's own
+store never starts in either test host (`INTERVALLY_UNIT_TESTS`).
+`ProStorePhoneStoreKitTests` drives the real `ProStore` against it with `SKTestSession` in
+the iPhone app, in one serialized suite because a process has a single StoreKit test
+environment. The simulator build signs with `Supporting/IntervallyPhone-Simulator.entitlements`
+(the app's entitlements plus `get-task-allow`): without it the iOS 26.3 simulator refuses
+every StoreKit test call ("not installed for development"). `Product.purchase()` itself
+can't complete in a test session with dialogs off (Xcode's server cancels it), so that one
+test is disabled; `ManualQAStoreKit` hosts a live session for buying through the real sheet
+by hand. The watch's twin, `ProStoreStoreKitTests`, is disabled: a companion watch app's
+StoreKit is served as the iPhone app's, and Xcode 26.2's test service refuses the session
+(the reason is in the suite).
+
+Debug builds accept QA launch flags, none of which exist in Release. On the watch,
+`-qaPro pro|free` pins the entitlement for one launch and
+`-qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]` rewrites the selected preset. On
+iPhone, `-qaPro pro|free`, `-qaWatch unsupported|unpaired|notInstalled|installed|firstSync`
+(a stand-in watch that never reaches a real one), `-qaWelcome YES`, `-qaOpen
+editor|picker|bookends|paywall|settings|watch|pro` and `-qaEdit "rename 0 Sprint; warmup 0 300"`
+(`PhoneQA.swift`, `QAEdit.swift`).
 
 Shipping Pro is not settled: App Store Connect's help says In-App Purchases aren't supported
 on Apple Watch app versions. The ship gate at the top of `AppStore/Metadata.md` lists what
@@ -140,20 +149,25 @@ Core/       model compiled into the iPhone app, the watch app and the widget
   SyncDocument.swift       the presets and selection the iPhone and watch replicate:
                            last-writer-wins records + tombstones on a hybrid logical clock
   ValueSteps.swift         the crown's and the pickers' value tables
+  PresetField.swift        a preset's numbers as tiles show them: title, colour, range and
+                           values, shared by the watch's setup tiles and the iPhone's editor
   PresetNaming.swift       "Tabata" → "Tabata 2" for duplicates
   SharedDefaults.swift     the App Group on the watch; the app's own defaults on iPhone
   UnitTestHost.swift       keeps the real ProStore off in either test host
 Shared/     watch app and widget only
   RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
   StartWorkoutIntent.swift App Intents + Siri phrases
-Phone/                     the iPhone companion: App/, Workouts/, Components/, Resources/
+Phone/                     the iPhone companion: App/ (services, root, DEBUG QA flags),
+                           Welcome/, Workouts/, Editor/, Pro/ (paywall, offer codes and
+                           refunds), Settings/ (incl. Watch Status), Components/, Resources/
 Sources/                   the watch app (Pro/, Sync/ and Views/ProgressRing.swift also build
                            for iPhone)
   App/                     @main App + WKApplicationDelegate; ConnectivityWakes holds a
                            WatchConnectivity background wake until sync has merged it
   Model/TimerEngine.swift  anchor-based run state machine
-  Pro/                     Intervally Pro: the free tier's limits and ProGating, and
-                           ProStore, the app's only StoreKit code
+  Pro/                     Intervally Pro: the free tier's limits and ProGating, ProStore
+                           (the only StoreKit code, with Phone/Pro's iOS-only extension), and
+                           PaywallContent, the paywall's words for the watch and the iPhone
   Sync/                    WatchSync: the presets over WatchConnectivity, one application
                            context each way, merged and never replaced; SyncTransport wraps
                            WCSession so the tests can stand in for it

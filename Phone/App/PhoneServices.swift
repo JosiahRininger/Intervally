@@ -24,6 +24,8 @@ final class PhoneServices {
     /// The services the running app was launched with, so the unit tests can check that the
     /// host app's store never started. Never set by a test's own instances.
     static weak var current: PhoneServices?
+    /// The QA flags this launch was given (`PhoneQAOptions`).
+    private(set) var qa = PhoneQAOptions()
     #endif
 
     init(store: WorkoutStore = WorkoutStore(), pro: ProStore = ProStore(), sync: WatchSync? = nil) {
@@ -34,10 +36,18 @@ final class PhoneServices {
 
     /// The app's own services, started. The only place the app creates them.
     static func launch() -> PhoneServices {
-        let services = PhoneServices()
         #if DEBUG
+        let qa = PhoneQAOptions.current
+        let store = WorkoutStore()
+        // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
+        let sync = qa.watch.map { WatchSync(store: store, transport: QAWatchTransport(state: $0, store: store)) }
+        let services = PhoneServices(store: store, sync: sync)
+        services.qa = qa
         current = services
         services.applyQAEdits()
+        if let isPro = qa.pro { services.pro.overrideForQA(isPro) }
+        #else
+        let services = PhoneServices()
         #endif
         services.start()
         return services

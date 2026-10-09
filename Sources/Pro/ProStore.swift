@@ -212,6 +212,16 @@ final class ProStore: ProGating {
             && !transaction.isUpgraded
     }
 
+    /// The purchase a refund request would be for: the latest verified transaction for Pro,
+    /// while it still grants Pro and was bought on this Apple Account. Nil for a family-shared
+    /// copy, which only the family member who bought it can ask a refund for.
+    nonisolated static func latestPurchasedTransactionID() async -> UInt64? {
+        guard case .verified(let transaction)? = await StoreKit.Transaction.latest(for: ProProduct.id),
+              grantsPro(transaction),
+              ownership(of: transaction) == .purchased else { return nil }
+        return transaction.id
+    }
+
     nonisolated private static func ownership(of transaction: StoreKit.Transaction) -> Ownership {
         transaction.ownershipType == .familyShared ? .familyShared : .purchased
     }

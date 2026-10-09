@@ -69,6 +69,11 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
+        # Simulator builds only: the app's entitlements plus get-task-allow. Without it the
+        # iOS 26.3 simulator's storekitd refuses StoreKit testing ("not installed for
+        # development"), for SKTestSession and the Run action's StoreKit configuration alike.
+        # Device and archive builds keep the file above (SimulatorEntitlementsTests).
+        "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Supporting/IntervallyPhone-Simulator.entitlements
         # iPhone only (no iPad screenshot set). iPad still runs it in compatibility mode,
         # which the app handles (WCSession.isSupported() == false).
         TARGETED_DEVICE_FAMILY: "1"

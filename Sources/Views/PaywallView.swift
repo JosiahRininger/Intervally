@@ -6,219 +6,6 @@
 import SwiftUI
 import WatchKit
 
-/// The door the paywall was opened from. Only the line under the title changes, so each
-/// door answers what the user was reaching for.
-enum PaywallContext: Hashable, Sendable {
-    case presets, bookends, tapStrength, settings
-}
-
-/// Everything the paywall says, worked out from the store's state apart from the view, so
-/// every state is testable and no view needs StoreKit.
-struct PaywallContent: Equatable, Sendable {
-
-    /// What sits under the context line: the price on a capsule, or why there isn't one.
-    enum Action: Equatable, Sendable {
-        case buy(price: String)
-        case loading
-        case purchasing
-        case owned(title: String, detail: String)
-        /// Screen Time or a device profile blocks purchases.
-        case blocked
-        /// The App Store answered without the product.
-        case unavailable
-        /// The App Store could not be reached.
-        case loadFailed
-    }
-
-    struct Feature: Equatable, Sendable, Identifiable {
-        let systemImage: String
-        let title: String
-        var id: String { title }
-    }
-
-    let contextLine: String
-    let action: Action
-    /// The terms under the price: shown only once there is a price.
-    let footnote: String?
-    /// The answer to the user's last tap, when it needs one.
-    let note: String?
-    /// Restore stays even when purchases are blocked: restoring buys nothing.
-    let offersRestore: Bool
-    /// "Feel Strongest", for someone deciding whether stronger taps are worth it.
-    let offersPreview: Bool
-
-    static let title = "Intervally Pro"
-    static let restoreTitle = "Restore Purchases"
-    static let previewTitle = "Feel Strongest"
-    static let retryTitle = "Try Again"
-
-    /// Base taps stay free, so the copy only ever describes a repeated pattern (Guideline
-    /// 4.10): never "unlock haptics".
-    static let features: [Feature] = [
-        Feature(systemImage: "square.stack.3d.up.fill", title: "Unlimited presets"),
-        Feature(systemImage: "sunrise.fill", title: "Warmup & cooldown"),
-        Feature(systemImage: "hand.tap.fill", title: "Stronger taps"),
-        Feature(systemImage: "heart.fill", title: "Support an indie dev"),
-    ]
-
-    /// - Parameters:
-    ///   - isPro: Pro with `ownership == .none` — from the cache before StoreKit answers,
-    ///     or a QA override — still reads as owned.
-    ///   - lastPurchase: The view keeps at most one of this and `lastRestore`: the outcome
-    ///     of whichever was tapped last.
-    static func make(
-        context: PaywallContext,
-        isPro: Bool,
-        ownership: ProStore.Ownership,
-        canMakePayments: Bool,
-        offer: ProStore.OfferState,
-        isPurchasing: Bool,
-        lastPurchase: ProStore.PurchaseOutcome?,
-        lastRestore: ProStore.RestoreOutcome?
-    ) -> PaywallContent {
-        let action = action(
-            isPro: isPro, ownership: ownership, canMakePayments: canMakePayments,
-            offer: offer, isPurchasing: isPurchasing, lastPurchase: lastPurchase
-        )
-        return PaywallContent(
-            contextLine: contextLine(for: context),
-            action: action,
-            footnote: footnote(for: action, offer: offer),
-            note: isPro ? nil : note(for: action, lastPurchase: lastPurchase, lastRestore: lastRestore),
-            offersRestore: !isPro,
-            offersPreview: context == .tapStrength && !isPro
-        )
-    }
-
-    static func contextLine(for context: PaywallContext) -> String {
-        switch context {
-        case .presets: "Free includes \(ProProduct.freePresetLimit) presets. Pro has no limit."
-        case .bookends: "Add a warmup and cooldown to any workout."
-        case .tapStrength: "Stronger taps you can feel through a sleeve."
-        case .settings: "Get more from every workout."
-        }
-    }
-
-    private static func action(
-        isPro: Bool,
-        ownership: ProStore.Ownership,
-        canMakePayments: Bool,
-        offer: ProStore.OfferState,
-        isPurchasing: Bool,
-        lastPurchase: ProStore.PurchaseOutcome?
-    ) -> Action {
-        if isPro {
-            return ownership == .familyShared
-                ? .owned(title: "Pro is shared by your family", detail: "Unlocked through Family Sharing.")
-                : .owned(title: "You have Pro", detail: "Thanks for supporting Intervally.")
-        }
-        // Ahead of the block: the system sheet is already up, so the capsule waits with it.
-        if isPurchasing { return .purchasing }
-        if !canMakePayments || lastPurchase == .notAllowed { return .blocked }
-        // The product loaded, but the App Store then refused to sell it.
-        if lastPurchase == .unavailable { return .unavailable }
-        switch offer {
-        case .idle, .loading: return .loading
-        case .loaded(let offer): return .buy(price: offer.displayPrice)
-        case .unavailable: return .unavailable
-        case .failed: return .loadFailed
-        }
-    }
-
-    private static func footnote(for action: Action, offer: ProStore.OfferState) -> String? {
-        guard case .loaded(let offer) = offer else { return nil }
-        switch action {
-        case .buy, .purchasing:
-            return offer.isFamilyShareable ? "One-time purchase · Includes Family Sharing" : "One-time purchase"
-        case .loading, .owned, .blocked, .unavailable, .loadFailed:
-            return nil
-        }
-    }
-
-    /// A purchase's note rides with the capsule it came from; elsewhere the status already
-    /// says what went wrong. A restore's note can follow any state, blocked included.
-    private static func note(
-        for action: Action,
-        lastPurchase: ProStore.PurchaseOutcome?,
-        lastRestore: ProStore.RestoreOutcome?
-    ) -> String? {
-        if case .buy = action, let lastPurchase {
-            switch lastPurchase {
-            case .pending: return "Waiting for approval. Pro unlocks as soon as it's approved."
-            case .failed: return "The purchase didn't go through. Try again."
-            case .unverified: return "The App Store couldn't verify this purchase. Try Restore Purchases."
-            case .purchased, .cancelled, .notAllowed, .unavailable: break
-            }
-        }
-        switch lastRestore {
-        case .nothingFound: return "No purchase found for this Apple Account."
-        case .failed: return "Couldn't reach the App Store. Try again."
-        case .restored, .cancelled, nil: return nil
-        }
-    }
-}
-
-extension PaywallContent.Action {
-    /// Whether the capsule buys anything: only once it shows the price.
-    var isPurchasable: Bool {
-        if case .buy = self { return true }
-        return false
-    }
-
-    /// The capsule's words; nil while it shows a spinner, or when there is no capsule.
-    var buttonTitle: String? {
-        guard case .buy(let price) = self else { return nil }
-        return "Unlock · \(price)"
-    }
-
-    /// The capsule spoken in full: "Unlock · $4.99" reads as punctuation.
-    var buttonAccessibilityLabel: String? {
-        switch self {
-        case .buy(let price): "Unlock Intervally Pro for \(price)"
-        case .loading: "Loading price"
-        case .purchasing: "Purchasing"
-        case .owned, .blocked, .unavailable, .loadFailed: nil
-        }
-    }
-
-    /// The first line of a state with no capsule.
-    var headline: String? {
-        switch self {
-        case .owned(let title, _): title
-        case .blocked: "Purchases are turned off"
-        case .unavailable: "Pro isn't available right now"
-        case .loadFailed: "Can't reach the App Store"
-        case .buy, .loading, .purchasing: nil
-        }
-    }
-
-    var detail: String? {
-        switch self {
-        case .owned(_, let detail): detail
-        case .blocked: "Screen Time or a device profile is blocking purchases on this watch."
-        case .unavailable: "Try again later."
-        case .loadFailed: "Check your connection and try again."
-        case .buy, .loading, .purchasing: nil
-        }
-    }
-
-    var systemImage: String? {
-        switch self {
-        case .owned: "checkmark.seal.fill"
-        case .blocked: "lock.fill"
-        case .unavailable: "clock.fill"
-        case .loadFailed: "wifi.slash"
-        case .buy, .loading, .purchasing: nil
-        }
-    }
-
-    /// Both can clear on their own. `products(for:)` reports most network failures as an
-    /// empty answer, so offline usually lands on `.unavailable` rather than `.loadFailed`.
-    var offersRetry: Bool {
-        self == .unavailable || self == .loadFailed
-    }
-}
-
 /// Intervally Pro: what it adds, its price, and Restore.
 ///
 /// Always pushed inside the stack its entry point already uses — never a sheet on top of a
@@ -339,6 +126,14 @@ struct PaywallPage: View {
         VStack(alignment: .leading, spacing: 8) {
             PaywallHeader(content: content, buy: buy, retry: retry)
 
+            // Only when this watch couldn't sell Pro: the way that still works. Below the
+            // header, so it never pushes Try Again under the fold.
+            if let companion = content.companionLine {
+                Text(companion)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             if let note = content.note {
                 Text(note)
                     .font(.footnote)
@@ -521,13 +316,6 @@ struct PaywallHeader: View {
             }
         }
         .accessibilityElement(children: .combine)
-    }
-}
-
-private extension PaywallContent.Action {
-    var isOwned: Bool {
-        if case .owned = self { return true }
-        return false
     }
 }
 

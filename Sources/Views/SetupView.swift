@@ -404,83 +404,12 @@ private struct PhaseTile: View {
 
 // MARK: - Fields
 
-/// A number the setup pages edit. A tile pushes its editor by value, which keeps the root
-/// stack as data that a start from outside the app can clear (`RootNavigation`).
-enum SetupField: Hashable, CaseIterable, Sendable {
-    case work, rest, rounds, prepare, warmup, cooldown
+/// The watch's name for a preset's number: the setup tiles edit `PresetField`, which the
+/// iPhone's editor shares. A tile pushes its editor by value, which keeps the root stack as
+/// data that a start from outside the app can clear (`RootNavigation`).
+typealias SetupField = PresetField
 
-    var title: String {
-        switch self {
-        case .work: "Work"
-        case .rest: "Rest"
-        case .rounds: "Rounds"
-        case .prepare: "Get Ready"
-        case .warmup: "Warmup"
-        case .cooldown: "Cooldown"
-        }
-    }
-
-    /// The phase it times. Rounds is structure, not a phase.
-    var kind: IntervalPhase.Kind? {
-        switch self {
-        case .work: .work
-        case .rest: .rest
-        case .rounds: nil
-        case .prepare: .prepare
-        case .warmup: .warmup
-        case .cooldown: .cooldown
-        }
-    }
-
-    /// The warmup and cooldown are Intervally Pro.
-    var isPro: Bool { self == .warmup || self == .cooldown }
-
-    var keyPath: WritableKeyPath<IntervalWorkout, Int> {
-        switch self {
-        case .work: \.workSeconds
-        case .rest: \.restSeconds
-        case .rounds: \.rounds
-        case .prepare: \.prepareSeconds
-        case .warmup: \.warmupSeconds
-        case .cooldown: \.cooldownSeconds
-        }
-    }
-
-    var range: ClosedRange<Int> {
-        switch self {
-        case .work: IntervalWorkout.workRange
-        case .rest: IntervalWorkout.restRange
-        case .rounds: IntervalWorkout.roundsRange
-        case .prepare: IntervalWorkout.prepareRange
-        case .warmup: IntervalWorkout.warmupRange
-        case .cooldown: IntervalWorkout.cooldownRange
-        }
-    }
-
-    /// The phase's colour. Rounds stays white rather than borrowing a meaning it doesn't have.
-    var tint: Color { kind.map(Theme.light(for:)) ?? .white }
-
-    /// The editor's glyph: the phase's own, or a loop for rounds.
-    var symbolName: String { kind?.symbolName ?? "repeat" }
-
-    /// The value as its tile shows it.
-    func tileText(_ value: Int) -> String {
-        switch self {
-        case .rounds: "\(value)"
-        case .warmup, .cooldown: DurationFormat.bookend(value)
-        case .work, .rest, .prepare: DurationFormat.clock(value)
-        }
-    }
-
-    /// The value as VoiceOver reads it, on the tile and in the editor.
-    func spoken(_ value: Int) -> String {
-        switch self {
-        case .rounds: DurationFormat.rounds(value)
-        case .warmup, .cooldown: DurationFormat.bookendSpoken(value)
-        case .work, .rest, .prepare: DurationFormat.spoken(value)
-        }
-    }
-
+extension SetupField {
     /// The crown editor its tile opens. The bookends turn over their own table in 30-second
     /// steps and say "Off" at zero; everything else keeps the editor's own schedule.
     @MainActor

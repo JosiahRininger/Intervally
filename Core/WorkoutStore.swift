@@ -228,11 +228,14 @@ final class WorkoutStore {
         commitLocalChange()
     }
 
+    /// Adds a preset at the end of the list. On the watch it is also selected, as the setup
+    /// screen shows the selected preset; the iPhone passes `select: false`, where only Put on
+    /// Watch changes what the watch starts next.
     @discardableResult
-    func add(_ workout: IntervalWorkout = IntervalWorkout(name: "New")) -> IntervalWorkout {
+    func add(_ workout: IntervalWorkout = IntervalWorkout(name: "New"), select: Bool = true) -> IntervalWorkout {
         let clamped = workout.clamped
         document.upsert(clamped, clock: &clock)
-        document.select(clamped.id, clock: &clock)
+        if select { document.select(clamped.id, clock: &clock) }
         commitLocalChange()
         return clamped
     }

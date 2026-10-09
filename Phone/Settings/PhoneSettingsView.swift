@@ -1,0 +1,184 @@
+//
+//  PhoneSettingsView.swift
+//  IntervallyPhone
+//
+
+import SwiftUI
+
+/// A screen pushed inside Settings.
+enum SettingsRoute: Hashable {
+    case pro, watch
+}
+
+/// The iPhone's Settings sheet: Intervally Pro, the watch, the App Store's purchase sheets,
+/// and the links App Review and users look for. Nothing here is a placeholder.
+///
+/// The paywall is pushed here rather than presented: this is already a sheet.
+struct PhoneSettingsView: View {
+    @Environment(ProStore.self) private var pro
+    @Environment(WatchSync.self) private var sync
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var path: [SettingsRoute] = []
+    @State private var notice: StoreNotice?
+    /// The store action under way, so a second tap can't start another.
+    @State private var busy: StoreAction?
+
+    enum StoreAction: Equatable {
+        case restore, redeem, refund
+    }
+
+    private static let support = URL(string: "https://josiahrininger.com/intervally/support")
+    private static let privacyPolicy = URL(string: "https://josiahrininger.com/intervally/privacy")
+
+    static var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = info?["CFBundleVersion"] as? String ?? "1"
+        return "\(short) (\(build))"
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            List {
+                Section {
+                    NavigationLink(value: SettingsRoute.pro) {
+                        proRow(ProStatusRow(isPro: pro.isPro, ownership: pro.ownership))
+                    }
+                    NavigationLink(value: SettingsRoute.watch) {
+                        watchRow
+                    }
+                }
+
+                Section {
+                    storeButton(.restore, title: PaywallContent.restoreTitle, systemImage: "arrow.clockwise")
+                    storeButton(.redeem, title: "Redeem Code", systemImage: "giftcard")
+                    // A family member's shared copy can only be refunded by whoever bought it.
+                    if pro.ownership == .purchased {
+                        storeButton(.refund, title: "Request a Refund", systemImage: "arrow.uturn.backward.circle")
+                    }
+                } header: {
+                    Text("Purchases")
+                } footer: {
+                    Text("Intervally Pro is one purchase for your iPhone and your Apple Watch.")
+                }
+
+                Section {
+                    if let support = Self.support {
+                        Link(destination: support) {
+                            Label("Support", systemImage: "questionmark.circle")
+                        }
+                    }
+                    if let privacyPolicy = Self.privacyPolicy {
+                        Link(destination: privacyPolicy) {
+                            Label("Privacy Policy", systemImage: "hand.raised")
+                        }
+                    }
+                } footer: {
+                    Text("Intervally \(Self.version)")
+                }
+            }
+            .blackCanvas()
+            .navigationTitle("Settings")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                // Neutral, as on the paywall: closing Settings confirms nothing.
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(role: .close) { dismiss() }
+                }
+            }
+            .navigationDestination(for: SettingsRoute.self) { route in
+                switch route {
+                case .pro: PhonePaywallView(context: .settings)
+                case .watch: WatchStatusView()
+                }
+            }
+            .alert(notice?.title ?? "", isPresented: isShowingNotice, presenting: notice) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { notice in
+                Text(notice.message)
+            }
+        }
+        #if DEBUG
+        .modifier(SettingsQAOpen(path: $path))
+        #endif
+    }
+
+    private var isShowingNotice: Binding<Bool> {
+        Binding { notice != nil } set: { if !$0 { notice = nil } }
+    }
+
+    // MARK: - Rows
+
+    private func proRow(_ row: ProStatusRow) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: row.systemImage)
+                .foregroundStyle(Theme.work)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ProStatusRow.title)
+                    .font(.body.weight(.semibold))
+                Text(row.subtitle)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private var watchRow: some View {
+        let status = WatchStatusContent(peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt)
+        return HStack(spacing: 12) {
+            Image(systemName: status.systemImage)
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Apple Watch")
+                    .font(.body.weight(.semibold))
+                Text(status.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func storeButton(_ action: StoreAction, title: String, systemImage: String) -> some View {
+        Button {
+            run(action)
+        } label: {
+            HStack {
+                Label(title, systemImage: systemImage)
+                Spacer()
+                if busy == action {
+                    ProgressView()
+                }
+            }
+        }
+        .disabled(busy != nil)
+    }
+
+    // MARK: - Actions
+
+    private func run(_ action: StoreAction) {
+        guard busy == nil else { return }
+        busy = action
+        Task {
+            switch action {
+            case .restore: notice = StoreNotice.restore(await pro.restore())
+            case .redeem: notice = StoreNotice.redeem(await pro.redeemOfferCode())
+            case .refund: notice = StoreNotice.refund(await pro.requestRefund())
+            }
+            busy = nil
+        }
+    }
+}
+
+#Preview {
+    let store = WorkoutStore(defaults: UserDefaults(suiteName: "preview.settings") ?? .standard)
+    PhoneSettingsView()
+        .environment(ProStore(defaults: UserDefaults(suiteName: "preview.pro") ?? .standard))
+        .environment(WatchSync(store: store))
+}

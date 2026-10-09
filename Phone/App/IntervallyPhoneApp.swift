@@ -19,7 +19,7 @@ struct IntervallyPhoneApp: App {
 
     var body: some Scene {
         WindowGroup {
-            WorkoutsView()
+            root
                 .environment(services.store)
                 .environment(services.pro)
                 .environment(services.sync)
@@ -31,5 +31,14 @@ struct IntervallyPhoneApp: App {
             }
             Task { await services.handleForeground() }
         }
+    }
+
+    private var root: some View {
+        #if DEBUG
+        PhoneRootView(forceWelcome: services.qa.welcome)
+            .environment(\.qaScreen, services.qa.screen)
+        #else
+        PhoneRootView()
+        #endif
     }
 }

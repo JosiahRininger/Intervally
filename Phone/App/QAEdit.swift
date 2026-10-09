@@ -16,6 +16,8 @@ enum QAEdit: Equatable {
     case rest(Int, Int)
     case rounds(Int, Int)
     case prepare(Int, Int)
+    case warmup(Int, Int)
+    case cooldown(Int, Int)
     case delete(Int)
     /// SwiftUI's `onMove` offsets: the preset at `from` goes before the one now at `to`.
     case move(from: Int, to: Int)
@@ -51,6 +53,8 @@ enum QAEdit: Equatable {
         case "rest": return .rest(first, second)
         case "rounds": return .rounds(first, second)
         case "prepare": return .prepare(first, second)
+        case "warmup": return .warmup(first, second)
+        case "cooldown": return .cooldown(first, second)
         case "move": return .move(from: first, to: second)
         default: return nil
         }
@@ -76,6 +80,8 @@ enum QAEdit: Equatable {
         case .rest(let index, let seconds): edit(index) { $0.restSeconds = seconds }
         case .rounds(let index, let count): edit(index) { $0.rounds = count }
         case .prepare(let index, let seconds): edit(index) { $0.prepareSeconds = seconds }
+        case .warmup(let index, let seconds): edit(index) { $0.warmupSeconds = seconds }
+        case .cooldown(let index, let seconds): edit(index) { $0.cooldownSeconds = seconds }
         case .delete(let index):
             if let workout = preset(index) { store.delete(workout) }
         case .move(let from, let to):

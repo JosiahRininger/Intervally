@@ -13,6 +13,12 @@ struct WatchStatusContent: Equatable {
     let detail: String
     /// When the two devices last exchanged presets. Only once the watch is set up.
     let lastSynced: Date?
+    /// The way to install the watch app, a step a line, for the Watch Status screen. Empty
+    /// unless the watch is paired and the app isn't on it.
+    let installSteps: [String]
+    /// Send to Watch Now: a forced send, for a watch that seems to have missed something.
+    /// Only when there is a watch app to send to.
+    let offersSendNow: Bool
 
     init(peer: PeerState, lastSentAt: Date?, lastReceivedAt: Date?) {
         switch peer {
@@ -41,6 +47,14 @@ struct WatchStatusContent: Equatable {
                 : "Workouts you change here show up on your watch."
         }
         lastSynced = peer == .ready ? [lastSentAt, lastReceivedAt].compactMap { $0 }.max() : nil
+        installSteps = peer == .appNotInstalled
+            ? [
+                "Open the Watch app on this iPhone.",
+                "Tap My Watch, then scroll to Available Apps.",
+                "Tap Install next to Intervally.",
+            ]
+            : []
+        offersSendNow = peer == .ready
     }
 
     /// "Synced just now", "Last synced 5 minutes ago"; nil before the first exchange.
@@ -50,6 +64,14 @@ struct WatchStatusContent: Equatable {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return "Last synced \(formatter.localizedString(for: lastSynced, relativeTo: now))"
+    }
+}
+
+extension PeerState {
+    /// Whether this iPhone has an Apple Watch to talk about. Without one, as on iPad or with
+    /// none paired, only the words about a watch go: presets and Pro work the same.
+    var hasWatch: Bool {
+        self != .unsupported && self != .notPaired
     }
 }
 
