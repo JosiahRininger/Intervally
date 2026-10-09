@@ -131,8 +131,10 @@ Debug builds accept QA launch flags, none of which exist in Release. On the watc
 `-qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]` rewrites the selected preset. On
 iPhone, `-qaPro pro|free`, `-qaWatch unsupported|unpaired|notInstalled|installed|firstSync`
 (a stand-in watch that never reaches a real one), `-qaWelcome YES`, `-qaOpen
-editor|picker|bookends|paywall|settings|watch|pro` and `-qaEdit "rename 0 Sprint; warmup 0 300"`
-(`PhoneQA.swift`, `QAEdit.swift`).
+editor|picker|bookends|paywall|settings|watch|pro|health|history|session`,
+`-qaHistory sample|empty|connect|unavailable|failed` (History from a fixture; Health is never
+read or written) and `-qaEdit "rename 0 Sprint; warmup 0 300"` (`PhoneQA.swift`,
+`QAEdit.swift`, `SampleHistory.swift`).
 
 Shipping Pro is not settled: App Store Connect's help says In-App Purchases aren't supported
 on Apple Watch app versions. The ship gate at the top of `AppStore/Metadata.md` lists what
@@ -152,14 +154,19 @@ Core/       model compiled into the iPhone app, the watch app and the widget
   PresetField.swift        a preset's numbers as tiles show them: title, colour, range and
                            values, shared by the watch's setup tiles and the iPhone's editor
   PresetNaming.swift       "Tabata" → "Tabata 2" for duplicates
+  HealthMetadata.swift     the tags the watch writes to Health and History reads back
+  HealthAccess.swift       what each app asks Health for: the watch's request covers the
+                           iPhone's, since both are one app to Health
   SharedDefaults.swift     the App Group on the watch; the app's own defaults on iPhone
   UnitTestHost.swift       keeps the real ProStore off in either test host
 Shared/     watch app and widget only
   RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
   StartWorkoutIntent.swift App Intents + Siri phrases
-Phone/                     the iPhone companion: App/ (services, root, DEBUG QA flags),
-                           Welcome/, Workouts/, Editor/, Pro/ (paywall, offer codes and
-                           refunds), Settings/ (incl. Watch Status), Components/, Resources/
+Phone/                     the iPhone companion: App/ (services, the two tabs, DEBUG QA
+                           flags), Welcome/, Workouts/, Editor/, History/ (sessions read
+                           from Health, SessionSummary, Session Detail), Pro/ (paywall,
+                           offer codes and refunds), Settings/ (incl. Watch Status and the
+                           Apple Health explainer), Components/, Resources/
 Sources/                   the watch app (Pro/, Sync/ and Views/ProgressRing.swift also build
                            for iPhone)
   App/                     @main App + WKApplicationDelegate; ConnectivityWakes holds a

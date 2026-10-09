@@ -19,6 +19,8 @@ final class PhoneServices {
     let pro: ProStore
     /// Keeps the presets in step with the watch. Pro never travels this way.
     let sync: WatchSync
+    /// The sessions the watch saved to Health. Reads nothing until History is first shown.
+    let history: HistoryModel
 
     #if DEBUG
     /// The services the running app was launched with, so the unit tests can check that the
@@ -28,10 +30,16 @@ final class PhoneServices {
     private(set) var qa = PhoneQAOptions()
     #endif
 
-    init(store: WorkoutStore = WorkoutStore(), pro: ProStore = ProStore(), sync: WatchSync? = nil) {
+    init(
+        store: WorkoutStore = WorkoutStore(),
+        pro: ProStore = ProStore(),
+        sync: WatchSync? = nil,
+        history: HistoryModel? = nil
+    ) {
         self.store = store
         self.pro = pro
         self.sync = sync ?? WatchSync(store: store)
+        self.history = history ?? HistoryModel(source: HealthHistory())
     }
 
     /// The app's own services, started. The only place the app creates them.
@@ -41,7 +49,9 @@ final class PhoneServices {
         let store = WorkoutStore()
         // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
         let sync = qa.watch.map { WatchSync(store: store, transport: QAWatchTransport(state: $0, store: store)) }
-        let services = PhoneServices(store: store, sync: sync)
+        // A fixture in place of Health, so nothing is read from it or written to it.
+        let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
+        let services = PhoneServices(store: store, sync: sync, history: history)
         services.qa = qa
         current = services
         services.applyQAEdits()
@@ -67,8 +77,12 @@ final class PhoneServices {
 
     /// The app came forward. Reads the entitlement again, so a purchase or refund made on
     /// another device shows without a relaunch; a store that never started reads nothing.
+    /// History reads Health again alongside, if it has been opened: the watch may have saved
+    /// a workout meanwhile.
     func handleForeground() async {
+        async let history: Void = history.handleForeground()
         await pro.handleForeground()
+        await history
     }
 
     /// The app is leaving the foreground: an edit still waiting to be sent goes now.

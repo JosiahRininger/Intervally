@@ -121,7 +121,8 @@ targets:
               - intervally
         NSHealthShareUsageDescription: >-
           Intervally reads your heart rate during a workout so it can show it alongside
-          your intervals.
+          your intervals, and your interval workouts so Intervally on iPhone can show your
+          history.
         NSHealthUpdateUsageDescription: >-
           Intervally saves your interval sessions to Health as workouts, so they count
           toward your activity rings.

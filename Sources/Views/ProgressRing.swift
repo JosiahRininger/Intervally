@@ -102,9 +102,15 @@ struct SegmentedRing: View {
     /// The workout's every phase, falling back to the grouped form when the ring is too
     /// small (or the workout too long) for each phase to be seen.
     init(plan: IntervalPlan, strokeRatio: CGFloat = 0.06, gap: CGFloat = 2) {
+        self.init(phases: plan.phases, strokeRatio: strokeRatio, gap: gap)
+    }
+
+    /// Phases in the order they ran, which need not make a whole plan: the iPhone's History
+    /// draws a session from the intervals Health recorded, an early end included.
+    init(phases: [IntervalPhase], strokeRatio: CGFloat = 0.06, gap: CGFloat = 2) {
         self.init(
-            segments: Self.segments(for: plan),
-            grouped: Self.groupedSegments(for: plan),
+            segments: Self.segments(for: phases),
+            grouped: Self.groupedSegments(for: phases),
             strokeRatio: strokeRatio,
             gap: gap
         )
@@ -230,15 +236,20 @@ struct SegmentedRing: View {
     /// true share up to `bookendCap`; whatever the bookends give up goes back to the other
     /// phases in proportion to their seconds, so the rounds keep their rhythm.
     nonisolated static func displayFractions(for plan: IntervalPlan, bookendCap: Double = SegmentedRing.bookendCap) -> [Double] {
-        let phases = plan.phases
-        let total = plan.totalDuration
+        displayFractions(for: plan.phases, bookendCap: bookendCap)
+    }
+
+    /// `displayFractions(for:)` for phases that need not make a whole plan.
+    nonisolated static func displayFractions(for phases: [IntervalPhase], bookendCap: Double = SegmentedRing.bookendCap) -> [Double] {
+        let total = phases.reduce(0) { $0 + $1.duration }
         guard total > 0 else { return phases.map { _ in 0 } }
         let actual = phases.map { $0.duration / total }
         let bookendShare = phases.indices
             .filter { phases[$0].kind.isBookend }
             .reduce(0.0) { $0 + min(actual[$1], bookendCap) }
         let otherSeconds = phases.filter { !$0.kind.isBookend }.reduce(0.0) { $0 + $1.duration }
-        // A plan always has at least one work interval; this only guards the arithmetic.
+        // A plan always has a work interval. A session that ended in its warmup may not, and
+        // then the bookends are all there is to draw, at their true shares.
         guard otherSeconds > 0 else { return actual }
         let otherShare = 1 - bookendShare
         return phases.indices.map { index in
@@ -252,8 +263,12 @@ struct SegmentedRing: View {
     /// next phase starts a new block — the lead-in, the warmup, each round (work plus its
     /// rest), then the cooldown.
     nonisolated static func segments(for plan: IntervalPlan) -> [Segment] {
-        let phases = plan.phases
-        let fractions = displayFractions(for: plan)
+        segments(for: plan.phases)
+    }
+
+    /// `segments(for:)` for phases that need not make a whole plan.
+    nonisolated static func segments(for phases: [IntervalPhase]) -> [Segment] {
+        let fractions = displayFractions(for: phases)
         return phases.indices.map { index in
             let phase = phases[index]
             let next = index + 1 < phases.count ? phases[index + 1] : nil
@@ -270,10 +285,15 @@ struct SegmentedRing: View {
     /// The same plan as one arc per phase kind, in the order the kinds first appear, with
     /// the bookends capped as in the detailed form.
     nonisolated static func groupedSegments(for plan: IntervalPlan) -> [Segment] {
-        let fractions = displayFractions(for: plan)
+        groupedSegments(for: plan.phases)
+    }
+
+    /// `groupedSegments(for:)` for phases that need not make a whole plan.
+    nonisolated static func groupedSegments(for phases: [IntervalPhase]) -> [Segment] {
+        let fractions = displayFractions(for: phases)
         var order: [IntervalPhase.Kind] = []
         var shares: [IntervalPhase.Kind: Double] = [:]
-        for (phase, fraction) in zip(plan.phases, fractions) {
+        for (phase, fraction) in zip(phases, fractions) {
             if shares[phase.kind] == nil { order.append(phase.kind) }
             shares[phase.kind, default: 0] += fraction
         }

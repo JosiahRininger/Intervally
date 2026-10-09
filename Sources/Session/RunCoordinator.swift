@@ -254,7 +254,8 @@ final class RunCoordinator {
             log.info("closing out a leftover workout session before a new run")
             await workout.end()
         }
-        if !tookSession { tookSession = await workout.start() }
+        // Tagged with the run's own workout, which a restore takes from its snapshot.
+        if !tookSession { tookSession = await workout.start(for: engine.plan.workout) }
 
         // The run may have been stopped while the session was starting. Taking a tier now
         // would leave a live workout session — holding the app open and showing the workout
@@ -305,7 +306,7 @@ final class RunCoordinator {
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.engine.isActive,
                       self.tier == .extendedRuntime else { return }
-                guard await self.workout.start() else { continue }
+                guard await self.workout.start(for: self.engine.plan.workout) else { continue }
 
                 // The run may have ended while the session was starting.
                 guard self.engine.isActive, !Task.isCancelled else {

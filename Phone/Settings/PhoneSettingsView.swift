@@ -7,16 +7,18 @@ import SwiftUI
 
 /// A screen pushed inside Settings.
 enum SettingsRoute: Hashable {
-    case pro, watch
+    case pro, watch, health
 }
 
-/// The iPhone's Settings sheet: Intervally Pro, the watch, the App Store's purchase sheets,
-/// and the links App Review and users look for. Nothing here is a placeholder.
+/// The iPhone's Settings sheet: Intervally Pro, the watch, Apple Health, the App Store's
+/// purchase sheets, and the links App Review and users look for. Nothing here is a
+/// placeholder.
 ///
 /// The paywall is pushed here rather than presented: this is already a sheet.
 struct PhoneSettingsView: View {
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
+    @Environment(HistoryModel.self) private var history
     @Environment(\.dismiss) private var dismiss
 
     @State private var path: [SettingsRoute] = []
@@ -47,6 +49,12 @@ struct PhoneSettingsView: View {
                     }
                     NavigationLink(value: SettingsRoute.watch) {
                         watchRow
+                    }
+                    NavigationLink(value: SettingsRoute.health) {
+                        row(
+                            systemImage: "heart.text.square", title: "Apple Health",
+                            subtitle: HistoryMessage.settingsSubtitle(for: history.state)
+                        )
                     }
                 }
 
@@ -91,6 +99,7 @@ struct PhoneSettingsView: View {
                 switch route {
                 case .pro: PhonePaywallView(context: .settings)
                 case .watch: WatchStatusView()
+                case .health: HealthExplainerView()
                 }
             }
             .alert(notice?.title ?? "", isPresented: isShowingNotice, presenting: notice) { _ in
@@ -129,15 +138,19 @@ struct PhoneSettingsView: View {
 
     private var watchRow: some View {
         let status = WatchStatusContent(peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt)
-        return HStack(spacing: 12) {
-            Image(systemName: status.systemImage)
+        return row(systemImage: status.systemImage, title: "Apple Watch", subtitle: status.title)
+    }
+
+    private func row(systemImage: String, title: String, subtitle: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
                 .foregroundStyle(.secondary)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text("Apple Watch")
+                Text(title)
                     .font(.body.weight(.semibold))
-                Text(status.title)
+                Text(subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -181,4 +194,5 @@ struct PhoneSettingsView: View {
     PhoneSettingsView()
         .environment(ProStore(defaults: UserDefaults(suiteName: "preview.pro") ?? .standard))
         .environment(WatchSync(store: store))
+        .environment(HistoryModel(source: HealthHistory()))
 }

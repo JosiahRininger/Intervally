@@ -18,11 +18,14 @@ import WatchConnectivity
 ///   sync reports that state and sends nothing to a real one.
 /// - `-qaWelcome YES` shows the welcome whatever was seen before.
 /// - `-qaOpen <screen>` opens one screen on launch (`QAScreen`).
+/// - `-qaHistory sample|empty|connect|unavailable|failed` reads History from a fixture
+///   (`SampleHistory`) instead of Health, which is never read or written.
 struct PhoneQAOptions: Equatable {
     var pro: Bool?
     var watch: QAWatchState?
     var welcome = false
     var screen: QAScreen?
+    var history: QAHistory?
 
     static let current = parse(ProcessInfo.processInfo.arguments)
 
@@ -42,6 +45,7 @@ struct PhoneQAOptions: Equatable {
             options.welcome = value(after: "-qaWelcome").map { ["yes", "1", "true"].contains($0.lowercased()) } ?? true
         }
         options.screen = value(after: "-qaOpen").flatMap(QAScreen.init(rawValue:))
+        options.history = value(after: "-qaHistory").flatMap(QAHistory.init(rawValue:))
         return options
     }
 
@@ -126,10 +130,16 @@ enum QAScreen: String, CaseIterable, Sendable {
     case watch
     /// Settings > Intervally Pro.
     case pro
+    /// Settings > Apple Health.
+    case health
+    /// The History tab.
+    case history
+    /// The History tab, with its newest session open.
+    case session
 
-    /// Where each screen starts: the Workouts stack, the editor, or Settings.
+    /// Where each screen starts: the tabs, the Workouts stack, the editor, Settings or History.
     enum Stage: Sendable {
-        case workouts, editor, settings
+        case tabs, workouts, editor, settings, history
     }
 
     /// Each stage opens its part once per launch, so a second editor opened by hand doesn't
@@ -166,7 +176,8 @@ struct WorkoutsQAOpen: ViewModifier {
             switch screen {
             case .editor, .picker, .bookends: path = [.editor(store.selected.id, isNew: false)]
             case .paywall: sheet = .paywall
-            case .settings, .watch, .pro: sheet = .settings
+            case .settings, .watch, .pro, .health: sheet = .settings
+            case .history, .session: break
             }
         }
     }
@@ -190,16 +201,63 @@ struct EditorQAOpen: ViewModifier {
     }
 }
 
-/// `-qaOpen watch|pro` in Settings: pushes the screen, once.
+/// `-qaOpen watch|pro|health` in Settings: pushes the screen, once.
 struct SettingsQAOpen: ViewModifier {
     @Binding var path: [SettingsRoute]
     @Environment(\.qaScreen) private var screen
 
     func body(content: Content) -> some View {
         content.onAppear {
-            guard screen == .watch || screen == .pro, QAScreen.open(.settings) else { return }
-            path = [screen == .watch ? .watch : .pro]
+            let route: SettingsRoute? = switch screen {
+            case .watch: .watch
+            case .pro: .pro
+            case .health: .health
+            default: nil
+            }
+            guard let route, QAScreen.open(.settings) else { return }
+            path = [route]
         }
     }
+}
+
+/// `-qaOpen history|session`: selects the History tab, once.
+struct TabsQAOpen: ViewModifier {
+    @Binding var tab: PhoneTab
+    @Environment(\.qaScreen) private var screen
+
+    func body(content: Content) -> some View {
+        content.onAppear {
+            guard screen == .history || screen == .session, QAScreen.open(.tabs) else { return }
+            tab = .history
+        }
+    }
+}
+
+/// `-qaOpen session` in History: opens the newest session once the sessions are in, once.
+struct HistoryQAOpen: ViewModifier {
+    @Binding var path: [SessionSummary]
+    @Environment(\.qaScreen) private var screen
+    @Environment(HistoryModel.self) private var history
+
+    func body(content: Content) -> some View {
+        content.onChange(of: history.sessions.first) { _, newest in
+            guard screen == .session, let newest, QAScreen.open(.history) else { return }
+            path = [newest]
+        }
+    }
+}
+
+/// A History to stand in for Health's, one per History state.
+enum QAHistory: String, CaseIterable, Sendable {
+    /// Three weeks of sessions: an early end, a long warmup, one without heart rate.
+    case sample
+    /// Connected, with nothing saved yet.
+    case empty
+    /// Never asked: Connect Apple Health, which then "allows" the sample.
+    case connect
+    /// A device without Health.
+    case unavailable
+    /// Every read fails, as on a locked iPhone.
+    case failed
 }
 #endif

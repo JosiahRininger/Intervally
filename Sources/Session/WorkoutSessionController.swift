@@ -45,14 +45,17 @@ final class WorkoutSessionController: NSObject {
 
     static var isSupported: Bool { HKHealthStore.isHealthDataAvailable() }
 
-    private var typesToShare: Set<HKSampleType> { [HKQuantityType.workoutType()] }
-    /// Only what the app uses. Heart rate is shown during a run; active energy feeds the
+    nonisolated static var typesToShare: Set<HKSampleType> { [HKQuantityType.workoutType()] }
+    /// Only what Intervally uses. Heart rate is shown during a run; active energy feeds the
     /// workout's totals. The activity summary (ring data) was requested but never read —
-    /// and HealthKit review holds apps to asking for exactly what they need.
-    private var typesToRead: Set<HKObjectType> {
+    /// and HealthKit review holds apps to asking for exactly what they need. Workouts are
+    /// read by History on the iPhone, which shares this app's Health identity: asking for
+    /// them here too keeps either app's request from undoing the other's (`HealthAccess`).
+    nonisolated static var typesToRead: Set<HKObjectType> {
         [
             HKQuantityType(.heartRate),
             HKQuantityType(.activeEnergyBurned),
+            HKObjectType.workoutType(),
         ]
     }
 
@@ -71,7 +74,7 @@ final class WorkoutSessionController: NSObject {
             let once = Once()
             Task { @MainActor in
                 do {
-                    try await self.store.requestAuthorization(toShare: self.typesToShare, read: self.typesToRead)
+                    try await self.store.requestAuthorization(toShare: Self.typesToShare, read: Self.typesToRead)
                     if once.claim() { continuation.resume(returning: true) }
                 } catch {
                     self.log.error("health authorization failed: \(error.localizedDescription, privacy: .public)")
@@ -166,19 +169,27 @@ final class WorkoutSessionController: NSObject {
 
     /// Whether the user has already answered the Health prompt.
     ///
-    /// `authorizationStatus(for:)` is a *synchronous* XPC call to healthd. On the main actor
-    /// it froze the whole UI mid-push for over a minute when healthd was degraded (seen in
-    /// the simulator after a preferences reset). Run it off the main actor, and if healthd
-    /// doesn't answer in two seconds, assume the prompt was answered: an unresponsive
-    /// healthd will not be showing a sheet either, and "decided" is the branch that bounds
-    /// the authorization request that follows.
+    /// Asks whether this exact request would show the sheet, not what the workout type's
+    /// sharing status is. The iPhone app shares this app's Health identity, and its History
+    /// asks to read workouts: once that was granted, sharing no longer read as
+    /// `.notDetermined` on a watch that had never asked to share. The sheet then got the
+    /// five-second bound meant for an answered one, and the first run started behind it with
+    /// no workout session (paired simulators).
+    ///
+    /// Bounded: healthd has been seen to stop answering (the simulator, after a preferences
+    /// reset, froze the UI for over a minute on the old synchronous status call). If it
+    /// doesn't answer in two seconds, assume the prompt was answered: an unresponsive healthd
+    /// will not be showing a sheet either, and "decided" is the branch that bounds the
+    /// authorization request that follows.
     private func authorizationIsDecided() async -> Bool {
         let store = self.store
+        let share = Self.typesToShare
+        let read = Self.typesToRead
         return await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
             let once = Once()
             Task.detached {
-                let decided = store.authorizationStatus(for: HKQuantityType.workoutType()) != .notDetermined
-                if once.claim() { continuation.resume(returning: decided) }
+                let status = try? await store.statusForAuthorizationRequest(toShare: share, read: read)
+                if once.claim() { continuation.resume(returning: Self.isDecided(status)) }
             }
             Task { @MainActor in
                 try? await Task.sleep(for: .seconds(2))
@@ -188,6 +199,13 @@ final class WorkoutSessionController: NSObject {
                 }
             }
         }
+    }
+
+    /// Whether a request would come back without showing a sheet. Only `.shouldRequest`
+    /// means a sheet; HealthKit's not knowing, or an error, counts as answered, which bounds
+    /// the request rather than leaving Start waiting on healthd.
+    nonisolated static func isDecided(_ status: HKAuthorizationRequestStatus?) -> Bool {
+        status != .shouldRequest
     }
 
     /// Waits for the previous run's Health save, but not indefinitely.
@@ -246,6 +264,16 @@ final class WorkoutSessionController: NSObject {
     /// Starts a live workout session. Returns false if one could not be started, so the
     /// caller can fall back.
     func start(at date: Date = Date()) async -> Bool {
+        await start(at: date, tagging: nil)
+    }
+
+    /// Starts a live workout session for `workout`, and tags the saved Health workout with it
+    /// (`workoutMetadata(for:)`) so History on the iPhone can find it and name it.
+    func start(at date: Date, for workout: IntervalWorkout) async -> Bool {
+        await start(at: date, tagging: workout)
+    }
+
+    private func start(at date: Date, tagging workout: IntervalWorkout?) async -> Bool {
         // Wait out any teardown still in flight rather than reporting its stale state.
         await awaitTeardown(seconds: 8)
         guard Self.isSupported, session == nil else { return isRunning }
@@ -279,6 +307,7 @@ final class WorkoutSessionController: NSObject {
                 if case .failed(let error) = outcome { throw error }
                 throw CollectionTimedOut()
             }
+            if let workout { tag(builder, with: workout) }
 
             isRunning = true
             log.info("workout session started")
@@ -309,8 +338,36 @@ final class WorkoutSessionController: NSObject {
         )
     }
 
-    nonisolated static let phaseMetadataKey = "IntervallyPhase"
-    nonisolated static let roundMetadataKey = "IntervallyRound"
+    /// Tags the collecting workout with the preset it runs, without holding up the start. The
+    /// tags only matter at the save, a whole run away, and a wedged healthd must not keep the
+    /// run waiting for its tier (see `beginCollection`). A failure costs History this one
+    /// session's name and round count, so it is only logged.
+    private func tag(_ builder: HKLiveWorkoutBuilder, with workout: IntervalWorkout) {
+        Task { @MainActor in
+            do {
+                try await builder.addMetadata(Self.workoutMetadata(for: workout))
+                self.log.info("workout tagged with its preset")
+            } catch {
+                self.log.error("could not tag the workout: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+    }
+
+    /// What the saved workout is tagged with: the preset's ID, which is how History finds
+    /// Intervally's workouts, its name as it was, and the rounds planned, so History can tell
+    /// a run that ended early. A blank name is left out rather than written empty.
+    nonisolated static func workoutMetadata(for workout: IntervalWorkout) -> [String: Any] {
+        var metadata: [String: Any] = [
+            HealthMetadata.presetID: workout.id.uuidString,
+            HealthMetadata.plannedRounds: workout.clamped.rounds,
+        ]
+        let name = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !name.isEmpty { metadata[HealthMetadata.presetName] = name }
+        return metadata
+    }
+
+    nonisolated static let phaseMetadataKey = HealthMetadata.phase
+    nonisolated static let roundMetadataKey = HealthMetadata.round
 
     /// What each Health activity is tagged with. Every activity keeps the workout's HIIT
     /// type, warmup and cooldown included: all activities of an interval workout share the

@@ -238,15 +238,6 @@ struct WorkoutsView: View {
     }
 }
 
-private extension View {
-    /// A list row that is only its card: no row background, separator or system inset.
-    func cardRow() -> some View {
-        listRowBackground(Color.clear)
-            .listRowSeparator(.hidden)
-            .listRowInsets(EdgeInsets(top: 5, leading: 16, bottom: 5, trailing: 16))
-    }
-}
-
 #Preview {
     let store = WorkoutStore(defaults: UserDefaults(suiteName: "preview.workouts") ?? .standard)
     WorkoutsView()

@@ -25,6 +25,10 @@ protocol WorkoutSessioning: AnyObject {
     @discardableResult func requestAuthorization() async -> Bool
     func adoptRecoveredSession() async -> Bool
     func start(at date: Date) async -> Bool
+    /// Starts a session for `workout`, so the saved Health workout carries the preset that
+    /// ran (History on the iPhone reads it). A stand-in that doesn't care takes the default,
+    /// a plain `start(at:)`.
+    func start(at date: Date, for workout: IntervalWorkout) async -> Bool
     /// Segments the session so each interval becomes its own activity in Health.
     func beginActivity(for phase: IntervalPhase, at date: Date)
     func pause()
@@ -36,6 +40,8 @@ protocol WorkoutSessioning: AnyObject {
 extension WorkoutSessioning {
     func beginActivity(for phase: IntervalPhase) { beginActivity(for: phase, at: Date()) }
     func start() async -> Bool { await start(at: Date()) }
+    func start(at date: Date, for workout: IntervalWorkout) async -> Bool { await start(at: date) }
+    func start(for workout: IntervalWorkout) async -> Bool { await start(at: Date(), for: workout) }
     @discardableResult func end() async -> Bool { await end(at: Date()) }
 }
 

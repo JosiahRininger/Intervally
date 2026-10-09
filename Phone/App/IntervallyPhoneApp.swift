@@ -5,8 +5,8 @@
 
 import SwiftUI
 
-/// The iPhone companion: where workouts are planned and Pro is bought. Workouts only ever run
-/// on the watch.
+/// The iPhone companion: where workouts are planned, looked back on and Pro is bought.
+/// Workouts only ever run on the watch.
 @main
 struct IntervallyPhoneApp: App {
     /// Created in `init`, so the store is listening before the first view appears.
@@ -23,6 +23,7 @@ struct IntervallyPhoneApp: App {
                 .environment(services.store)
                 .environment(services.pro)
                 .environment(services.sync)
+                .environment(services.history)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {
