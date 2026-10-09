@@ -139,6 +139,45 @@ struct MetadataTests {
         #expect(!purchase.contains("Tap the gear"))
     }
 
+    // MARK: - An iPhone app with an Apple Watch app
+
+    @Test("The record is the iPhone app's, under a SKU that names no one platform")
+    func recordIsTheIPhoneApps() throws {
+        // Both are set once, when the record is created, and can never change.
+        let companion = try #require(Bundle.main.object(forInfoDictionaryKey: "WKCompanionAppBundleIdentifier") as? String)
+        #expect(try Self.field("Bundle ID").text == companion)
+        #expect(try Self.field("SKU").text == "intervally")
+    }
+
+    /// The watch-only listing told App Review there was no iPhone app to carry the purchase.
+    @Test("Nothing pasted into App Store Connect calls Intervally watch-only", arguments: [
+        "## Description (4000)", "### Notes for the reviewer (4000)", "### Review notes (4000)",
+    ])
+    func neverWatchOnly(label: String) throws {
+        let text = try Self.field(label).text.lowercased()
+        for phrase in ["standalone", "no iphone app", "watch-only", "watch only"] {
+            #expect(!text.contains(phrase), "\(label) says \(phrase)")
+        }
+    }
+
+    @Test("The description says where the data stays, and that workouts run on the watch")
+    func descriptionSaysWhereDataStays() throws {
+        let description = try Self.field("## Description (4000)").text
+        #expect(description.contains("stay on your iPhone and Apple Watch and in Apple Health"))
+        #expect(description.contains("Workouts run on Apple Watch."))
+    }
+
+    @Test("The purchase goes in with the iOS version, and its notes start on the iPhone")
+    func purchaseRidesWithTheIOSVersion() throws {
+        #expect(try Self.listing().contains("add Intervally Pro to the same submission as iOS version 1.0"))
+        let purchase = try Self.field("### Review notes (4000)").text
+        let iPhone = try #require(purchase.range(of: "ON IPHONE (the main way to buy; no Apple Watch needed)"))
+        let watch = try #require(purchase.range(of: "ON APPLE WATCH"))
+        #expect(iPhone.lowerBound < watch.lowerBound)
+        // The watch's paywall points to the iPhone where the App Store can't sell Pro on it.
+        #expect(purchase.contains("its Intervally Pro screen says Pro can also be unlocked in Intervally on iPhone"))
+    }
+
     // MARK: - The In-App Purchase record
 
     @Test("The StoreKit configuration mirrors the App Store Connect record")
@@ -176,70 +215,6 @@ struct MetadataTests {
         let matches = try fields().filter { $0.label == label }
         #expect(matches.count == 1, "\(matches.count) fields labelled \(label)")
         return try #require(matches.first)
-    }
-}
-
-/// One value the listing has you paste, as it writes it down.
-struct ListingField: Equatable {
-    /// The heading a block sits under, or a table row's first cell.
-    let label: String
-    let text: String
-    /// Apple's limit, written as "(100)" at the end of the label.
-    let limit: Int?
-    /// The count the listing claims: "(160)" on the line after a block, or after a
-    /// table value.
-    let statedCount: Int?
-    let isBlock: Bool
-}
-
-/// Just enough Markdown for `Metadata.md`: fenced blocks under headings, and table rows
-/// whose value is in backticks.
-enum Listing {
-    static func fields(in markdown: String) -> [ListingField] {
-        let lines = markdown.components(separatedBy: "\n")
-        var fields: [ListingField] = []
-        var heading = ""
-        var index = 0
-        while index < lines.count {
-            let line = lines[index]
-            if line.hasPrefix("#") {
-                heading = line
-            } else if line == "```" {
-                var body: [String] = []
-                index += 1
-                while index < lines.count, lines[index] != "```" {
-                    body.append(lines[index])
-                    index += 1
-                }
-                let after = index + 1 < lines.count ? lines[index + 1] : ""
-                fields.append(ListingField(
-                    label: heading, text: body.joined(separator: "\n"),
-                    limit: trailingCount(heading), statedCount: leadingCount(after), isBlock: true
-                ))
-            } else if line.hasPrefix("|"), let field = tableField(line) {
-                fields.append(field)
-            }
-            index += 1
-        }
-        return fields
-    }
-
-    private static func tableField(_ line: String) -> ListingField? {
-        let cells = line.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
-        guard cells.count >= 2,
-              let match = cells[1].firstMatch(of: /^`([^`]+)`(.*)$/) else { return nil }
-        return ListingField(
-            label: cells[0], text: String(match.1),
-            limit: trailingCount(cells[0]), statedCount: trailingCount(String(match.2)), isBlock: false
-        )
-    }
-
-    private static func trailingCount(_ text: String) -> Int? {
-        text.firstMatch(of: /\((\d+)\)\s*$/).flatMap { Int($0.1) }
-    }
-
-    private static func leadingCount(_ text: String) -> Int? {
-        text.firstMatch(of: /^\((\d+)\)/).flatMap { Int($0.1) }
     }
 }
 

@@ -105,6 +105,8 @@ struct ValuePickerSheet: View {
             }
             .pickerStyle(.wheel)
             .labelsHidden()
+            // A wheel's rows keep their height whatever the text size.
+            .dynamicTypeSize(...Self.largestRowSize)
             .padding(.horizontal)
             .navigationTitle(field.title)
             .navigationBarTitleDisplayMode(.inline)
@@ -118,6 +120,11 @@ struct ValuePickerSheet: View {
         .presentationBackground(.black)
         .onChange(of: selection) { _, new in onPick(new) }
     }
+
+    /// The largest text a wheel row takes. Rows don't grow, so at the accessibility sizes
+    /// each value overlapped the next on an iPhone SE. The sheet's title and the editor's
+    /// tiles still follow the user's size.
+    static let largestRowSize = DynamicTypeSize.xxxLarge
 
     /// A wheel row: the tile's form, with rounds spelled out ("8 rounds") since a bare
     /// number in a wheel says nothing on its own.

@@ -14,6 +14,8 @@ enum WorkoutsRoute: Hashable {
 /// What the Workouts screen says about the watch, worked out apart from the view.
 enum WorkoutsContent {
     static let watchHint = "Open Intervally on your watch to bring your presets over."
+    /// Makes a preset the one the watch starts next, from the library's menu and the editor.
+    static let putOnWatchTitle = "Put on Watch"
 
     static func upNextTitle(peer: PeerState) -> String {
         peer.hasWatch ? "Up next on your watch" : "Up next"
@@ -163,7 +165,7 @@ struct WorkoutsView: View {
                 Button {
                     actions.putOnWatch(workout)
                 } label: {
-                    Label("Put on Watch", systemImage: "applewatch")
+                    Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
                 }
             }
             Button {

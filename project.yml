@@ -177,6 +177,8 @@ targets:
       - path: Tests
       # Sync runs on both devices, so its tests run in both bundles.
       - path: SyncTests
+      # Helpers both bundles share, such as the App Store listing's parser.
+      - path: TestSupport
       # The StoreKit configuration is a resource of the test bundle only, where
       # SKTestSession loads it by URL. Never list it under Sources, Shared or Widget:
       # XcodeGen would copy it into the app or the widget.
@@ -204,6 +206,7 @@ targets:
     sources:
       - path: PhoneTests
       - path: SyncTests
+      - path: TestSupport
       # SKTestSession loads it by URL; test bundle only, as for the watch.
       - path: StoreKit
         buildPhase: resources

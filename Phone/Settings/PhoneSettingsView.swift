@@ -28,6 +28,23 @@ struct PhoneSettingsView: View {
 
     enum StoreAction: Equatable {
         case restore, redeem, refund
+
+        /// The row's words, which the App Review notes quote.
+        var title: String {
+            switch self {
+            case .restore: PaywallContent.restoreTitle
+            case .redeem: "Redeem Code"
+            case .refund: "Request a Refund"
+            }
+        }
+
+        var systemImage: String {
+            switch self {
+            case .restore: "arrow.clockwise"
+            case .redeem: "giftcard"
+            case .refund: "arrow.uturn.backward.circle"
+            }
+        }
     }
 
     private static let support = URL(string: "https://josiahrininger.com/intervally/support")
@@ -59,11 +76,11 @@ struct PhoneSettingsView: View {
                 }
 
                 Section {
-                    storeButton(.restore, title: PaywallContent.restoreTitle, systemImage: "arrow.clockwise")
-                    storeButton(.redeem, title: "Redeem Code", systemImage: "giftcard")
+                    storeButton(.restore)
+                    storeButton(.redeem)
                     // A family member's shared copy can only be refunded by whoever bought it.
                     if pro.ownership == .purchased {
-                        storeButton(.refund, title: "Request a Refund", systemImage: "arrow.uturn.backward.circle")
+                        storeButton(.refund)
                     }
                 } header: {
                     Text("Purchases")
@@ -158,12 +175,12 @@ struct PhoneSettingsView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func storeButton(_ action: StoreAction, title: String, systemImage: String) -> some View {
+    private func storeButton(_ action: StoreAction) -> some View {
         Button {
             run(action)
         } label: {
             HStack {
-                Label(title, systemImage: systemImage)
+                Label(action.title, systemImage: action.systemImage)
                 Spacer()
                 if busy == action {
                     ProgressView()

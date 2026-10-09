@@ -11,6 +11,9 @@ struct HistoryMessage: Equatable {
     let title: String
     let detail: String
 
+    /// History's one request to Health, in History and the explainer alike.
+    static let connectTitle = "Connect Apple Health"
+
     /// Where to look in Health. The same words in the empty state and the explainer.
     static let whereToCheck = "In the Health app, tap your picture, then Apps under Privacy, then Intervally."
 
@@ -169,7 +172,7 @@ struct HistoryView: View {
                             ProgressView()
                                 .tint(Theme.onTint)
                         } else {
-                            Text("Connect Apple Health")
+                            Text(HistoryMessage.connectTitle)
                         }
                     }
                     .font(.headline)

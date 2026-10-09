@@ -8,6 +8,13 @@ import SwiftUI
 /// Whether the first-launch welcome has been seen. Per iPhone: nothing about it syncs.
 enum Welcome {
     static let seenKey = "phone.welcomeSeen.v1"
+
+    /// The ring's side, for a visible height above Continue: whatever the words and the
+    /// watch's install steps leave (about 410 points at the default text size), from 140 to
+    /// 220. At 220 on an iPhone SE the install steps ran under Continue.
+    static func ringSide(forHeight height: CGFloat) -> CGFloat {
+        min(220, max(140, (height - 410).rounded()))
+    }
 }
 
 /// The first launch, once: what Intervally is, where the watch stands, and Continue. No
@@ -79,7 +86,8 @@ struct WelcomeView: View {
                     .rotationEffect(.degrees(-90))
                     .padding(8)
             }
-            .frame(width: 220, height: 220)
+            .aspectRatio(1, contentMode: .fit)
+            .containerRelativeFrame(.vertical) { height, _ in Welcome.ringSide(forHeight: height) }
             .accessibilityHidden(true)
     }
 }

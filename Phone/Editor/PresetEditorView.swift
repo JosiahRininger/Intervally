@@ -262,7 +262,7 @@ struct PresetEditorView: View {
             Button {
                 actions.putOnWatch(workout)
             } label: {
-                Label("Put on Watch", systemImage: "applewatch")
+                Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
                     .font(.headline)
                     .frame(maxWidth: .infinity, minHeight: 52)
             }

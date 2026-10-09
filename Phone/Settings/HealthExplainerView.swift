@@ -82,7 +82,7 @@ struct HealthExplainerView: View {
                     Button {
                         Task { await history.connect() }
                     } label: {
-                        Text("Connect Apple Health")
+                        Text(HistoryMessage.connectTitle)
                             .font(.headline)
                             .frame(maxWidth: .infinity, minHeight: 52)
                     }

@@ -1,9 +1,11 @@
 # Intervally
 
-An interval timer for Apple Watch. Set work, rest and rounds; it counts you through them
-with distinct haptics for each phase and keeps time correctly whether or not you're looking
-at your wrist. Intervally Pro, a one-time purchase, adds unlimited presets, warmup and
-cooldown phases, and stronger taps.
+An interval timer for Apple Watch, with an iPhone app to plan workouts and look back on
+them. Set work, rest and rounds; the watch counts you through them with distinct haptics
+for each phase and keeps time correctly whether or not you're looking at your wrist. The
+iPhone edits the same presets, shows each session the watch saved to Health, and sells Pro.
+Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, and
+stronger taps.
 
 ## Tech stack
 
@@ -19,9 +21,15 @@ xcodegen generate
 ```
 
 ```bash
+# The watch app: Tests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.2'
+# The iPhone app (also builds the embedded watch app): PhoneTests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
+
+At 1.0 the watch suite runs 494 tests (24 skipped: the StoreKit suite that can't run in a
+companion watch app, and the opt-in manual QA) and the iPhone suite 220 (2 skipped: the one
+purchase Xcode's test server cancels, and its manual QA), all Swift Testing, on Xcode 26.2.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
 bundle ID `com.josiahrininger.intervally` and the App Store record; the watch app is
@@ -136,9 +144,58 @@ editor|picker|bookends|paywall|settings|watch|pro|health|history|session`,
 read or written) and `-qaEdit "rename 0 Sprint; warmup 0 300"` (`PhoneQA.swift`,
 `QAEdit.swift`, `SampleHistory.swift`).
 
-Shipping Pro is not settled: App Store Connect's help says In-App Purchases aren't supported
-on Apple Watch app versions. The ship gate at the top of `AppStore/Metadata.md` lists what
-to check before promising Pro at launch.
+Pro is sold in both apps, under one product. App Store Connect doesn't take In-App
+Purchases with an Apple Watch app version, which is why Intervally ships as an iPhone app
+that embeds the watch app: Apple's "Creating independent watchOS apps" says a watch app's
+purchases are shared with its companion iOS app. Nothing about Pro crosses WatchConnectivity.
+Each device asks StoreKit, whose `Transaction.updates` also delivers a purchase made on the
+other device, and the watch keeps Restore. Whether App Store Connect accepts the first
+purchase with an iOS version whose build embeds a StoreKit-using watch app is still to be
+checked: the ship gate at the top of `AppStore/Metadata.md` says how.
+
+## The iPhone app
+
+The iPhone is where workouts are planned, looked back on and paid for. Workouts only ever
+run on the watch: there is no phone timer, which keeps clear of Guideline 4.3(b)'s "simple
+timers". Two tabs, each with a gear for Settings:
+
+- **Workouts.** The preset the watch starts next, then the library. A preset's editor has a
+  tile per number; each opens a wheel with exactly the values the crown turns over
+  (`PresetField`, `ValueSteps`). Put on Watch makes it the watch's next workout. Adding is
+  gated as on the watch, and a purchase finishes what the paywall interrupted.
+- **History.** The interval workouts the watch saved to Health, grouped by week, each with
+  its rounds, heart rate per interval and energy. Read-only: the iPhone never writes to
+  Health. To Health the two apps are one app, so the watch's request covers what History
+  reads (`HealthAccess`).
+- **Settings.** Intervally Pro, the watch's status, the Apple Health explainer, Restore,
+  Redeem Code and Request a Refund (iOS-only StoreKit sheets), Support and Privacy.
+
+Every screen works with no paired watch, and on iPad, where the app runs in compatibility
+mode and `WCSession.isSupported()` is false: only the words about a watch go. The first
+launch shows one welcome screen with the watch's status, and never a permission prompt.
+
+## Sync
+
+The iPhone and the watch keep the same presets and the same next workout over
+WatchConnectivity, with no server. Each device's own store stays primary: with no
+counterpart, as on iPad or a Family Setup watch, sync simply idles.
+
+- **What travels.** One `SyncDocument`: every preset as a last-writer-wins record, deletes
+  as tombstones, and the selection as one more register, stamped by a hybrid logical clock
+  so a watch whose clock runs behind still wins with a later edit. The three starters have
+  fixed IDs, so two fresh installs merge to three presets, not six. A merge is commutative,
+  idempotent and associative (`SyncDocumentTests` runs 2,000 seeded two-device histories).
+- **How.** `WatchSync` sends the whole document with `updateApplicationContext(_:)`, both
+  ways. It reaches an app that isn't running and replaces anything older still undelivered.
+  The receiver merges, never replaces, and replies only when the merge holds something the
+  sender lacks, so the two settle within two exchanges. A burst of edits, such as the crown
+  turning through values, goes as one send.
+- **The watch in the background.** A WatchConnectivity wake is held until the context has
+  merged, and handed back after at most 15 s (`ConnectivityWakes`). The complication reloads
+  only when the next workout changed.
+- **Never synced:** a run in progress (it carries its own copy of the workout), Pro (StoreKit
+  answers on each device), settings and Health data. A stored document that won't decode
+  suspends sync rather than being overwritten.
 
 ## Layout
 
@@ -189,6 +246,11 @@ Widget/                    Smart Stack complication + Control Center control
 Tests/                     Swift Testing, watch app
 PhoneTests/                Swift Testing, iPhone app
 SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
+TestSupport/               helpers for both bundles: the App Store listing's parser
+AppStore/                  Metadata.md (the App Store Connect listing, checked by tests) and
+                           Screenshots/ (iPhone 6.9" and 6.3", Watch, the purchase's review
+                           shot, and compose.py, which captions the iPhone captures)
+Design/AppIcon/            the icon's generator; one PNG serves the iPhone and the watch
 ```
 
 ## Design notes
@@ -234,12 +296,20 @@ small watch.
 - Also only checkable on a watch, or in an Xcode run: a real purchase, restore and Ask to
   Buy; the Rename sheet that opens after a purchase from New Preset; and "COOLDOWN" fitting
   the 40mm run screen.
-- `PrivacyInfo.xcprivacy` ships in both the app and the widget; nothing is collected and
-  nothing leaves the watch.
+- A privacy manifest ships in each bundle: `Supporting/PrivacyInfo.xcprivacy` in the watch
+  app and the widget, `Phone/Resources/PrivacyInfo.xcprivacy` in the iPhone app. Nothing is
+  collected; presets go only between the user's own devices.
+- Only devices can show: WatchConnectivity's background wakes and their limits, watch
+  switching, Health bringing a watch workout to the iPhone, and an iPhone purchase reaching
+  the watch. Simulators passed each data path; none of them enforces the real limits.
 
 ## Shipping
 
 - Privacy policy: https://josiahrininger.com/intervally/privacy
 - Support: https://josiahrininger.com/intervally/support
 - App Store listing copy, review notes, the In-App Purchase record and screenshots:
-  `AppStore/`. `MetadataTests` checks the listing against Apple's field limits and the app.
+  `AppStore/`. `MetadataTests` checks the listing against Apple's field limits and the app;
+  `PhoneMetadataTests` checks the iPhone's words in it, and `ShipAssetsTests` the icon and
+  every screenshot's size and alpha.
+- Archive the `IntervallyPhone` scheme only. Its archive carries the watch app, so one
+  upload is one iOS version with both apps.
