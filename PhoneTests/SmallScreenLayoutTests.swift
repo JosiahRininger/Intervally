@@ -35,6 +35,26 @@ struct SmallScreenLayoutTests {
         #expect(Welcome.ringSide(forHeight: 0) == 140)
     }
 
+    @Test("The editor's ring is full size until it is measured, and wherever there is room")
+    func editorRingFullSize() {
+        #expect(EditorLayout.ringSide(visibleHeight: 0, belowRing: 0) == 220)
+        #expect(EditorLayout.ringSide(visibleHeight: 900, belowRing: 560) == 220)
+    }
+
+    /// Measured on an iPhone 17 Pro, free, default text size: 664 points between the
+    /// navigation bar and Put on Watch, 418 of them below the ring.
+    @Test("On a 6.3-inch iPhone the ring shrinks until the whole editor fits")
+    func editorRingFits() {
+        let side = EditorLayout.ringSide(visibleHeight: 664, belowRing: 418)
+        #expect(side == 190)
+        #expect(side + 418 + EditorLayout.chrome <= 664)
+    }
+
+    @Test("The editor's ring never shrinks below 160 points; past that the editor scrolls")
+    func editorRingSmallest() {
+        #expect(EditorLayout.ringSide(visibleHeight: 500, belowRing: 560) == 160)
+    }
+
     /// At the accessibility sizes each wheel value overlapped the next on an iPhone SE.
     @Test("Wheel rows follow the text size up to the largest standard one, and stop there")
     func wheelRowsStopGrowing() {

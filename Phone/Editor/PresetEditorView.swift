@@ -5,6 +5,23 @@
 
 import SwiftUI
 
+/// The editor's ring: as large as lets the whole editor fit on screen, from 160 to 220 points.
+/// At a fixed 220, a 6.3-inch iPhone had to scroll to reach Warmup and Cooldown, which sat
+/// under Put on Watch.
+enum EditorLayout {
+    static let ringSides: ClosedRange<CGFloat> = 160...220
+    /// The ring's top padding, the gap below it and the stack's bottom padding.
+    static let chrome: CGFloat = 8 + 24 + 24
+
+    /// For the scroll view's visible height and the height of everything below the ring. Until
+    /// both are measured, the full size.
+    static func ringSide(visibleHeight: CGFloat, belowRing: CGFloat) -> CGFloat {
+        guard visibleHeight > 0, belowRing > 0 else { return ringSides.upperBound }
+        let room = (visibleHeight - belowRing - chrome).rounded(.down)
+        return min(ringSides.upperBound, max(ringSides.lowerBound, room))
+    }
+}
+
 /// One preset, edited in place: every change is saved and synced as it is made, as on the
 /// watch, so there is nothing to save and nothing to lose.
 ///
@@ -32,6 +49,8 @@ struct PresetEditorView: View {
     @FocusState private var nameFocused: Bool
     /// Coming back from the copy Duplicate opened must not empty and refocus the name again.
     @State private var hasAppeared = false
+    @State private var visibleHeight: CGFloat = 0
+    @State private var belowRing: CGFloat = 0
 
     enum Sheet: Hashable, Identifiable {
         case picker(PresetField)
@@ -94,20 +113,26 @@ struct PresetEditorView: View {
 
         return ScrollView {
             VStack(spacing: 24) {
-                hero(runs)
-                nameField(workout)
-                tiles(workout, fields: [.work, .rest, .rounds, .prepare])
-                VStack(alignment: .leading, spacing: 10) {
-                    SectionLabel("Warmup & Cooldown")
-                    tiles(workout, fields: [.warmup, .cooldown])
+                hero(runs, side: EditorLayout.ringSide(visibleHeight: visibleHeight, belowRing: belowRing))
+                VStack(spacing: 24) {
+                    nameField(workout)
+                    tiles(workout, fields: [.work, .rest, .rounds, .prepare])
+                    VStack(alignment: .leading, spacing: 10) {
+                        SectionLabel("Warmup & Cooldown")
+                        tiles(workout, fields: [.warmup, .cooldown])
+                    }
+                    if sync.peer.hasWatch && !pinsPutOnWatch {
+                        putOnWatch(workout)
+                    }
                 }
-                if sync.peer.hasWatch && !pinsPutOnWatch {
-                    putOnWatch(workout)
-                }
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { belowRing = $0 }
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
+        // Inside the pinned bar: the scroll view's frame stops at it and at the navigation bar.
+        // (Its proxy still reports both as insets; subtracting them counted them twice.)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
         .blackCanvas()
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.hard, for: .bottom)
@@ -128,6 +153,9 @@ struct PresetEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         .toolbar { menu(workout) }
+        // A focused task with its own action at the bottom: the tabs come back with Back. With
+        // them, a 6.3-inch iPhone had no room for the ring at full size.
+        .toolbarVisibility(.hidden, for: .tabBar)
         .confirmationDialog("Delete “\(workout.name)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete Workout", role: .destructive) {
                 if actions.delete(workout) { dismiss() }
@@ -151,9 +179,8 @@ struct PresetEditorView: View {
 
     /// The workout that will run, as one ring with its total inside: without Pro, without its
     /// bookends, exactly as the watch would run it.
-    private func hero(_ runs: IntervalWorkout) -> some View {
-        let side: CGFloat = 220
-        return ZStack {
+    private func hero(_ runs: IntervalWorkout, side: CGFloat) -> some View {
+        ZStack {
             SegmentedRing(plan: IntervalPlan(workout: runs), strokeRatio: 0.07)
             VStack(spacing: 4) {
                 Text("Total")
@@ -162,7 +189,7 @@ struct PresetEditorView: View {
                     .kerning(0.6)
                     .foregroundStyle(.secondary)
                 Text(DurationFormat.timer(runs.totalSeconds))
-                    .font(.hero(52))
+                    .font(.hero((52 * side / EditorLayout.ringSides.upperBound).rounded()))
                     .lineLimit(1)
                     .minimumScaleFactor(0.45)
                 RhythmLine(workout: runs)
@@ -170,7 +197,9 @@ struct PresetEditorView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
             }
-            .padding(.horizontal, side * 0.15)
+            // Narrow enough for the ring's chord at the rhythm line's height at 160 points,
+            // where 0.15 let the line touch the ring at the largest text size.
+            .padding(.horizontal, side * 0.19)
             // The ring is a fixed size, so the words inside stop growing where they would no
             // longer fit; the tiles below carry the same values at any size.
             .dynamicTypeSize(...DynamicTypeSize.xxxLarge)

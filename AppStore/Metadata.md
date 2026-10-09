@@ -216,9 +216,8 @@ into these files at the same size. To retake them, in a Debug build:
 - Launch with `-phone.welcomeSeen.v1 YES -qaWatch installed` and `-qaPro free`, or
   `-qaPro pro` for shot 3.
 - Shot 3 sets its bookends with `-qaEdit "warmup 2 300; cooldown 2 180"`. Open Tabata
-  (shot 2) and EMOM (shot 3) from the library, then scroll until the Warmup and Cooldown
-  tiles clear the Put on Watch capsule, on both phones. Unscrolled, the 6.3" shot 2 showed
-  the section's header with both tiles hidden under the capsule and the tab bar.
+  (shot 2) and EMOM (shot 3) from the library. Nothing needs scrolling: the editor hides
+  the tab bar and sizes its ring so the whole editor fits on both phones.
 - Shots 4 and 5 use `-qaHistory sample -qaOpen history` and `-qaOpen session`. The sample
   sessions are a fixture: nothing is read from or written to Health (Guideline 5.1.3(ii)).
 - Override the status bar with `simctl status_bar <udid> override --time 9:41

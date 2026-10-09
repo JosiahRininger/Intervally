@@ -36,7 +36,7 @@ struct EditorTile: View {
         let field = content.field
 
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
                 Label {
                     Text(field.title)
                         .font(.subheadline.weight(.semibold))
@@ -61,8 +61,9 @@ struct EditorTile: View {
                         .font(.headline)
                 }
             }
-            .padding(14)
-            .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, minHeight: 88, alignment: .leading)
             .tileBackground()
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }

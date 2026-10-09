@@ -161,7 +161,9 @@ timers". Two tabs, each with a gear for Settings:
 
 - **Workouts.** The preset the watch starts next, then the library. A preset's editor has a
   tile per number; each opens a wheel with exactly the values the crown turns over
-  (`PresetField`, `ValueSteps`). Put on Watch makes it the watch's next workout. Adding is
+  (`PresetField`, `ValueSteps`). Put on Watch makes it the watch's next workout. The
+  editor hides the tab bar and sizes its ring to fit (`EditorLayout`), so on a 6.3" iPhone
+  nothing is below the fold. Adding is
   gated as on the watch, and a purchase finishes what the paywall interrupted.
 - **History.** The interval workouts the watch saved to Health, grouped by week, each with
   its rounds, heart rate per interval and energy. Read-only: the iPhone never writes to
