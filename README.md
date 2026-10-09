@@ -135,7 +135,12 @@ to check before promising Pro at launch.
 Core/       model compiled into the iPhone app, the watch app and the widget
   IntervalWorkout.swift    settings (lead-in, warmup, work/rest/rounds, cooldown), clamped
   IntervalPlan.swift       immutable expanded schedule + pure position(atElapsed:)
-  WorkoutStore.swift       presets and in-flight run persistence
+  WorkoutStore.swift       presets and in-flight run persistence; local edits stamp the
+                           sync document, merge(_:) folds in the other device's
+  SyncDocument.swift       the presets and selection the iPhone and watch replicate:
+                           last-writer-wins records + tombstones on a hybrid logical clock
+  ValueSteps.swift         the crown's and the pickers' value tables
+  PresetNaming.swift       "Tabata" → "Tabata 2" for duplicates
   SharedDefaults.swift     the App Group on the watch; the app's own defaults on iPhone
   UnitTestHost.swift       keeps the real ProStore off in either test host
 Shared/     watch app and widget only

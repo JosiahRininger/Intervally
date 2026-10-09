@@ -139,22 +139,10 @@ struct ValueEditorView: View {
         return table.indices.min { abs(table[$0] - target) < abs(table[$1] - target) } ?? 0
     }
 
-    /// Every value the crown can land on, from the lower bound to the upper, each a
-    /// multiple of the stride in force at that point. The upper bound is always included.
+    /// Every value the crown can land on. The table lives in `ValueSteps`, shared with the
+    /// iPhone's pickers; this forwarder keeps the watch's call sites and tests as they were.
     nonisolated static func values(in range: ClosedRange<Int>, step: Int) -> [Int] {
-        var table = [range.lowerBound]
-        while let last = table.last, last < range.upperBound {
-            let stride = Self.stride(at: last, step: step)
-            table.append(min(range.upperBound, (last / stride + 1) * stride))
-        }
-        return table
-    }
-
-    private nonisolated static func stride(at value: Int, step: Int) -> Int {
-        guard step > 1 else { return 1 }
-        if value < 120 { return step }
-        if value < 600 { return 15 }
-        return 30
+        ValueSteps.values(in: range, step: step)
     }
 }
 

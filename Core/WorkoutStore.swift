@@ -21,6 +21,9 @@ struct RunSnapshot: Codable, Equatable, Sendable {
 /// integer keys and got them wrong: `HostingController` seeded `"timerOn"` while
 /// `SelectorOptions.key` read and wrote `"timeOn"`, so the seeded default and the saved
 /// value lived at different keys and the work duration silently reset.
+///
+/// The presets and the selection live in a `SyncDocument`, which the iPhone and the watch
+/// replicate: local edits stamp it, and `merge(_:)` folds in the other device's.
 @MainActor
 @Observable
 final class WorkoutStore {
@@ -28,10 +31,16 @@ final class WorkoutStore {
     /// Shared with the widget extension, which reads the active run to render a live
     /// countdown on the watch face.
     enum Key {
+        /// Derived from `document` and rewritten with it, so the widget, the complication and
+        /// the run code read exactly what they always have.
         static let workouts = "workouts.v2"
         static let selected = "selectedWorkoutID.v2"
         static let activeRun = "activeRun.v2"
         static let startTimes = "startTimes.v1"
+        /// The presets' source of truth.
+        static let document = "sync.document.v1"
+        /// This install's `SyncClock`.
+        static let clock = "sync.clock.v1"
     }
 
     /// Reads the persisted run without constructing a full store. Used by the widget,
@@ -100,27 +109,82 @@ final class WorkoutStore {
     @ObservationIgnored private let encoder = JSONEncoder()
     @ObservationIgnored private let decoder = JSONDecoder()
 
+    /// What sync sends. Local edits stamp it; `merge(_:)` folds in the other device's.
+    @ObservationIgnored private(set) var document: SyncDocument
+    @ObservationIgnored private var clock: SyncClock
+
+    /// True when a stored preset list exists but won't decode. The store then never writes
+    /// the document, and neither applies nor offers remote changes, so a decoding problem
+    /// can't turn into permanent loss on either device. Only a launch that reads it clears it.
+    let isSyncSuspended: Bool
+
+    /// Called once after every local edit, so sync can offer it to the other device. A merge
+    /// never calls it: `MergeResult` already says whether the sender needs a reply.
+    @ObservationIgnored var onLocalChange: (@MainActor () -> Void)?
+
+    /// The live presets in list order, derived from `document`.
     private(set) var workouts: [IntervalWorkout]
+    /// Derived too: the document's selection while it names a live preset, else the first.
+    private var selection: UUID
+
+    /// Setting it is a local edit; an id that names no live preset is ignored.
     var selectedID: UUID {
-        didSet { defaults.set(selectedID.uuidString, forKey: Key.selected) }
+        get { selection }
+        set { select(newValue) }
     }
 
     init(defaults: UserDefaults = SharedDefaults.suite) {
         self.defaults = defaults
 
-        let blob = defaults.data(forKey: Key.workouts)
-        let decoded = blob.map(Self.decodePresets) ?? []
+        var clock = defaults.data(forKey: Key.clock).flatMap { try? JSONDecoder().decode(SyncClock.self, from: $0) }
+            ?? SyncClock(device: UUID().uuidString)
+        let loaded = Self.load(from: defaults, clock: &clock)
+        // Stamps must beat everything already stored, even if the clock itself was lost.
+        clock.observe(loaded.document)
 
-        let loaded = decoded.isEmpty ? Self.starterWorkouts : decoded
-        self.workouts = loaded
+        self.clock = clock
+        self.document = loaded.document
+        self.isSyncSuspended = loaded.isSuspended
+        let derived = Self.derive(from: loaded.document)
+        self.workouts = derived.workouts
+        self.selection = derived.selection
 
-        let storedID = defaults.string(forKey: Key.selected).flatMap(UUID.init(uuidString:))
-        self.selectedID = loaded.first(where: { $0.id == storedID })?.id ?? loaded[0].id
+        if loaded.needsSave { persist() }
+    }
 
-        // Seed only a genuinely fresh install. A blob that exists but would not decode is
-        // left exactly as it is: overwriting it with the starters would turn a decoding
-        // problem into permanent loss of everything the user built.
-        if blob == nil { persistWorkouts() }
+    /// What the store starts from, and whether that must be written back now.
+    private struct Loaded {
+        var document: SyncDocument
+        var isSuspended = false
+        var needsSave = false
+    }
+
+    /// The stored document; else a preset list saved before sync existed, imported once; else
+    /// the starters. A blob that exists but won't decode is left exactly as it is: overwriting
+    /// it would turn a decoding problem into permanent loss of everything the user built.
+    nonisolated private static func load(from defaults: UserDefaults, clock: inout SyncClock) -> Loaded {
+        let legacyBlob = defaults.data(forKey: Key.workouts)
+        let legacy = legacyBlob.map(decodePresets) ?? []
+        let legacySelection = defaults.string(forKey: Key.selected).flatMap(UUID.init(uuidString:))
+
+        if let blob = defaults.data(forKey: Key.document) {
+            if var document = try? JSONDecoder().decode(SyncDocument.self, from: blob) {
+                clock.observe(document)
+                let repaired = document.repairIfEmpty(clock: &clock)
+                // Also rewrites the derived copies if they went missing, so the complication
+                // never loses its preset over them.
+                if !document.workouts.isEmpty {
+                    return Loaded(document: document, needsSave: repaired || legacyBlob == nil)
+                }
+            }
+            // Fall back to the derived copies, which the last good launch wrote beside it and
+            // which keep taking this install's edits while sync is off.
+            guard !legacy.isEmpty else { return Loaded(document: .fresh, isSuspended: true) }
+            return Loaded(document: .imported(legacy, selectedID: legacySelection, clock: &clock), isSuspended: true)
+        }
+        guard legacyBlob != nil else { return Loaded(document: .fresh, needsSave: true) }
+        guard !legacy.isEmpty else { return Loaded(document: .fresh, isSuspended: true) }
+        return Loaded(document: .imported(legacy, selectedID: legacySelection, clock: &clock), needsSave: true)
     }
 
     /// Decodes presets one at a time, so a single unreadable entry costs that entry rather
@@ -136,44 +200,126 @@ final class WorkoutStore {
         return entries.compactMap(\.value)
     }
 
+    /// The list and the selection everything else reads. A selection naming a preset that is
+    /// gone falls back to the first without stamping anything, so two devices never trade
+    /// fallbacks back and forth.
+    nonisolated private static func derive(from document: SyncDocument) -> (workouts: [IntervalWorkout], selection: UUID) {
+        let workouts = document.workouts
+        let chosen = workouts.first { $0.id == document.selected.value } ?? workouts[0]
+        return (workouts, chosen.id)
+    }
+
     // MARK: - Presets
 
-    static let starterWorkouts: [IntervalWorkout] = [
-        IntervalWorkout(name: "Classic", prepareSeconds: 10, workSeconds: 30, restSeconds: 15, rounds: 8),
-        IntervalWorkout(name: "Tabata", prepareSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 8),
-        IntervalWorkout(name: "EMOM", prepareSeconds: 10, workSeconds: 45, restSeconds: 15, rounds: 10),
-    ]
+    /// Fixed ids, so two fresh installs agree on them (`SyncDocument.starterIDs`).
+    nonisolated static let starterWorkouts = SyncDocument.starterWorkouts
 
     var selected: IntervalWorkout {
         get { workouts.first(where: { $0.id == selectedID }) ?? workouts[0] }
         set { update(newValue) }
     }
 
+    /// Saves an edit to a live preset. An edit that changes nothing stamps nothing: the crown
+    /// re-sends the same value, and each stamp is something to sync.
     func update(_ workout: IntervalWorkout) {
-        guard let index = workouts.firstIndex(where: { $0.id == workout.id }) else { return }
-        workouts[index] = workout.clamped
-        persistWorkouts()
+        let clamped = workout.clamped
+        guard let current = workouts.first(where: { $0.id == workout.id }), current != clamped else { return }
+        document.upsert(clamped, clock: &clock)
+        commitLocalChange()
     }
 
     @discardableResult
     func add(_ workout: IntervalWorkout = IntervalWorkout(name: "New")) -> IntervalWorkout {
         let clamped = workout.clamped
-        workouts.append(clamped)
-        selectedID = clamped.id
-        persistWorkouts()
+        document.upsert(clamped, clock: &clock)
+        document.select(clamped.id, clock: &clock)
+        commitLocalChange()
         return clamped
     }
 
+    /// Refused for the last preset. Deleting the selected one selects the first, as an edit of
+    /// its own, so the deleted preset can't take the selection back if it is ever restored.
     func delete(_ workout: IntervalWorkout) {
-        guard workouts.count > 1 else { return }
-        workouts.removeAll { $0.id == workout.id }
-        if selectedID == workout.id { selectedID = workouts[0].id }
-        persistWorkouts()
+        let wasSelected = workout.id == selection
+        guard document.delete(workout.id, clock: &clock) else { return }
+        if wasSelected { document.select(document.workouts.first?.id, clock: &clock) }
+        commitLocalChange()
     }
 
-    private func persistWorkouts() {
-        guard let data = try? encoder.encode(workouts) else { return }
-        defaults.set(data, forKey: Key.workouts)
+    /// Reorders the list, with offsets as SwiftUI's `onMove` gives them.
+    func move(fromOffsets source: IndexSet, toOffset destination: Int) {
+        guard document.move(fromOffsets: source, toOffset: destination, clock: &clock) else { return }
+        commitLocalChange()
+    }
+
+    /// Compared with the register rather than the derived selection: choosing the preset a
+    /// fallback put on screen records it, so a restored preset can't take the selection back.
+    private func select(_ id: UUID) {
+        guard id != document.selected.value, workouts.contains(where: { $0.id == id }) else { return }
+        document.select(id, clock: &clock)
+        commitLocalChange()
+    }
+
+    private func commitLocalChange() {
+        rederive()
+        persist()
+        onLocalChange?()
+    }
+
+    /// Assigns only what changed: a merge that touches nothing visible, a tombstone say,
+    /// must not redraw every view that reads the list.
+    private func rederive() {
+        let derived = Self.derive(from: document)
+        if workouts != derived.workouts { workouts = derived.workouts }
+        if selection != derived.selection { selection = derived.selection }
+    }
+
+    /// Writes the document, unless sync is suspended over an unreadable one, and the derived
+    /// copies the rest of the app reads.
+    private func persist() {
+        if !isSyncSuspended, let data = try? encoder.encode(document) {
+            defaults.set(data, forKey: Key.document)
+        }
+        if let data = try? encoder.encode(clock) {
+            defaults.set(data, forKey: Key.clock)
+        }
+        if let data = try? encoder.encode(workouts) {
+            defaults.set(data, forKey: Key.workouts)
+        }
+        defaults.set(selection.uuidString, forKey: Key.selected)
+    }
+
+    // MARK: - Sync
+
+    /// What a merge did, for whoever delivered the remote document.
+    struct MergeResult: Equatable, Sendable {
+        /// The local document took something from the remote one, if perhaps only a record
+        /// nothing shows, such as the tombstone of a preset this device never had.
+        var changed: Bool
+        /// The preset setup and the complication show is another one, or reads differently.
+        var selectedPresetChanged: Bool
+        /// The merge holds something the sender's document doesn't, so the sender needs a
+        /// reply. False once both hold the same, which is what stops the two replying forever.
+        var mergedDiffersFromRemote: Bool
+
+        static let unchanged = MergeResult(changed: false, selectedPresetChanged: false, mergedDiffersFromRemote: false)
+    }
+
+    /// Folds in the other device's document. Stamps nothing of its own, apart from the repair
+    /// when the merge would leave no preset, and never calls `onLocalChange`. A suspended
+    /// store applies nothing.
+    @discardableResult
+    func merge(_ remote: SyncDocument) -> MergeResult {
+        guard !isSyncSuspended else { return .unchanged }
+        let before = selected
+        let merged = document.receiving(remote, clock: &clock)
+        let changed = merged != document
+        if changed {
+            document = merged
+            rederive()
+            persist()
+        }
+        return MergeResult(changed: changed, selectedPresetChanged: selected != before, mergedDiffersFromRemote: merged != remote)
     }
 
     // MARK: - In-flight run

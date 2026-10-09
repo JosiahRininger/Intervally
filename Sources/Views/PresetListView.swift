@@ -157,20 +157,10 @@ struct PresetListView: View {
         return store.add(copy)
     }
 
-    /// "Tabata" → "Tabata 2"; "Tabata 2" → "Tabata 3", counting past any name already taken,
-    /// so duplicating a duplicate does not pile up suffixes.
+    /// "Tabata" → "Tabata 2". The rule lives in `PresetNaming`, shared with the iPhone; this
+    /// forwarder keeps the watch's call sites and tests as they were.
     nonisolated static func uniqueName(after name: String, among taken: [String]) -> String {
-        var stem = name
-        var number = 2
-        if let space = name.lastIndex(of: " "),
-           space > name.startIndex,
-           let suffix = Int(name[name.index(after: space)...]) {
-            stem = String(name[..<space])
-            number = suffix + 1
-        }
-        let names = Set(taken)
-        while names.contains("\(stem) \(number)") { number += 1 }
-        return "\(stem) \(number)"
+        PresetNaming.uniqueName(after: name, among: taken)
     }
 }
 
