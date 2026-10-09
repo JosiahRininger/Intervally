@@ -117,14 +117,7 @@ struct RunView: View {
         let paused = engine.status == .paused
 
         return VStack(spacing: 0) {
-            Text(paused ? "Paused" : kind.shortTitle)
-                .font(.phaseLabel)
-                .textCase(.uppercase)
-                .kerning(0.6)
-                .foregroundStyle(.white.opacity(0.7))
-                .lineLimit(1)
-                // "COOLDOWN", the longest word, needs about 0.69 to fit a 40mm chord.
-                .minimumScaleFactor(0.65)
+            PhaseWord(word: paused ? "Paused" : kind.shortTitle)
                 .frame(maxWidth: lineWidth)
 
             countdown(position, size: heroSize, color: paused ? .white.opacity(0.55) : palette.fill(for: kind))
@@ -475,5 +468,41 @@ struct RoundFooter: Equatable, Sendable {
             accessibilityLabel = "Round \(current) of \(total)"
         }
         dots = total <= Self.maxDots ? all : nil
+    }
+}
+
+/// The phase word at the top of the run ring: "WORK", "REST", "COOLDOWN", "PAUSED".
+///
+/// The tracked style when the word fits its line whole; otherwise the same size without the
+/// tracking, allowed to shrink to `smallestScale`. On a 40mm ring the line is about 53pt and
+/// "COOLDOWN" is 84pt as set: the old label asked that tracked Text to shrink to 0.65, which
+/// would have fit, and it truncated to "COOLDO…" instead. So the fallback drops the tracking
+/// before it shrinks. Only that word, on the smallest watches, ever shrinks.
+struct PhaseWord: View {
+    let word: String
+
+    struct Style {
+        let font: Font
+        let kerning: CGFloat
+    }
+
+    static let tracked = Style(font: .phaseLabel, kerning: 0.6)
+    static let untracked = Style(font: .phaseLabel, kerning: 0)
+    static let smallestScale: CGFloat = 0.55
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            Self.text(word, Self.tracked)
+            Self.text(word, Self.untracked).minimumScaleFactor(Self.smallestScale)
+        }
+    }
+
+    static func text(_ word: String, _ style: Style) -> some View {
+        Text(word)
+            .font(style.font)
+            .textCase(.uppercase)
+            .kerning(style.kerning)
+            .foregroundStyle(.white.opacity(0.7))
+            .lineLimit(1)
     }
 }

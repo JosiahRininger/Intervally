@@ -343,9 +343,10 @@ small watch.
   Before Stronger taps is sold, check on a watch that taps fire with the wrist down at all
   three tap strengths, and how far apart the repeats feel; the spacing is a starting point.
 - Also only checkable on a watch, or in an Xcode run: a real purchase, restore and Ask to
-  Buy; the Rename sheet that opens after a purchase from New Preset; and "COOLDOWN" fitting
-  the 40mm run screen (the 40mm simulator truncates it to "COOLDO…": the label doesn't
-  scale as `RunView` expects).
+  Buy; and the Rename sheet that opens after a purchase from New Preset. ("COOLDOWN" on the
+  40mm run screen used to truncate to "COOLDO…": a tracked Text ignored its
+  minimumScaleFactor. `PhaseWord` now drops the tracking before it shrinks; seen whole on
+  the 40mm simulator, and `PhaseWordTests` measures every phase word against the 40mm line.)
 - Pastel's Home Screen icon switches in the iPhone simulator, but the simulator can't show
   iOS's "You have changed the icon" alert: the call reports an error although the icon
   changes, and after that the simulator's `lsd` can refuse later changes ("Resource
