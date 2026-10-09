@@ -41,6 +41,8 @@ enum WorkoutsContent {
 struct WorkoutsView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
+    @Environment(ReviewLedger.self) private var reviews
+    @Environment(\.requestReview) private var requestReview
     @Environment(WatchSync.self) private var sync
 
     @State private var path: [WorkoutsRoute] = []
@@ -169,6 +171,7 @@ struct WorkoutsView: View {
             if sync.peer.hasWatch, !actions.isUpNext(workout) {
                 Button {
                     actions.putOnWatch(workout)
+                    reviews.ask(.sentToWatch, using: requestReview)
                 } label: {
                     Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
                 }
@@ -251,4 +254,5 @@ struct WorkoutsView: View {
         .environment(store)
         .environment(ProStore(defaults: UserDefaults(suiteName: "preview.pro") ?? .standard))
         .environment(WatchSync(store: store))
+        .environment(ReviewLedger(defaults: UserDefaults(suiteName: "preview.reviews") ?? .standard))
 }

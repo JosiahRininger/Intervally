@@ -12,6 +12,9 @@ struct SessionDetailView: View {
     let session: SessionSummary
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(HistoryModel.self) private var history
+    @Environment(ReviewLedger.self) private var reviews
+    @Environment(\.requestReview) private var requestReview
 
     var body: some View {
         ScrollView {
@@ -36,6 +39,10 @@ struct SessionDetailView: View {
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
+        // Back to the list after looking at a session: the calmest good moment there is.
+        .onDisappear {
+            reviews.ask(.lookedBackAtSession(sessionCount: history.sessions.count), using: requestReview)
+        }
     }
 
     // MARK: - Hero

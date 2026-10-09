@@ -21,6 +21,8 @@ final class PhoneServices {
     let sync: WatchSync
     /// The sessions the watch saved to Health. Reads nothing until History is first shown.
     let history: HistoryModel
+    /// When to ask for an App Store rating (`ReviewPolicy`).
+    let reviews: ReviewLedger
 
     #if DEBUG
     /// The services the running app was launched with, so the unit tests can check that the
@@ -34,12 +36,14 @@ final class PhoneServices {
         store: WorkoutStore = WorkoutStore(),
         pro: ProStore = ProStore(),
         sync: WatchSync? = nil,
-        history: HistoryModel? = nil
+        history: HistoryModel? = nil,
+        reviews: ReviewLedger = ReviewLedger()
     ) {
         self.store = store
         self.pro = pro
         self.sync = sync ?? WatchSync(store: store)
         self.history = history ?? HistoryModel(source: HealthHistory())
+        self.reviews = reviews
     }
 
     /// The app's own services, started. The only place the app creates them.
@@ -53,6 +57,7 @@ final class PhoneServices {
         let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
         let services = PhoneServices(store: store, sync: sync, history: history)
         services.qa = qa
+        services.reviews.isSuppressed = qa.isActive
         current = services
         services.applyQAEdits()
         if let isPro = qa.pro { services.pro.overrideForQA(isPro) }
@@ -73,6 +78,7 @@ final class PhoneServices {
         guard !isUnitTestHost else { return }
         pro.start()
         sync.activate()
+        reviews.recordOpen()
     }
 
     /// The app came forward. Reads the entitlement again, so a purchase or refund made on
@@ -80,6 +86,7 @@ final class PhoneServices {
     /// History reads Health again alongside, if it has been opened: the watch may have saved
     /// a workout meanwhile.
     func handleForeground() async {
+        reviews.recordOpen()
         async let history: Void = history.handleForeground()
         await pro.handleForeground()
         await history

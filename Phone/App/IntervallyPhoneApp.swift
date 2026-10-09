@@ -24,6 +24,7 @@ struct IntervallyPhoneApp: App {
                 .environment(services.pro)
                 .environment(services.sync)
                 .environment(services.history)
+                .environment(services.reviews)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {

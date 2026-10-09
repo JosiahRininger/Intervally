@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 /// A screen pushed inside Settings.
 enum SettingsRoute: Hashable {
@@ -89,6 +90,18 @@ struct PhoneSettingsView: View {
                 }
 
                 Section {
+                    // Asked for: the App Store's own Write a Review page, any time.
+                    if let writeReview = ReviewLinks.writeReview {
+                        Link(destination: writeReview) {
+                            Label("Rate Intervally", systemImage: "star")
+                        }
+                    }
+                    // Something wrong reaches Josiah, not just a one-star review.
+                    if let feedback = ReviewLinks.feedbackMail(appVersion: Self.version, systemVersion: UIDevice.current.systemVersion) {
+                        Link(destination: feedback) {
+                            Label("Send Feedback", systemImage: "envelope")
+                        }
+                    }
                     if let support = Self.support {
                         Link(destination: support) {
                             Label("Support", systemImage: "questionmark.circle")

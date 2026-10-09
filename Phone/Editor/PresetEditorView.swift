@@ -42,6 +42,8 @@ struct PresetEditorView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
+    @Environment(ReviewLedger.self) private var reviews
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
 
@@ -305,6 +307,7 @@ struct PresetEditorView: View {
         } else {
             Button {
                 actions.putOnWatch(workout)
+                reviews.ask(.sentToWatch, using: requestReview)
             } label: {
                 Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
                     .font(.headline)
@@ -371,4 +374,5 @@ struct PresetEditorView: View {
     .environment(store)
     .environment(ProStore(defaults: UserDefaults(suiteName: "preview.pro") ?? .standard))
     .environment(WatchSync(store: store))
+    .environment(ReviewLedger(defaults: UserDefaults(suiteName: "preview.reviews") ?? .standard))
 }

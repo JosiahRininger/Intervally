@@ -27,6 +27,9 @@ struct PhoneQAOptions: Equatable {
     var screen: QAScreen?
     var history: QAHistory?
 
+    /// Any QA flag at all: such a launch is being driven or captured, never really used.
+    var isActive: Bool { pro != nil || watch != nil || welcome || screen != nil || history != nil }
+
     static let current = parse(ProcessInfo.processInfo.arguments)
 
     /// Unreadable values are ignored rather than guessed at, so a typo leaves the app as it
