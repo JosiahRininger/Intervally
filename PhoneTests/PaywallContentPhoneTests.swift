@@ -67,6 +67,28 @@ struct PaywallContentPhoneTests {
         #expect(make(isPro: true, ownership: .none) == make(isPro: true, ownership: .purchased))
     }
 
+    /// On iPad, or an iPhone with no watch paired, there is no watch to choose Tap Strength on.
+    @Test("Owned with no watch: only what is left to do here")
+    func ownedWithoutWatch() {
+        func owned(_ ownership: ProStore.Ownership) -> PaywallContent.Action {
+            PaywallContent.make(
+                context: .settings, isPro: true, ownership: ownership, canMakePayments: true,
+                offer: Self.shareable, isPurchasing: false, lastPurchase: nil, lastRestore: nil,
+                platform: .phone, hasWatch: false
+            ).action
+        }
+        #expect(owned(.purchased) == .owned(title: "You have Pro", detail: "Unlocked. Add more workouts and warmups."))
+        #expect(owned(.familyShared) == .owned(
+            title: "Pro is shared by your family",
+            detail: "Unlocked through Family Sharing. Add more workouts and warmups."
+        ))
+        // The watch's own paywall never asks.
+        #expect(PaywallContent.make(
+            context: .settings, isPro: true, ownership: .purchased, canMakePayments: true, offer: .idle,
+            isPurchasing: false, lastPurchase: nil, lastRestore: nil, platform: .watch, hasWatch: false
+        ).action == .owned(title: "You have Pro", detail: "Thanks for supporting Intervally."))
+    }
+
     @Test("Blocked purchases name this iPhone, not a watch")
     func blocked() {
         let content = make(canMakePayments: false)

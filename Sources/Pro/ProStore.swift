@@ -191,17 +191,38 @@ final class ProStore: ProGating {
         apply(owned)
     }
 
+    /// One verified current entitlement, as much of it as the rules below read. Plain
+    /// values, so those rules can be tested with a family-shared copy, which a StoreKit test
+    /// session can't make.
+    struct Entitlement: Equatable, Sendable {
+        let transactionID: UInt64
+        let grantsPro: Bool
+        let ownership: Ownership
+    }
+
     /// StoreKit's answer: how Pro is held, judged from verified current entitlements only.
-    /// Bought outright beats family-shared when the user has both.
     nonisolated static func currentOwnership() async -> Ownership {
-        var found = Ownership.none
+        ownership(among: await currentEntitlements())
+    }
+
+    /// Bought outright beats family-shared when the user has both.
+    nonisolated static func ownership(among entitlements: [Entitlement]) -> Ownership {
+        let granting = entitlements.filter(\.grantsPro)
+        if granting.contains(where: { $0.ownership == .purchased }) { return .purchased }
+        return granting.isEmpty ? .none : .familyShared
+    }
+
+    nonisolated private static func currentEntitlements() async -> [Entitlement] {
+        var entitlements: [Entitlement] = []
         for await result in StoreKit.Transaction.currentEntitlements(for: ProProduct.id) {
-            guard case .verified(let transaction) = result, Self.grantsPro(transaction) else { continue }
-            let held = Self.ownership(of: transaction)
-            if held == .purchased { return .purchased }
-            found = held
+            guard case .verified(let transaction) = result else { continue }
+            entitlements.append(Entitlement(
+                transactionID: transaction.id,
+                grantsPro: grantsPro(transaction),
+                ownership: ownership(of: transaction)
+            ))
         }
-        return found
+        return entitlements
     }
 
     /// Whether a transaction unlocks Pro. Family-shared copies count; refunded, revoked
@@ -212,14 +233,21 @@ final class ProStore: ProGating {
             && !transaction.isUpgraded
     }
 
-    /// The purchase a refund request would be for: the latest verified transaction for Pro,
-    /// while it still grants Pro and was bought on this Apple Account. Nil for a family-shared
-    /// copy, which only the family member who bought it can ask a refund for.
+    /// The purchase a refund request would be for: the current entitlement bought on this
+    /// Apple Account. Nil for a family-shared copy, which only the family member who bought it
+    /// can ask a refund for.
+    ///
+    /// From the same read as `ownership`, which shows Request a Refund, rather than from
+    /// `Transaction.latest(for:)`: the latest transaction can be a newer family-shared copy,
+    /// or one since revoked, while the user's own purchase still stands, and the button then
+    /// answered that there was nothing to refund.
     nonisolated static func latestPurchasedTransactionID() async -> UInt64? {
-        guard case .verified(let transaction)? = await StoreKit.Transaction.latest(for: ProProduct.id),
-              grantsPro(transaction),
-              ownership(of: transaction) == .purchased else { return nil }
-        return transaction.id
+        refundableTransactionID(among: await currentEntitlements())
+    }
+
+    /// Exactly when `ownership(among:)` says `.purchased`, the purchase that says so.
+    nonisolated static func refundableTransactionID(among entitlements: [Entitlement]) -> UInt64? {
+        entitlements.first { $0.grantsPro && $0.ownership == .purchased }?.transactionID
     }
 
     nonisolated private static func ownership(of transaction: StoreKit.Transaction) -> Ownership {

@@ -247,7 +247,9 @@ final class RunCoordinator {
         // termination never reaches Health.
         var tookSession = false
         if recovering {
-            tookSession = await workout.adoptRecoveredSession()
+            // The run's own workout, from its snapshot: the session ran it, so a tag that never
+            // landed before the termination can still be written.
+            tookSession = await workout.adoptRecoveredSession(for: engine.plan.workout)
         } else if await workout.adoptRecoveredSession() {
             // A session the system is still holding from a run that is no longer resumable.
             // Save what it recorded and start clean, rather than appending this run to it.

@@ -24,6 +24,10 @@ protocol WorkoutSessioning: AnyObject {
 
     @discardableResult func requestAuthorization() async -> Bool
     func adoptRecoveredSession() async -> Bool
+    /// Adopts a recovered session that ran `workout`, the run's own, and tags it with that
+    /// workout if its tag never landed: History finds a workout by its tag alone. A stand-in
+    /// that doesn't care takes the default, a plain adopt.
+    func adoptRecoveredSession(for workout: IntervalWorkout) async -> Bool
     func start(at date: Date) async -> Bool
     /// Starts a session for `workout`, so the saved Health workout carries the preset that
     /// ran (History on the iPhone reads it). A stand-in that doesn't care takes the default,
@@ -38,6 +42,7 @@ protocol WorkoutSessioning: AnyObject {
 }
 
 extension WorkoutSessioning {
+    func adoptRecoveredSession(for workout: IntervalWorkout) async -> Bool { await adoptRecoveredSession() }
     func beginActivity(for phase: IntervalPhase) { beginActivity(for: phase, at: Date()) }
     func start() async -> Bool { await start(at: Date()) }
     func start(at date: Date, for workout: IntervalWorkout) async -> Bool { await start(at: date) }

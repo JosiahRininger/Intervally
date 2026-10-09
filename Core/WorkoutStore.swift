@@ -228,6 +228,15 @@ final class WorkoutStore {
         commitLocalChange()
     }
 
+    /// Renames a preset as it stands now, not as a sheet captured it when it opened: anything
+    /// the other device changed in the meantime has been merged since, and saving the old
+    /// copy would put it back, under a newer stamp, on both devices.
+    func rename(_ id: UUID, to name: String) {
+        guard var workout = workouts.first(where: { $0.id == id }) else { return }
+        workout.name = name
+        update(workout)
+    }
+
     /// Adds a preset at the end of the list. On the watch it is also selected, as the setup
     /// screen shows the selected preset; the iPhone passes `select: false`, where only Put on
     /// Watch changes what the watch starts next.

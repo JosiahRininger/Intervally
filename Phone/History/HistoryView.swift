@@ -48,12 +48,15 @@ struct HistoryMessage: Equatable {
         }
     }
 
-    /// Settings' Apple Health row.
+    /// Settings' Apple Health row. Before History or the explainer has read Health once,
+    /// nothing is known yet, and Settings doesn't touch HealthKit to find out: the row then
+    /// says what History is for, and claims no access either way.
     static func settingsSubtitle(for state: HistoryModel.State) -> String {
         switch state {
+        case .loading: "What History reads"
         case .unavailable: "Not available on this device"
         case .needsAccess: "Not connected"
-        case .loading, .empty, .loaded, .failed: "Reads your watch's workouts"
+        case .empty, .loaded, .failed: "Reads your watch's workouts"
         }
     }
 }

@@ -19,11 +19,16 @@ struct PhoneBundleTests {
         #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
     }
 
-    @Test("Health is read-only on iPhone: a reason to read, none to write")
+    /// Read-only is pinned where it is decided, in what History asks Health for. The write
+    /// reason is still declared: App Store Connect wants both purpose strings from any binary
+    /// that links HealthKit's authorization call (ITMS-90683), whatever it asks for.
+    @Test("Health is read-only on iPhone, and both purpose strings say so")
     func healthIsReadOnly() throws {
-        let reason = try #require(info["NSHealthShareUsageDescription"] as? String)
-        #expect(!reason.isEmpty)
-        #expect(info["NSHealthUpdateUsageDescription"] == nil)
+        #expect(HealthHistory.shareTypes.isEmpty)
+        let read = try #require(info["NSHealthShareUsageDescription"] as? String)
+        #expect(!read.isEmpty)
+        let write = try #require(info["NSHealthUpdateUsageDescription"] as? String)
+        #expect(write.contains("only reads"))
     }
 
     @Test("The icon comes from the asset catalog")

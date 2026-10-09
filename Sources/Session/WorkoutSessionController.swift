@@ -121,6 +121,23 @@ final class WorkoutSessionController: NSObject {
         return true
     }
 
+    /// Adopts the recovered session of a run of `workout`, and tags it if the tag never
+    /// landed: the app can be terminated between `beginCollection` and `addMetadata`, and
+    /// that save would then never show in History.
+    func adoptRecoveredSession(for workout: IntervalWorkout) async -> Bool {
+        guard await adoptRecoveredSession() else { return false }
+        if let builder, Self.needsTag(builder.metadata) {
+            log.notice("recovered workout was never tagged; tagging it now")
+            tag(builder, with: workout)
+        }
+        return true
+    }
+
+    /// Whether a workout's metadata lacks the preset ID History finds it by.
+    nonisolated static func needsTag(_ metadata: [String: Any]) -> Bool {
+        metadata[HealthMetadata.presetID] == nil
+    }
+
     /// First-to-finish gate for the recovery race. Thread-safe so either task may win.
     private final class Once: @unchecked Sendable {
         private let lock = NSLock()
@@ -340,8 +357,10 @@ final class WorkoutSessionController: NSObject {
 
     /// Tags the collecting workout with the preset it runs, without holding up the start. The
     /// tags only matter at the save, a whole run away, and a wedged healthd must not keep the
-    /// run waiting for its tier (see `beginCollection`). A failure costs History this one
-    /// session's name and round count, so it is only logged.
+    /// run waiting for its tier (see `beginCollection`). A failure leaves the session out of
+    /// History altogether, which finds Intervally's workouts by the preset ID alone, though
+    /// it still saves to Health and Fitness. It is logged, and a recovered session is tagged
+    /// again (`adoptRecoveredSession(for:)`); one that stays in this process is not retried.
     private func tag(_ builder: HKLiveWorkoutBuilder, with workout: IntervalWorkout) {
         Task { @MainActor in
             do {

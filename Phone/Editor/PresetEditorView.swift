@@ -133,7 +133,7 @@ struct PresetEditorView: View {
                 if actions.delete(workout) { dismiss() }
             }
         } message: {
-            Text("It's removed from your watch too.")
+            Text(WorkoutsContent.deleteMessage(peer: sync.peer))
         }
         .onAppear {
             guard !hasAppeared else { return }

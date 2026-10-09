@@ -64,9 +64,9 @@ struct PresetListView: View {
         }
         .sheet(item: $renaming) { workout in
             RenamePresetView(workout: workout) { newName in
-                var updated = workout
-                updated.name = newName
-                store.update(updated)
+                // By id: `workout` is the copy from when the sheet opened, and the iPhone may
+                // have changed the preset while the name was being dictated.
+                store.rename(workout.id, to: newName)
                 renaming = nil
             }
         }

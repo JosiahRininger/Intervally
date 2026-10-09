@@ -183,6 +183,16 @@ struct WorkoutsModelTests {
         #expect(WorkoutsContent.upNextTitle(peer: .unsupported) == "Up next")
     }
 
+    /// On iPad, or an iPhone with no watch paired, nothing is removed from any watch.
+    @Test("Delete's confirmation names the watch only when there is one", arguments: [
+        PeerState.unsupported, .activating, .notPaired, .appNotInstalled, .ready,
+    ])
+    func deleteMessage(peer: PeerState) {
+        let message = WorkoutsContent.deleteMessage(peer: peer)
+        #expect(message.contains("watch") == peer.hasWatch)
+        #expect(message == (peer.hasWatch ? "It's removed from your watch too." : "This can't be undone."))
+    }
+
     @Test("The bring-your-presets hint shows until the watch has sent anything", arguments: [
         PeerState.unsupported, .activating, .notPaired, .appNotInstalled, .ready,
     ])

@@ -61,6 +61,13 @@ targets:
         NSHealthShareUsageDescription: >-
           Intervally shows the interval workouts your Apple Watch saved to Health, with each
           interval and your heart rate.
+        # The iPhone never writes to Health (HealthHistory.shareTypes is empty), but it links
+        # the authorization call that can, and App Store Connect's purpose-string check reads
+        # the binary, not the call's arguments (ITMS-90683). True of the app as Health lists
+        # it: the watch app, under the same name, saves the workouts.
+        NSHealthUpdateUsageDescription: >-
+          Your Apple Watch saves your interval sessions to Health as workouts. Intervally on
+          iPhone only reads them.
     entitlements:
       path: Supporting/IntervallyPhone.entitlements
       properties:

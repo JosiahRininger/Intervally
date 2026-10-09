@@ -21,6 +21,11 @@ enum WorkoutsContent {
         peer.hasWatch ? "Up next on your watch" : "Up next"
     }
 
+    /// Under the delete confirmation. Only an iPhone with a watch has one to remove it from.
+    static func deleteMessage(peer: PeerState) -> String {
+        peer.hasWatch ? "It's removed from your watch too." : "This can't be undone."
+    }
+
     /// Until the watch has sent its presets once, its own edits are only on the watch. Shown
     /// only with the watch app installed: before that, Settings explains what to do.
     static func showsWatchHint(peer: PeerState, lastReceivedAt: Date?) -> Bool {

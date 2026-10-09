@@ -43,6 +43,11 @@ struct SyncClock: Codable, Equatable, Sendable {
 /// One preset's replicated state. A deleted preset stays as a tombstone, or the other
 /// device's copy would bring it straight back. The tombstone keeps the last contents, so
 /// the empty-list repair has a real preset to restore.
+///
+/// Two last-writer-wins registers: the contents (workout and tombstone) under `stamp`, and
+/// the place in the list under `orderStamp`. A reorder on one device and an edit on the
+/// other then both survive: a move can't put back contents it never touched, and an edit
+/// can't put back a place it never touched.
 struct PresetRecord: Codable, Equatable, Sendable {
     var id: UUID
     var workout: IntervalWorkout
@@ -50,12 +55,45 @@ struct PresetRecord: Codable, Equatable, Sendable {
     /// Where it sits in the list on both devices: the starters at 0, 1 and 2, a new preset
     /// after every other, a moved one between its new neighbours.
     var order: Int64
+    /// When the contents were last written.
     var stamp: SyncStamp
+    /// When `order` was last written: by the add that created the preset, or by a move.
+    var orderStamp: SyncStamp
+
+    /// A preset placed when it was written, as an add places it.
+    init(id: UUID, workout: IntervalWorkout, deleted: Bool, order: Int64, stamp: SyncStamp, orderStamp: SyncStamp? = nil) {
+        self.id = id
+        self.workout = workout
+        self.deleted = deleted
+        self.order = order
+        self.stamp = stamp
+        self.orderStamp = orderStamp ?? stamp
+    }
+
+    /// The later of its two stamps: the last time anything in it was written.
+    var latestStamp: SyncStamp { max(stamp, orderStamp) }
+
+    /// Each register keeps the later write. On an exact tie the receiver keeps its own, as
+    /// `Register` does.
+    func merged(with other: PresetRecord) -> PresetRecord {
+        var out = self
+        if other.stamp > stamp {
+            out.workout = other.workout
+            out.deleted = other.deleted
+            out.stamp = other.stamp
+        }
+        if other.orderStamp > orderStamp {
+            out.order = other.order
+            out.orderStamp = other.orderStamp
+        }
+        return out
+    }
 }
 
 extension PresetRecord {
     /// Lenient like `IntervalWorkout`: only the id is required. The workout's own id is
     /// forced to the record's, so a record can never describe a preset it isn't filed under.
+    /// A record without an order stamp was placed no later than its contents were written.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let id = try container.decode(UUID.self, forKey: .id)
@@ -66,7 +104,8 @@ extension PresetRecord {
             workout: workout,
             deleted: (try? container.decode(Bool.self, forKey: .deleted)) ?? false,
             order: (try? container.decode(Int64.self, forKey: .order)) ?? 0,
-            stamp: (try? container.decode(SyncStamp.self, forKey: .stamp)) ?? .origin
+            stamp: (try? container.decode(SyncStamp.self, forKey: .stamp)) ?? .origin,
+            orderStamp: try? container.decode(SyncStamp.self, forKey: .orderStamp)
         )
     }
 }
@@ -87,10 +126,11 @@ struct Register<Value: Codable & Equatable & Sendable>: Codable, Equatable, Send
 /// The presets and the selected preset, as the iPhone and the watch replicate them.
 ///
 /// State-based: each side sends its whole document and the receiver merges, never
-/// replaces. Every preset is a last-writer-wins record, a deletion is a tombstone, and the
-/// selection is a last-writer-wins register, all stamped by `SyncClock`. That makes
-/// `merged(with:)` commutative, associative and idempotent, so the two devices converge
-/// however WatchConnectivity orders, drops or repeats what they send.
+/// replaces. Every preset is a last-writer-wins record whose place in the list is a
+/// register of its own, a deletion is a tombstone, and the selection is a last-writer-wins
+/// register, all stamped by `SyncClock`. That makes `merged(with:)` commutative,
+/// associative and idempotent, so the two devices converge however WatchConnectivity
+/// orders, drops or repeats what they send.
 struct SyncDocument: Equatable, Sendable {
     /// Written into every encoded document, so a later version can tell what an older one
     /// wrote. Not a stored property: two versions holding the same presets are equal, and a
@@ -104,7 +144,7 @@ struct SyncDocument: Equatable, Sendable {
     var workouts: [IntervalWorkout] { liveRecords.map(\.workout) }
 
     var highestMillis: Int64 {
-        presets.values.reduce(selected.stamp.millis) { max($0, $1.stamp.millis) }
+        presets.values.reduce(selected.stamp.millis) { max($0, $1.latestStamp.millis) }
     }
 
     private var liveRecords: [PresetRecord] {
@@ -116,8 +156,7 @@ struct SyncDocument: Equatable, Sendable {
     func merged(with other: SyncDocument) -> SyncDocument {
         var out = self
         for (id, theirs) in other.presets {
-            if let mine = out.presets[id], !(theirs.stamp > mine.stamp) { continue }
-            out.presets[id] = theirs
+            out.presets[id] = out.presets[id]?.merged(with: theirs) ?? theirs
         }
         out.selected = selected.merged(with: other.selected)
         return out
@@ -189,13 +228,22 @@ struct SyncDocument: Equatable, Sendable {
 
     // MARK: - Local edits
 
-    /// Saves `workout`, clamped. An existing preset keeps its place; a new one goes after
-    /// every other.
+    /// Saves `workout`, clamped. An existing preset keeps its place, and the stamp of that
+    /// place, so an edit can't undo a move the other device made; a new one goes after every
+    /// other.
     mutating func upsert(_ workout: IntervalWorkout, clock: inout SyncClock) {
         let stamp = clock.tick()
+        if var record = presets[workout.id] {
+            record.workout = workout.clamped
+            record.deleted = false
+            record.stamp = stamp
+            presets[workout.id] = record
+            return
+        }
         let highest = presets.values.map(\.order).max() ?? -1
-        let order = presets[workout.id]?.order ?? max(stamp.millis, highest + 1)
-        presets[workout.id] = PresetRecord(id: workout.id, workout: workout.clamped, deleted: false, order: order, stamp: stamp)
+        presets[workout.id] = PresetRecord(
+            id: workout.id, workout: workout.clamped, deleted: false, order: max(stamp.millis, highest + 1), stamp: stamp
+        )
     }
 
     /// Tombstones a live preset. Refused for the last one: there must always be one to run.
@@ -217,10 +265,12 @@ struct SyncDocument: Equatable, Sendable {
     static let orderSpacing: Int64 = 1 << 16
 
     /// Moves live presets the way SwiftUI's `onMove` describes it: `source` and
-    /// `destination` are offsets into `workouts` before the move. Only the moved presets are
-    /// restamped, placed between their new neighbours, so a concurrent edit to any other
-    /// preset survives. When the neighbours leave no room, every preset whose place changes
-    /// is renumbered instead. False when nothing moved.
+    /// `destination` are offsets into `workouts` before the move. The moved presets are
+    /// placed between their new neighbours; when the neighbours leave no room, as between
+    /// the starters, every preset whose place changes is renumbered instead. Either way only
+    /// places are written, under `orderStamp`: no preset's contents are, so a concurrent edit
+    /// on the other device survives the move, whichever preset it touched. False when
+    /// nothing moved.
     @discardableResult
     mutating func move(fromOffsets source: IndexSet, toOffset destination: Int, clock: inout SyncClock) -> Bool {
         let live = liveRecords
@@ -268,7 +318,7 @@ struct SyncDocument: Equatable, Sendable {
 
     private mutating func place(_ id: UUID, at order: Int64, stamp: SyncStamp) {
         presets[id]?.order = order
-        presets[id]?.stamp = stamp
+        presets[id]?.orderStamp = stamp
     }
 }
 
@@ -286,8 +336,7 @@ extension SyncDocument: Codable {
         let entries = try container.decode([LossyRecord].self, forKey: .presets)
         var presets: [UUID: PresetRecord] = [:]
         for case let record? in entries.map(\.record) {
-            if let kept = presets[record.id], !(record.stamp > kept.stamp) { continue }
-            presets[record.id] = record
+            presets[record.id] = presets[record.id]?.merged(with: record) ?? record
         }
         let selected = (try? container.decode(Register<UUID?>.self, forKey: .selected))
             ?? Register(value: nil, stamp: .origin)

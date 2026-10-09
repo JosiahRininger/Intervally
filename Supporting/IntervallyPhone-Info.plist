@@ -26,6 +26,8 @@
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Intervally shows the interval workouts your Apple Watch saved to Health, with each interval and your heart rate.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Your Apple Watch saves your interval sessions to Health as workouts. Intervally on iPhone only reads them.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

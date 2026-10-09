@@ -277,6 +277,18 @@ struct HistoryMessageTests {
         #expect(detail.contains("stays on this iPhone"))
     }
 
+    /// Settings can open from Workouts before History has ever read Health, and on a fresh
+    /// install the row then read as connected. Opening the explainer turned it into "Not
+    /// connected".
+    @Test("Before History has read Health, Settings' row claims no access either way")
+    func settingsSubtitleBeforeFirstRead() {
+        let subtitle = HistoryMessage.settingsSubtitle(for: .loading)
+        #expect(subtitle == "What History reads")
+        for known in [HistoryModel.State.unavailable, .needsAccess, .empty, .loaded, .failed] {
+            #expect(subtitle != HistoryMessage.settingsSubtitle(for: known))
+        }
+    }
+
     @Test("Settings' Apple Health row says where History stands")
     func settingsSubtitles() {
         #expect(HistoryMessage.settingsSubtitle(for: .unavailable) == "Not available on this device")

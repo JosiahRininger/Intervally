@@ -14,7 +14,7 @@ import StoreKitTest
 ///
 /// The watch's twin of this suite can't run since the watch app became a companion (its
 /// StoreKit is served under the iPhone app's ID), so this is where the real StoreKit paths
-/// are checked. Every test that touches StoreKit lives in this one serialized suite: a
+/// are checked, its tests ported here with it: `ProStore` is the same file on both devices. Every test that touches StoreKit lives in this one serialized suite: a
 /// process has a single test environment, so two suites running at once would clear each
 /// other's transactions. It needs the simulator build's `get-task-allow`
 /// (`SimulatorEntitlementsTests`): without it storekitd answers every call with
@@ -188,6 +188,32 @@ struct ProStorePhoneStoreKitTests {
         #expect(seeded.object(forKey: ProStore.Key.cachedIsPro) as? Bool == false)
     }
 
+    @Test("A refunded transaction grants nothing, even handed straight to the store")
+    func refundedTransactionGrantsNothing() async throws {
+        let store = makeStore()
+        let bought = try await session.buyProduct(identifier: ProProduct.id)
+        try session.refundTransaction(identifier: UInt(bought.id))
+
+        // The refund reaches the transaction history on the same delay as the entitlements.
+        var refunded: StoreKit.Transaction?
+        let deadline = ContinuousClock.now + .seconds(5)
+        while refunded == nil, ContinuousClock.now < deadline {
+            for await result in StoreKit.Transaction.all {
+                if case .verified(let transaction) = result, transaction.id == bought.id,
+                   transaction.revocationDate != nil {
+                    refunded = transaction
+                }
+            }
+            if refunded == nil { try? await Task.sleep(for: .milliseconds(50)) }
+        }
+        let transaction = try #require(refunded, "The refunded copy carries a revocation date")
+        #expect(ProStore.grantsPro(transaction) == false)
+
+        #expect(await store.handle(.success(.verified(transaction))) == .failed)
+        #expect(store.isPro == false)
+        #expect(cachedIsPro == nil)
+    }
+
     @Test("An empty read still in flight when a purchase lands can't undo it")
     func staleReadCantUndoPurchase() async throws {
         let transaction = try await session.buyProduct(identifier: ProProduct.id)
@@ -247,6 +273,15 @@ struct ProStorePhoneStoreKitTests {
         let store = makeStore()
         let transaction = try await session.buyProduct(identifier: ProProduct.id)
         #expect(await store.handle(.success(.unverified(transaction, .invalidSignature))) == .unverified)
+        #expect(store.isPro == false)
+        #expect(cachedIsPro == nil)
+    }
+
+    @Test("handle: Ask to Buy and a cancelled sheet change nothing")
+    func handlePendingAndCancelled() async {
+        let store = makeStore()
+        #expect(await store.handle(.pending) == .pending)
+        #expect(await store.handle(.userCancelled) == .cancelled)
         #expect(store.isPro == false)
         #expect(cachedIsPro == nil)
     }
@@ -320,6 +355,58 @@ struct ProStorePhoneStoreKitTests {
         try await session.buyProduct(identifier: ProProduct.id)
         #expect(await waitUntil { store.isPro })
         #expect(reads.value >= 2, "The unlock came from a refresh the listener triggered")
+    }
+
+    // MARK: - Lifecycle
+
+    /// Here rather than with the scripted rules: `start()` listens to the real
+    /// `Transaction.updates`, which only this serialized suite may do.
+    @Test("Coming forward reads again, so a downgrade an outage confirmed doesn't stand", .timeLimit(.minutes(1)))
+    func foregroundUndoesConfirmedDowngrade() async throws {
+        let seeded = makeTestDefaults()
+        seeded.set(true, forKey: ProStore.Key.cachedIsPro)
+        // Empty for start()'s read and its confirmation, then StoreKit recovers.
+        let answers: [ProStore.Ownership] = [.none, .none, .purchased]
+        let reads = Counter()
+        let store = makeStore(defaults: seeded, readOwnership: {
+            let answer = answers[min(reads.value, answers.count - 1)]
+            reads.increment()
+            return answer
+        })
+        defer { store.stop() }
+
+        store.start()
+        try #require(await waitUntil { !store.isPro })
+        #expect(reads.value == 2)
+
+        await store.handleForeground()
+        #expect(reads.value == 3)
+        #expect(store.isPro)
+        #expect(store.ownership == .purchased)
+        #expect(seeded.object(forKey: ProStore.Key.cachedIsPro) as? Bool == true)
+    }
+
+    /// A second listener would finish and process every transaction twice, and outlive
+    /// `stop()`. Each `start()` that listens also reads the entitlement once, so the reads
+    /// count the listeners.
+    @Test("start() listens once, however often it is called, and stop() ends it", .timeLimit(.minutes(1)))
+    func startIsIdempotent() async throws {
+        let reads = Counter()
+        let store = makeStore(readOwnership: {
+            reads.increment()
+            return .none
+        })
+        #expect(store.isListening == false)
+        store.start()
+        store.start()
+        #expect(store.isListening)
+        try #require(await waitUntil { reads.value >= 1 })
+        // Long enough for a second start's read, which follows at once, to have landed.
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(reads.value == 1)
+
+        store.stop()
+        #expect(store.isListening == false)
     }
 
     // MARK: - Restore

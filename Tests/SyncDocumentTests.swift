@@ -309,6 +309,92 @@ struct SyncDocumentTests {
         #expect(watch.document == phone.document)
     }
 
+    // MARK: Places and contents
+
+    /// The first reorder on a fresh install, between two starters, renumbers the presets
+    /// after it. That once restamped their contents too, with this device's copies.
+    @Test("An edit on one device survives a reorder on the other that renumbers its preset")
+    func editSurvivesRenumberingMove() throws {
+        var phone = Replica("phone", last: logicalBase), watch = Replica("watch", last: logicalBase)
+        phone.document.upsert(IntervalWorkout(name: "Hill Sprints"), clock: &phone.clock)
+        watch.receive(phone.document)
+
+        // At the gym without the phone, the watch changes Tabata. An hour later the phone,
+        // still unaware, drags Hill Sprints between Classic and Tabata.
+        var tabata = watch.document.workouts[1]
+        tabata.rounds = 12
+        watch.document.upsert(tabata, clock: &watch.clock)
+        phone.clock.last = watch.clock.last + 3_600_000
+        let before = try #require(phone.document.presets[tabata.id])
+        #expect(phone.document.move(fromOffsets: [3], toOffset: 1, clock: &phone.clock))
+        let renumbered = try #require(phone.document.presets[tabata.id])
+        #expect(renumbered.order != before.order, "No room between the starters: Tabata is renumbered")
+        #expect(renumbered.stamp == before.stamp, "Its place is written, never its contents")
+
+        var replicas = [phone, watch]
+        _ = try settle(&replicas, from: 0)
+        for replica in replicas {
+            #expect(replica.document.workouts.map(\.name) == ["Classic", "Hill Sprints", "Tabata", "EMOM"])
+            #expect(replica.document.workouts[2].rounds == 12)
+        }
+        #expect(replicas[0].document == replicas[1].document)
+    }
+
+    @Test("A move and an edit of the same preset on the two devices both survive, in either order", arguments: [false, true])
+    func moveAndEditBothSurvive(editFirst: Bool) throws {
+        var phone = Replica("phone", last: logicalBase), watch = Replica("watch", last: logicalBase)
+        var emom = watch.document.workouts[2]
+        emom.rounds = 4
+        if editFirst {
+            watch.document.upsert(emom, clock: &watch.clock)
+            phone.clock.last = watch.clock.last + 1_000
+            #expect(phone.document.move(fromOffsets: [2], toOffset: 0, clock: &phone.clock))
+        } else {
+            #expect(phone.document.move(fromOffsets: [2], toOffset: 0, clock: &phone.clock))
+            watch.clock.last = phone.clock.last + 1_000
+            watch.document.upsert(emom, clock: &watch.clock)
+        }
+
+        var replicas = [phone, watch]
+        _ = try settle(&replicas, from: 1)
+        for replica in replicas {
+            #expect(replica.document.workouts.map(\.name) == ["EMOM", "Classic", "Tabata"])
+            #expect(replica.document.workouts[0].rounds == 4)
+        }
+        #expect(replicas[0].document == replicas[1].document)
+    }
+
+    @Test("A move made after seeing the other's move wins, even with a clock five minutes behind")
+    func laterMoveWinsDespiteSkew() {
+        var phone = Replica("phone"), watch = Replica("watch")
+        phone.clock.last = Int64(Date().timeIntervalSince1970 * 1000) + 300_000
+        phone.document.move(fromOffsets: [2], toOffset: 0, clock: &phone.clock)
+        watch.receive(phone.document)
+        #expect(watch.document.workouts.map(\.name) == ["EMOM", "Classic", "Tabata"])
+
+        // The clock saw the phone's move, though it wrote no contents and no selection.
+        watch.document.move(fromOffsets: [0], toOffset: 3, clock: &watch.clock)
+        phone.receive(watch.document)
+        #expect(phone.document.workouts.map(\.name) == ["Classic", "Tabata", "EMOM"])
+        #expect(phone.document == watch.document)
+    }
+
+    @Test("A place's stamp travels with the document; a record without one was placed when written")
+    func orderStampCoding() throws {
+        var replica = Replica("phone")
+        replica.document.move(fromOffsets: [2], toOffset: 0, clock: &replica.clock)
+        let moved = try #require(replica.document.presets[SyncDocument.starterIDs[2]])
+        #expect(moved.orderStamp > moved.stamp)
+        #expect(try overTheWire(replica.document) == replica.document)
+
+        let json = Data("""
+        {"presets": [{"id": "6A1E0C2B-5D4F-4E43-9C1A-000000000001", "order": 3,
+                      "stamp": {"millis": 9, "device": "phone"}}]}
+        """.utf8)
+        let record = try #require(JSONDecoder().decode(SyncDocument.self, from: json).presets[SyncDocument.starterIDs[0]])
+        #expect(record.orderStamp == SyncStamp(millis: 9, device: "phone"))
+    }
+
     // MARK: Legacy import
 
     @Test("A preset list from before sync is imported in order, stamped as this device's write")

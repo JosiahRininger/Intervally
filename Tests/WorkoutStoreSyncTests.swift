@@ -67,7 +67,8 @@ struct WorkoutStoreSyncTests {
         #expect(reports.value == 1)
         #expect(store.document != before)
         let device = try storedDevice()
-        let restamped = store.document.presets.values.filter { before.presets[$0.id] != $0 }.map(\.stamp)
+        // The latest of a record's two stamps: a move writes only the place's.
+        let restamped = store.document.presets.values.filter { before.presets[$0.id] != $0 }.map(\.latestStamp)
             + (store.document.selected != before.selected ? [store.document.selected.stamp] : [])
         #expect(!restamped.isEmpty)
         #expect(restamped.allSatisfy { $0.device == device && $0 > .origin })
@@ -256,6 +257,33 @@ struct WorkoutStoreSyncTests {
         #expect(store.workouts.count == 1)
         #expect(result.mergedDiffersFromRemote)
         #expect(reports.value == 2, "The two local deletes; the repair travels in the reply")
+    }
+
+    /// The watch's Rename sheet holds the preset as it was when the sheet opened, and saving
+    /// that copy put back what the iPhone had changed since, on both devices.
+    @Test("A rename keeps what the other device changed while the name was being typed")
+    func renameKeepsMergedEdits() {
+        let (store, reports) = makeStore()
+        let opened = store.workouts[0]
+        var other = OtherDevice(store.document)
+        var classic = other.document.workouts[0]
+        classic.workSeconds = 60
+        other.document.upsert(classic, clock: &other.clock)
+        store.merge(other.document)
+
+        store.rename(opened.id, to: "Sprints")
+        #expect(store.workouts[0].name == "Sprints")
+        #expect(store.workouts[0].workSeconds == 60)
+        #expect(reports.value == 1)
+
+        other.document = other.document.receiving(store.document, clock: &other.clock)
+        #expect(other.document.workouts[0].name == "Sprints")
+        #expect(other.document.workouts[0].workSeconds == 60)
+
+        // The same name again, or a preset that is gone, changes nothing.
+        store.rename(opened.id, to: "Sprints")
+        store.rename(UUID(), to: "Nobody")
+        #expect(reports.value == 1)
     }
 
     // MARK: Loading

@@ -27,8 +27,8 @@ xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'p
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-At 1.0 the watch suite runs 494 tests (24 skipped: the StoreKit suite that can't run in a
-companion watch app, and the opt-in manual QA) and the iPhone suite 220 (2 skipped: the one
+At 1.0 the watch suite runs 508 tests (24 skipped: the StoreKit suite that can't run in a
+companion watch app, and the opt-in manual QA) and the iPhone suite 231 (2 skipped: the one
 purchase Xcode's test server cancels, and its manual QA), all Swift Testing, on Xcode 26.2.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
@@ -180,9 +180,11 @@ The iPhone and the watch keep the same presets and the same next workout over
 WatchConnectivity, with no server. Each device's own store stays primary: with no
 counterpart, as on iPad or a Family Setup watch, sync simply idles.
 
-- **What travels.** One `SyncDocument`: every preset as a last-writer-wins record, deletes
-  as tombstones, and the selection as one more register, stamped by a hybrid logical clock
-  so a watch whose clock runs behind still wins with a later edit. The three starters have
+- **What travels.** One `SyncDocument`: every preset as a last-writer-wins record whose
+  place in the list is a register of its own, so a reorder on the iPhone and an edit on the
+  watch both survive; deletes as tombstones; and the selection as one more register. All are
+  stamped by a hybrid logical clock so a watch whose clock runs behind still wins with a
+  later edit. The three starters have
   fixed IDs, so two fresh installs merge to three presets, not six. A merge is commutative,
   idempotent and associative (`SyncDocumentTests` runs 2,000 seeded two-device histories).
 - **How.** `WatchSync` sends the whole document with `updateApplicationContext(_:)`, both

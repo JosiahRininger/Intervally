@@ -75,6 +75,9 @@ struct ValueEditorView: View {
             guard next != value else { return }
             value = next
         }
+        .onChange(of: value) { _, new in
+            if let position = crownPosition(after: new, from: crown) { crown = position }
+        }
         .onAppear {
             // A stored value that is not on the table (say 7s from an older build) would
             // otherwise jump to a neighbour on the first click of the crown.
@@ -128,6 +131,15 @@ struct ValueEditorView: View {
         guard values[index] != value else { return }
         value = values[index]
         crown = Double(index)
+    }
+
+    /// Where the crown must sit once `value` has changed: nil while it already rests on that
+    /// value's detent, as after its own turn or a +/- tap, else on that detent. A value
+    /// changed from outside, by an edit merged in from the iPhone, left the crown where it
+    /// was, and its next click saved the old value's neighbour over the new one.
+    func crownPosition(after value: Int, from crown: Double) -> Double? {
+        let index = nearestIndex(to: value)
+        return clampedIndex(Int(crown.rounded())) == index ? nil : Double(index)
     }
 
     private func clampedIndex(_ index: Int) -> Int {

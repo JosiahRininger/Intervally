@@ -42,6 +42,17 @@ struct RootNavigation: Equatable, Sendable {
             path.removeAll { $0 == .run }
         }
     }
+
+    /// The preset on the setup screen changed underneath: the iPhone put another one on the
+    /// watch, or deleted this one. A field's editor edits whatever is selected, under a title
+    /// that names only the field, so it closes rather than go on editing another preset
+    /// unannounced. The paywall and the run stay.
+    mutating func selectedPresetChanged() {
+        path.removeAll { route in
+            if case .field = route { return true }
+            return false
+        }
+    }
 }
 
 struct RootView: View {
@@ -93,6 +104,9 @@ struct RootView: View {
             default:
                 break
             }
+        }
+        .onChange(of: store.selectedID) {
+            navigation.selectedPresetChanged()
         }
         .onChange(of: navigation.isRunning) { _, running in
             guard running else { return }

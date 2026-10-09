@@ -20,6 +20,7 @@ struct PhonePaywallView: View {
     var onUnlock: (() -> Void)? = nil
 
     @Environment(ProStore.self) private var pro
+    @Environment(WatchSync.self) private var sync
     @Environment(\.dismiss) private var dismiss
 
     @State private var lastPurchase: ProStore.PurchaseOutcome?
@@ -40,7 +41,8 @@ struct PhonePaywallView: View {
             isPurchasing: isBuying || pro.isPurchasing,
             lastPurchase: lastPurchase,
             lastRestore: lastRestore,
-            platform: .phone
+            platform: .phone,
+            hasWatch: sync.peer.hasWatch
         )
     }
 

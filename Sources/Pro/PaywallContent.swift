@@ -78,6 +78,8 @@ struct PaywallContent: Equatable, Sendable {
     ///     of whichever was tapped last.
     ///   - platform: The watch unless said otherwise, so the watch's wording stays exactly
     ///     what it was before the iPhone app existed.
+    ///   - hasWatch: iPhone only: whether it has a watch to choose Tap Strength on. Without
+    ///     one, as on iPad, the owned state sends nobody to a watch.
     static func make(
         context: PaywallContext,
         isPro: Bool,
@@ -87,11 +89,12 @@ struct PaywallContent: Equatable, Sendable {
         isPurchasing: Bool,
         lastPurchase: ProStore.PurchaseOutcome?,
         lastRestore: ProStore.RestoreOutcome?,
-        platform: PaywallPlatform = .watch
+        platform: PaywallPlatform = .watch,
+        hasWatch: Bool = true
     ) -> PaywallContent {
         let action = action(
-            isPro: isPro, ownership: ownership, canMakePayments: canMakePayments,
-            offer: offer, isPurchasing: isPurchasing, lastPurchase: lastPurchase, platform: platform
+            isPro: isPro, ownership: ownership, canMakePayments: canMakePayments, offer: offer,
+            isPurchasing: isPurchasing, lastPurchase: lastPurchase, platform: platform, hasWatch: hasWatch
         )
         return PaywallContent(
             platform: platform,
@@ -124,9 +127,10 @@ struct PaywallContent: Equatable, Sendable {
         offer: ProStore.OfferState,
         isPurchasing: Bool,
         lastPurchase: ProStore.PurchaseOutcome?,
-        platform: PaywallPlatform
+        platform: PaywallPlatform,
+        hasWatch: Bool
     ) -> Action {
-        if isPro { return owned(ownership, platform: platform) }
+        if isPro { return owned(ownership, platform: platform, hasWatch: hasWatch) }
         // Ahead of the block: the system sheet is already up, so the capsule waits with it.
         if isPurchasing { return .purchasing }
         if !canMakePayments || lastPurchase == .notAllowed { return .blocked }
@@ -141,15 +145,17 @@ struct PaywallContent: Equatable, Sendable {
     }
 
     /// On iPhone the detail says what to do next, on both devices: Tap Strength is chosen
-    /// on the watch, where the taps are felt.
-    private static func owned(_ ownership: ProStore.Ownership, platform: PaywallPlatform) -> Action {
+    /// on the watch, where the taps are felt. With no watch, only what is left here.
+    private static func owned(_ ownership: ProStore.Ownership, platform: PaywallPlatform, hasWatch: Bool) -> Action {
         let shared = ownership == .familyShared
         let title = shared ? "Pro is shared by your family" : "You have Pro"
         switch platform {
         case .watch:
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing." : "Thanks for supporting Intervally.")
         case .phone:
-            let next = "Add more workouts and warmups here; choose Tap Strength on your watch."
+            let next = hasWatch
+                ? "Add more workouts and warmups here; choose Tap Strength on your watch."
+                : "Add more workouts and warmups."
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing. \(next)" : "Unlocked. \(next)")
         }
     }
