@@ -7,7 +7,9 @@ used exactly as rendered in round 3, which has no script here; the PNG is the so
 switch back, copy `AppIcon-stopwatch.png` over both `AppIcon.png` files named below.
 
 **Pastel's alternate icon (iPhone only), `AppIcon-pastel.png`:** the same dumbbell and split
-ring, white on a blush gradient, the arcs in Pastel's work pink and rest mint. The iPhone
+ring, white on a blush gradient, the arcs in pink and mint. Those were Pastel's first work and
+rest colours; the theme has since moved rest to a sky blue, but the icon keeps mint, which
+holds up on blush where sky blue washes out at home-screen size. The iPhone
 switches to it while the theme is Pastel (`AppIconFollower`); watchOS has no alternate icons,
 so the watch keeps the dumbbell. Regenerate it with `python3 dumbbell/render_pastel.py dumbbell
 <outdir>` from this folder: of the three it writes, `b3-deeper-blush-white.png` is the icon
