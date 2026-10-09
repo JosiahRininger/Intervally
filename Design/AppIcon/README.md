@@ -1,6 +1,12 @@
 # App icon
 
-"Stopwatch with crown": two arcs — rest green flowing into work blue, a repeating round —
+**Shipping: the dumbbell ("split ring", option 9 of round 3), `AppIcon-dumbbell.png`.** A
+white dumbbell on the diagonal across two arcs, rest green flowing into work blue, on deep
+navy. Josiah's story poll (2026-10-09) leaned toward it over the stopwatch below. It is
+used exactly as rendered in round 3, which has no script here; the PNG is the source. To
+switch back, copy `AppIcon-stopwatch.png` over both `AppIcon.png` files named below.
+
+The alternative, kept and regenerable: "Stopwatch with crown": two arcs — rest green flowing into work blue, a repeating round —
 with round caps like the app's own run ring, a slim white stopwatch hand on the diagonal
 and a crown at twelve, on deep navy. It says "interval timer" without naming a sport, so it
 reads as Intervally's for yoga, running and HIIT alike.

@@ -10,6 +10,9 @@ import SwiftUI
 /// under Put on Watch.
 enum EditorLayout {
     static let ringSides: ClosedRange<CGFloat> = 160...220
+    /// The first-run line under the name, and where its dismissal is kept (per iPhone).
+    static let tip = "Tap the name or any tile to change it."
+    static let tipSeenKey = "phone.editorTipSeen.v1"
     /// The ring's top padding, the gap below it and the stack's bottom padding.
     static let chrome: CGFloat = 8 + 24 + 24
 
@@ -49,6 +52,9 @@ struct PresetEditorView: View {
     @FocusState private var nameFocused: Bool
     /// Coming back from the copy Duplicate opened must not empty and refocus the name again.
     @State private var hasAppeared = false
+    /// Until the first picker opens on this iPhone, a line under the name says the tiles
+    /// can be tapped. Once someone has found them it only takes room.
+    @AppStorage(EditorLayout.tipSeenKey) private var tipSeen = false
     @State private var visibleHeight: CGFloat = 0
     @State private var belowRing: CGFloat = 0
 
@@ -115,7 +121,15 @@ struct PresetEditorView: View {
             VStack(spacing: 24) {
                 hero(runs, side: EditorLayout.ringSide(visibleHeight: visibleHeight, belowRing: belowRing))
                 VStack(spacing: 24) {
-                    nameField(workout)
+                    VStack(spacing: 10) {
+                        nameField(workout)
+                        if !tipSeen {
+                            Text(EditorLayout.tip)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                    }
                     tiles(workout, fields: [.work, .rest, .rounds, .prepare])
                     VStack(alignment: .leading, spacing: 10) {
                         SectionLabel("Warmup & Cooldown")
@@ -261,6 +275,7 @@ struct PresetEditorView: View {
     }
 
     private func tap(_ field: PresetField) {
+        tipSeen = true
         if field.isPro && !pro.isPro {
             followUp.open(for: .pick(field))
             sheet = .paywall(.bookends)

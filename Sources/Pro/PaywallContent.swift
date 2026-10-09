@@ -98,7 +98,7 @@ struct PaywallContent: Equatable, Sendable {
         )
         return PaywallContent(
             platform: platform,
-            contextLine: contextLine(for: context),
+            contextLine: contextLine(for: context, platform: platform),
             action: action,
             footnote: footnote(for: action, offer: offer),
             note: isPro ? nil : note(for: action, lastPurchase: lastPurchase, lastRestore: lastRestore),
@@ -108,9 +108,14 @@ struct PaywallContent: Equatable, Sendable {
         )
     }
 
-    static func contextLine(for context: PaywallContext) -> String {
+    static func contextLine(for context: PaywallContext, platform: PaywallPlatform = .watch) -> String {
         switch context {
-        case .presets: "Free includes \(ProProduct.freePresetLimit) presets. Pro has no limit."
+        // Opened by + or New Preset at the limit, so it says what a free user can still do.
+        // The watch's is shorter: on a 40mm the longer one pushed the price below the fold.
+        case .presets: platform == .phone
+            // One sentence a line: run together, a 6.9-inch iPhone broke the line after "For".
+            ? "Free includes \(ProProduct.freePresetLimit) presets you can edit any time.\nFor more, get Pro."
+            : "Edit your presets any time, or get Pro for more."
         case .bookends: "Add a warmup and cooldown to any workout."
         case .tapStrength: "Stronger taps you can feel through a sleeve."
         case .settings: "Get more from every workout."

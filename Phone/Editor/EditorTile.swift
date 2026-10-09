@@ -15,6 +15,9 @@ struct EditorTileContent: Equatable {
     let value: String?
     let accessibilityValue: String
     let accessibilityHint: String
+    /// The up-and-down chevron that says a tap changes the value. Not on a locked tile,
+    /// whose tap opens Intervally Pro rather than a picker.
+    var showsPickerHint: Bool { !isLocked }
 
     init(field: PresetField, workout: IntervalWorkout, isPro: Bool) {
         let stored = workout[keyPath: field.keyPath]
@@ -37,16 +40,27 @@ struct EditorTile: View {
 
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
-                Label {
-                    Text(field.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                } icon: {
-                    Image(systemName: field.symbolName)
-                        .foregroundStyle(field.tint)
+                HStack(spacing: 4) {
+                    Label {
+                        Text(field.title)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    } icon: {
+                        Image(systemName: field.symbolName)
+                            .foregroundStyle(field.tint)
+                    }
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                    Spacer(minLength: 0)
+
+                    if content.showsPickerHint {
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.tertiary)
+                            .accessibilityHidden(true)
+                    }
                 }
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
 
                 Spacer(minLength: 0)
 

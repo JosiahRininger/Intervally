@@ -72,6 +72,21 @@ struct EditorTileTests {
         #expect(tile.accessibilityHint == "Opens a picker")
     }
 
+    @Test("Every tile a tap opens a picker for shows the chevron that says so; a locked one doesn't")
+    func pickerHint() {
+        let workout = WorkoutStore.starterWorkouts[0]
+        for field in PresetField.allCases {
+            #expect(EditorTileContent(field: field, workout: workout, isPro: true).showsPickerHint)
+            #expect(EditorTileContent(field: field, workout: workout, isPro: false).showsPickerHint == !field.isPro)
+        }
+    }
+
+    @Test("The first-run hint names both things a tap changes, and is kept per iPhone")
+    func firstRunTip() {
+        #expect(EditorLayout.tip == "Tap the name or any tile to change it.")
+        #expect(EditorLayout.tipSeenKey.hasPrefix("phone."), "Never synced to the watch")
+    }
+
     @Test("Tile words, as the watch's tiles show them")
     func tileText() {
         func value(_ field: PresetField) -> String? {

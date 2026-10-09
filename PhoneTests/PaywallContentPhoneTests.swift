@@ -101,8 +101,9 @@ struct PaywallContentPhoneTests {
         ProStore.OfferState.unavailable, .failed,
     ])
     func sharedStates(offer: ProStore.OfferState) {
-        let phone = make(offer: offer)
-        let watch = make(offer: offer, platform: .watch)
+        // Bookends: the presets door words itself per device (the next test).
+        let phone = make(context: .bookends, offer: offer)
+        let watch = make(context: .bookends, offer: offer, platform: .watch)
         #expect(phone.action == watch.action)
         #expect(phone.statusDetail == watch.statusDetail)
         #expect(phone.contextLine == watch.contextLine)
@@ -115,8 +116,20 @@ struct PaywallContentPhoneTests {
         #expect(make(context: .tapStrength, platform: .watch).offersPreview)
     }
 
+    @Test("The presets door says the same thing on both devices, shorter on the watch")
+    func presetsLinePerDevice() {
+        let phone = make(context: .presets).contextLine
+        let watch = make(context: .presets, platform: .watch).contextLine
+        #expect(phone != watch)
+        #expect(watch.count < phone.count, "A 40mm watch has to keep the price above the fold")
+        for line in [phone, watch] {
+            #expect(line.localizedCaseInsensitiveContains("edit"))
+            #expect(line.hasSuffix("get Pro for more.") || line.hasSuffix("For more, get Pro."))
+        }
+    }
+
     @Test("The doors the iPhone opens say what was reached for", arguments: [
-        (PaywallContext.presets, "Free includes 3 presets. Pro has no limit."),
+        (PaywallContext.presets, "Free includes 3 presets you can edit any time.\nFor more, get Pro."),
         (.bookends, "Add a warmup and cooldown to any workout."),
         (.settings, "Get more from every workout."),
     ])

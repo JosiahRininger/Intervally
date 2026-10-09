@@ -44,7 +44,7 @@ struct PaywallContentTests {
     }
 
     @Test("Each door says what the user was reaching for", arguments: [
-        (PaywallContext.presets, "Free includes 3 presets. Pro has no limit."),
+        (PaywallContext.presets, "Edit your presets any time, or get Pro for more."),
         (.bookends, "Add a warmup and cooldown to any workout."),
         (.tapStrength, "Stronger taps you can feel through a sleeve."),
         (.settings, "Get more from every workout."),
@@ -254,7 +254,8 @@ struct PaywallContentTests {
     @Test("Guideline 4.10: the copy never sells haptics themselves, only the repeated pattern")
     func neverSellsHaptics() {
         let contexts: [PaywallContext] = [.presets, .bookends, .tapStrength, .settings]
-        let copy = contexts.map(PaywallContent.contextLine(for:)) + PaywallContent.features.map(\.title)
+        let copy = contexts.flatMap { [PaywallContent.contextLine(for: $0), PaywallContent.contextLine(for: $0, platform: .phone)] }
+            + PaywallContent.features.map(\.title)
             + [TapStrengthView.footer, TapStrengthRow(stored: .standard, isPro: false).footer]
         #expect(copy.allSatisfy { !$0.localizedCaseInsensitiveContains("haptic") })
     }

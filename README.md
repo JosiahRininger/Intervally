@@ -163,7 +163,9 @@ timers". Two tabs, each with a gear for Settings:
   tile per number; each opens a wheel with exactly the values the crown turns over
   (`PresetField`, `ValueSteps`). Put on Watch makes it the watch's next workout. The
   editor hides the tab bar and sizes its ring to fit (`EditorLayout`), so on a 6.3" iPhone
-  nothing is below the fold. Adding is
+  nothing is below the fold. Each tile a tap opens a picker for carries an up-and-down
+  chevron, and until the first tile is tapped a line under the name says the name and
+  tiles can be changed. Adding is
   gated as on the watch, and a purchase finishes what the paywall interrupted.
 - **History.** The interval workouts the watch saved to Health, grouped by week, each with
   its rounds, heart rate per interval and energy. Read-only: the iPhone never writes to
