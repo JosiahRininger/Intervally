@@ -106,11 +106,14 @@ struct HeartRateLabel: View {
     }
 }
 
-/// How much of a session ran, as one white ring: full for a run that went to the end. White,
-/// because colour here only ever means a phase, and never concentric rings (Guideline 5.2.5).
+/// How much of a session ran, as one ring in the neutral (Classic's white): full for a run
+/// that went to the end. Neutral, because colour here only ever means a phase, and never
+/// concentric rings (Guideline 5.2.5).
 struct CompletionRing: View {
     /// 0...1.
     let fraction: Double
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
         GeometryReader { proxy in
@@ -118,10 +121,10 @@ struct CompletionRing: View {
             let lineWidth = max(3, side * 0.14)
             ZStack {
                 Circle()
-                    .stroke(.white.opacity(0.2), lineWidth: lineWidth)
+                    .stroke(palette.neutral.opacity(0.2), lineWidth: lineWidth)
                 Circle()
                     .trim(from: 0, to: max(0.0001, min(1, fraction)))
-                    .stroke(.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .stroke(palette.neutral, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             .frame(width: side - lineWidth, height: side - lineWidth)

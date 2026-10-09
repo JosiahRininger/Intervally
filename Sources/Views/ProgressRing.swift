@@ -71,12 +71,21 @@ struct ProgressRing: View {
 struct SegmentedRing: View {
     struct Segment: Identifiable, Equatable {
         let id: Int
-        let color: Color
+        /// The phase it draws, whose colour the palette in the environment decides.
+        let kind: IntervalPhase.Kind
         let fraction: Double
         /// Whether a gap follows this arc. The last arc's gap is the seam at twelve o'clock.
         var breakAfter: Bool = true
         /// A warmup or cooldown. Not counted against `maxDetailedSegments`.
         var isBookend: Bool = false
+
+        /// Its colour in `palette`.
+        func color(in palette: Palette) -> Color {
+            palette.fill(for: kind)
+        }
+
+        /// Its colour in Classic.
+        var color: Color { color(in: .classic) }
     }
 
     /// One arc's placement, in points of arc length clockwise from twelve o'clock.
@@ -91,6 +100,8 @@ struct SegmentedRing: View {
     var strokeRatio: CGFloat = 0.06
     /// Gap between arcs, in points of arc length.
     var gap: CGFloat = 2
+
+    @Environment(\.palette) private var palette
 
     init(segments: [Segment], grouped: [Segment]? = nil, strokeRatio: CGFloat = 0.06, gap: CGFloat = 2) {
         self.segments = segments
@@ -130,7 +141,7 @@ struct SegmentedRing: View {
                     let (segment, arc) = pair
                     Circle()
                         .trim(from: arc.start / circumference, to: (arc.start + arc.length) / circumference)
-                        .stroke(segment.color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
+                        .stroke(segment.color(in: palette), style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
                         .rotationEffect(.degrees(-90))
                 }
             }
@@ -274,7 +285,7 @@ struct SegmentedRing: View {
             let next = index + 1 < phases.count ? phases[index + 1] : nil
             return Segment(
                 id: phase.id,
-                color: Theme.light(for: phase.kind),
+                kind: phase.kind,
                 fraction: fractions[index],
                 breakAfter: next.map { $0.kind != .rest } ?? true,
                 isBookend: phase.kind.isBookend
@@ -300,7 +311,7 @@ struct SegmentedRing: View {
         return order.enumerated().map { index, kind in
             Segment(
                 id: index,
-                color: Theme.light(for: kind),
+                kind: kind,
                 fraction: shares[kind] ?? 0,
                 isBookend: kind.isBookend
             )

@@ -16,6 +16,7 @@ struct PresetListView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
 
     /// The preset currently being renamed, if any.
     @State private var renaming: IntervalWorkout?
@@ -47,6 +48,7 @@ struct PresetListView: View {
             }
             .accessibilityHint(canAdd ? "" : "Opens Intervally Pro")
         }
+        .accentTitle()
         .navigationTitle("Presets")
         .navigationBarTitleDisplayMode(.inline)
         // Pushed inside this sheet's own stack: a sheet over a sheet is unproven on watchOS,
@@ -105,7 +107,7 @@ struct PresetListView: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.work)
+                        .foregroundStyle(palette.work)
                 }
             }
         }
@@ -133,7 +135,7 @@ struct PresetListView: View {
             } label: {
                 Label("Rename", systemImage: "pencil")
             }
-            .tint(Theme.workDimmed)
+            .tint(palette.workDimmed)
         }
     }
 
@@ -213,6 +215,7 @@ struct RenamePresetView: View {
                 .submitLabel(.done)
                 .onSubmit(commit)
                 .scenePadding(.horizontal)
+                .accentTitle()
                 .navigationTitle("Rename")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {

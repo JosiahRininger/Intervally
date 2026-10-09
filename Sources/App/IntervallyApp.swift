@@ -26,6 +26,7 @@ struct IntervallyApp: App {
                 .environment(delegate.store)
                 .environment(delegate.coordinator)
                 .environment(delegate.pro)
+                .environment(delegate.theme)
         }
         .onChange(of: scenePhase) { _, phase in
             // Lowering the wrist suspends the app soon after; send an edit made just before

@@ -15,6 +15,7 @@ struct RunView: View {
     @Environment(RunCoordinator.self) private var coordinator
     @Environment(\.isLuminanceReduced) private var isLuminanceReduced
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.palette) private var palette
 
     @Binding var isRunning: Bool
 
@@ -65,8 +66,8 @@ struct RunView: View {
                 ProgressRing(
                     // Depletes: the arc is the time left, retreating toward twelve o'clock.
                     fraction: 1 - position.phaseProgress,
-                    color: isLuminanceReduced ? Theme.dimmed(for: kind) : Theme.light(for: kind),
-                    track: Theme.track(for: kind),
+                    color: isLuminanceReduced ? palette.dimmed(for: kind) : palette.fill(for: kind),
+                    track: palette.track(for: kind),
                     isDimmed: isLuminanceReduced,
                     animated: !reduceMotion
                 )
@@ -86,7 +87,7 @@ struct RunView: View {
         // ring. Inside the ring's ZStack it stopped at the ring's frame, so the bottom row
         // never lit up.
         .background {
-            Theme.light(for: flashKind)
+            palette.fill(for: flashKind)
                 .opacity(flash)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -126,7 +127,7 @@ struct RunView: View {
                 .minimumScaleFactor(0.65)
                 .frame(maxWidth: lineWidth)
 
-            countdown(position, size: heroSize, color: paused ? .white.opacity(0.55) : Theme.light(for: kind))
+            countdown(position, size: heroSize, color: paused ? .white.opacity(0.55) : palette.fill(for: kind))
                 .padding(.top, 2)
 
             footer(position, kind: kind, interior: interior)
@@ -198,7 +199,7 @@ struct RunView: View {
     private func dotColor(_ dot: RoundFooter.Dot, kind: IntervalPhase.Kind) -> Color {
         switch dot {
         case .done: .white.opacity(0.9)
-        case .current: Theme.light(for: kind)
+        case .current: palette.fill(for: kind)
         case .upcoming: .white.opacity(0.25)
         }
     }
@@ -246,8 +247,8 @@ struct RunView: View {
             }
             .buttonStyle(.glassProminent)
             .buttonBorderShape(.circle)
-            .tint(Theme.light(for: kind))
-            .foregroundStyle(Theme.onTint)
+            .tint(palette.fill(for: kind))
+            .foregroundStyle(palette.onTint)
             .handGestureShortcut(.primaryAction)
             .accessibilityLabel(paused ? "Resume" : "Pause")
             .frame(maxWidth: .infinity)
@@ -260,7 +261,8 @@ struct RunView: View {
     /// The same dial, resolved: the ring turns white and fills, the totals replace the
     /// countdown, the Health result takes the heart line, and one compact Done sits where
     /// Pause was. Nothing scrolls — a scroll view here ran the ring's top arc under the
-    /// status bar's blur. Blue, not rest-green — green is a phase word, and this is a state.
+    /// status bar's blur. The brand colour (Classic's blue, Pastel's pink), not rest-green —
+    /// green is a phase word, and this is a state.
     private func summary(in size: CGSize, insets: EdgeInsets) -> some View {
         let screen = CGSize(width: size.width, height: size.height + insets.top + insets.bottom)
         let dial = DialLayout(screen: screen)
@@ -275,7 +277,7 @@ struct RunView: View {
             ZStack {
                 ProgressRing(
                     fraction: 1,
-                    color: isLuminanceReduced ? Theme.dimmed(for: .work) : .white,
+                    color: isLuminanceReduced ? palette.dimmed(for: .work) : .white,
                     track: .clear,
                     isDimmed: isLuminanceReduced,
                     animated: !reduceMotion
@@ -319,7 +321,7 @@ struct RunView: View {
             }
             .buttonStyle(.borderedProminent)
             .buttonBorderShape(.capsule)
-            .tint(isLuminanceReduced ? Theme.dimmed(for: .work) : .white)
+            .tint(isLuminanceReduced ? palette.dimmed(for: .work) : .white)
             .foregroundStyle(fg)
             .fixedSize()
             .handGestureShortcut(.primaryAction)
@@ -332,7 +334,7 @@ struct RunView: View {
         .containerBackground(
             isLuminanceReduced
                 ? AnyShapeStyle(Color.black)
-                : AnyShapeStyle(LinearGradient(colors: [Theme.work, Theme.brandDeep], startPoint: .top, endPoint: .bottom)),
+                : AnyShapeStyle(LinearGradient(colors: [palette.brand, palette.brandDeep], startPoint: .top, endPoint: .bottom)),
             for: .navigation
         )
     }

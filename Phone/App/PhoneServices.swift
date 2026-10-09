@@ -17,12 +17,16 @@ final class PhoneServices {
     /// Intervally Pro. The iPhone holds the same purchase as the watch: StoreKit reports it on
     /// each device, and nothing about it is relayed between them.
     let pro: ProStore
-    /// Keeps the presets in step with the watch. Pro never travels this way.
+    /// The theme, chosen here or on the watch.
+    let theme: ThemeStore
+    /// Keeps the presets and the theme in step with the watch. Pro never travels this way.
     let sync: WatchSync
     /// The sessions the watch saved to Health. Reads nothing until History is first shown.
     let history: HistoryModel
     /// When to ask for an App Store rating (`ReviewPolicy`).
     let reviews: ReviewLedger
+    /// The Home Screen icon, which follows the theme. Off until `start()`.
+    let icon = AppIconFollower()
 
     #if DEBUG
     /// The services the running app was launched with, so the unit tests can check that the
@@ -35,13 +39,15 @@ final class PhoneServices {
     init(
         store: WorkoutStore = WorkoutStore(),
         pro: ProStore = ProStore(),
+        theme: ThemeStore = ThemeStore(),
         sync: WatchSync? = nil,
         history: HistoryModel? = nil,
         reviews: ReviewLedger = ReviewLedger()
     ) {
         self.store = store
         self.pro = pro
-        self.sync = sync ?? WatchSync(store: store)
+        self.theme = theme
+        self.sync = sync ?? WatchSync(store: store, theme: theme)
         self.history = history ?? HistoryModel(source: HealthHistory())
         self.reviews = reviews
     }
@@ -51,16 +57,18 @@ final class PhoneServices {
         #if DEBUG
         let qa = PhoneQAOptions.current
         let store = WorkoutStore()
+        let theme = ThemeStore()
         // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
-        let sync = qa.watch.map { WatchSync(store: store, transport: QAWatchTransport(state: $0, store: store)) }
+        let sync = qa.watch.map { WatchSync(store: store, theme: theme, transport: QAWatchTransport(state: $0, store: store)) }
         // A fixture in place of Health, so nothing is read from it or written to it.
         let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
-        let services = PhoneServices(store: store, sync: sync, history: history)
+        let services = PhoneServices(store: store, theme: theme, sync: sync, history: history)
         services.qa = qa
         services.reviews.isSuppressed = qa.isActive
         current = services
         services.applyQAEdits()
         if let isPro = qa.pro { services.pro.overrideForQA(isPro) }
+        if let pinned = qa.theme { services.theme.pinForQA(pinned) }
         #else
         let services = PhoneServices()
         #endif
@@ -76,6 +84,7 @@ final class PhoneServices {
     /// the test session's transactions and sync would send test presets to the watch.
     func start(isUnitTestHost: Bool = UnitTestHost.isActive) {
         guard !isUnitTestHost else { return }
+        icon.isEnabled = true
         pro.start()
         sync.activate()
         reviews.recordOpen()
@@ -87,6 +96,8 @@ final class PhoneServices {
     /// a workout meanwhile.
     func handleForeground() async {
         reviews.recordOpen()
+        // An icon change that arrived in the background, from the watch or a refund.
+        icon.cameForward()
         async let history: Void = history.handleForeground()
         await pro.handleForeground()
         await history

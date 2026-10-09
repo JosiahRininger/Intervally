@@ -8,7 +8,9 @@ import UIKit
 
 /// A screen pushed inside Settings.
 enum SettingsRoute: Hashable {
-    case pro, watch, health
+    case pro, watch, health, theme
+    /// The paywall, opened by a free user's Pastel in Theme.
+    case themePaywall
 }
 
 /// The iPhone's Settings sheet: Intervally Pro, the watch, Apple Health, the App Store's
@@ -18,9 +20,11 @@ enum SettingsRoute: Hashable {
 /// The paywall is pushed here rather than presented: this is already a sheet.
 struct PhoneSettingsView: View {
     @Environment(ProStore.self) private var pro
+    @Environment(ThemeStore.self) private var theme
     @Environment(WatchSync.self) private var sync
     @Environment(HistoryModel.self) private var history
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
 
     @State private var path: [SettingsRoute] = []
     @State private var notice: StoreNotice?
@@ -64,6 +68,12 @@ struct PhoneSettingsView: View {
                 Section {
                     NavigationLink(value: SettingsRoute.pro) {
                         proRow(ProStatusRow(isPro: pro.isPro, ownership: pro.ownership))
+                    }
+                    NavigationLink(value: SettingsRoute.theme) {
+                        row(
+                            systemImage: ThemeRow.systemImage, title: ThemeRow.title,
+                            subtitle: theme.effective(isPro: pro.isPro).title
+                        )
                     }
                     NavigationLink(value: SettingsRoute.watch) {
                         watchRow
@@ -116,13 +126,14 @@ struct PhoneSettingsView: View {
                     Text("Intervally \(Self.version)")
                 }
             }
-            .blackCanvas()
+            .appCanvas()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 // Neutral, as on the paywall: closing Settings confirms nothing.
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(role: .close) { dismiss() }
+                        .neutralGlass()
                 }
             }
             .navigationDestination(for: SettingsRoute.self) { route in
@@ -130,6 +141,14 @@ struct PhoneSettingsView: View {
                 case .pro: PhonePaywallView(context: .settings)
                 case .watch: WatchStatusView()
                 case .health: HealthExplainerView()
+                case .theme: ThemePickerView { path.append(.themePaywall) }
+                case .themePaywall:
+                    // A purchase here applies what was reached for, then goes back to the
+                    // picker to show it chosen.
+                    PhonePaywallView(context: .themes) {
+                        theme.paywallUnlocked()
+                        if path.last == .themePaywall { path.removeLast() }
+                    }
                 }
             }
             .alert(notice?.title ?? "", isPresented: isShowingNotice, presenting: notice) { _ in
@@ -152,7 +171,7 @@ struct PhoneSettingsView: View {
     private func proRow(_ row: ProStatusRow) -> some View {
         HStack(spacing: 12) {
             Image(systemName: row.systemImage)
-                .foregroundStyle(Theme.work)
+                .foregroundStyle(palette.workInk)
                 .frame(width: 28)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
@@ -223,6 +242,7 @@ struct PhoneSettingsView: View {
     let store = WorkoutStore(defaults: UserDefaults(suiteName: "preview.settings") ?? .standard)
     PhoneSettingsView()
         .environment(ProStore(defaults: UserDefaults(suiteName: "preview.pro") ?? .standard))
+        .environment(ThemeStore(defaults: UserDefaults(suiteName: "preview.theme") ?? .standard))
         .environment(WatchSync(store: store))
         .environment(HistoryModel(source: HealthHistory()))
 }

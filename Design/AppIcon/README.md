@@ -6,6 +6,15 @@ navy. Josiah's story poll (2026-10-09) leaned toward it over the stopwatch below
 used exactly as rendered in round 3, which has no script here; the PNG is the source. To
 switch back, copy `AppIcon-stopwatch.png` over both `AppIcon.png` files named below.
 
+**Pastel's alternate icon (iPhone only), `AppIcon-pastel.png`:** the same dumbbell and split
+ring, white on a blush gradient, the arcs in Pastel's work pink and rest mint. The iPhone
+switches to it while the theme is Pastel (`AppIconFollower`); watchOS has no alternate icons,
+so the watch keeps the dumbbell. Regenerate it with `python3 dumbbell/render_pastel.py dumbbell
+<outdir>` from this folder: of the three it writes, `b3-deeper-blush-white.png` is the icon
+(byte-identical to `AppIcon-pastel.png`); copy it to
+`Phone/Resources/Assets.xcassets/AppIcon-Pastel.appiconset/AppIcon-Pastel.png`.
+`ShipAssetsTests` holds that copy to this one, 1024 square with no alpha.
+
 The alternative, kept and regenerable: "Stopwatch with crown": two arcs — rest green flowing into work blue, a repeating round —
 with round caps like the app's own run ring, a slim white stopwatch hand on the diagonal
 and a crown at twelve, on deep navy. It says "interval timer" without naming a sport, so it

@@ -80,19 +80,21 @@ struct UpNextCard: View {
     }
 }
 
-/// "30s · 15s · 8×" in the ring's colours: work blue, rest green, the rounds in white. No
-/// rest is shown when there is none, rather than a green "0s" for a phase that never happens.
-/// One `Text`, so a tight fit wraps or scales the line as a whole.
+/// "30s · 15s · 8×" in the ring's colours as text: work, rest, then the rounds in the neutral
+/// (Classic's white). No rest is shown when there is none, rather than a "0s" for a phase that
+/// never happens. One `Text`, so a tight fit wraps or scales the line as a whole.
 struct RhythmLine: View {
     let workout: IntervalWorkout
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
-        let separator = Text(" · ").foregroundStyle(.white.opacity(0.4))
-        var line = Text(DurationFormat.clock(workout.workSeconds)).foregroundStyle(Theme.work)
+        let separator = Text(" · ").foregroundStyle(palette.neutral.opacity(0.4))
+        var line = Text(DurationFormat.clock(workout.workSeconds)).foregroundStyle(palette.workInk)
         if workout.restSeconds > 0 {
-            line = Text("\(line)\(separator)\(Text(DurationFormat.clock(workout.restSeconds)).foregroundStyle(Theme.rest))")
+            line = Text("\(line)\(separator)\(Text(DurationFormat.clock(workout.restSeconds)).foregroundStyle(palette.restInk))")
         }
-        line = Text("\(line)\(separator)\(Text("\(workout.rounds)×").foregroundStyle(.white.opacity(0.8)))")
+        line = Text("\(line)\(separator)\(Text("\(workout.rounds)×").foregroundStyle(palette.neutral.opacity(0.8)))")
         return line
             .monospacedDigit()
             .accessibilityLabel(workout.rhythm)

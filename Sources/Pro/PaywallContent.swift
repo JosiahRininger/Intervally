@@ -9,6 +9,8 @@ import Foundation
 /// door answers what the user was reaching for.
 enum PaywallContext: Hashable, Sendable {
     case presets, bookends, tapStrength, settings
+    /// Pastel, chosen by a free user in Theme.
+    case themes
 }
 
 /// Which device's paywall. The copy differs only where the devices do: what the other one
@@ -68,6 +70,7 @@ struct PaywallContent: Equatable, Sendable {
         Feature(systemImage: "square.stack.3d.up.fill", title: "Unlimited presets"),
         Feature(systemImage: "sunrise.fill", title: "Warmup & cooldown"),
         Feature(systemImage: "hand.tap.fill", title: "Stronger taps"),
+        Feature(systemImage: "paintpalette.fill", title: "Pastel theme"),
         Feature(systemImage: "heart.fill", title: "Support an indie dev"),
     ]
 
@@ -119,6 +122,8 @@ struct PaywallContent: Equatable, Sendable {
         case .bookends: "Add a warmup and cooldown to any workout."
         case .tapStrength: "Stronger taps you can feel through a sleeve."
         case .settings: "Get more from every workout."
+        // Shorter than the bookends' line, so the 40mm price stays above the fold.
+        case .themes: "Make Intervally yours with Pastel."
         }
     }
 

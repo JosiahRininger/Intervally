@@ -116,6 +116,7 @@ private struct WorkoutPage: View {
     let showSettings: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.palette) private var palette
 
     var body: some View {
         GeometryReader { proxy in
@@ -212,9 +213,9 @@ private struct WorkoutPage: View {
     /// rather than truncating each number to "3…".
     private func breakdown(withRounds: Bool) -> some View {
         let separator = Text(" · ").foregroundStyle(.white.opacity(0.4))
-        var line = Text(DurationFormat.clock(workout.workSeconds)).foregroundStyle(Theme.work)
+        var line = Text(DurationFormat.clock(workout.workSeconds)).foregroundStyle(palette.ink(for: .work))
         if workout.restSeconds > 0 {
-            line = Text("\(line)\(separator)\(Text(DurationFormat.clock(workout.restSeconds)).foregroundStyle(Theme.rest))")
+            line = Text("\(line)\(separator)\(Text(DurationFormat.clock(workout.restSeconds)).foregroundStyle(palette.ink(for: .rest)))")
         }
         if withRounds {
             line = Text("\(line)\(separator)\(Text("\(workout.rounds)×").foregroundStyle(.white.opacity(0.7)))")
@@ -234,8 +235,8 @@ private struct WorkoutPage: View {
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.capsule)
-        .tint(Theme.work)
-        .foregroundStyle(Theme.onTint)
+        .tint(palette.work)
+        .foregroundStyle(palette.onTint)
         // watchOS stretches bordered buttons to the full width unless told not to.
         .fixedSize()
         .handGestureShortcut(.primaryAction)
@@ -273,7 +274,7 @@ private struct IntervalsPage: View {
         }
         .scenePadding(.horizontal)
         .containerBackground(Color.black, for: .tabView)
-        .navigationTitle("Intervals")
+        .pageTitle(1)
         .navigationBarTitleDisplayMode(.inline)
     }
 }
@@ -288,6 +289,7 @@ private struct IntervalsPage: View {
 /// paging before.
 private struct BookendsPage: View {
     @Environment(ProStore.self) private var pro
+    @Environment(\.palette) private var palette
 
     var body: some View {
         GeometryReader { proxy in
@@ -312,7 +314,7 @@ private struct BookendsPage: View {
         }
         .scenePadding(.horizontal)
         .containerBackground(Color.black, for: .tabView)
-        .navigationTitle("Warm & Cool")
+        .pageTitle(2)
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -328,8 +330,8 @@ private struct BookendsPage: View {
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.capsule)
-        .tint(Theme.work)
-        .foregroundStyle(Theme.onTint)
+        .tint(palette.work)
+        .foregroundStyle(palette.onTint)
     }
 }
 
@@ -343,6 +345,7 @@ private struct PhaseTile: View {
 
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
+    @Environment(\.palette) private var palette
 
     /// A free user's Pro tile: "PRO" and a lock where the value would be.
     private var locked: Bool { field.isPro && !pro.isPro }
@@ -372,7 +375,7 @@ private struct PhaseTile: View {
                     // The value is the point of the tile, so it outranks the title clearly.
                     Text(field.tileText(value))
                         .font(.hero(min(30, 0.40 * height)))
-                        .foregroundStyle(field.tint)
+                        .foregroundStyle(field.tint(in: palette))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
@@ -402,6 +405,58 @@ private struct PhaseTile: View {
     }
 }
 
+// MARK: - Page titles
+
+extension SetupView {
+    /// Pages 2 and 3's titles. Page 1 has none: the preset's name is inside its ring.
+    nonisolated static func pageTitle(_ page: Int) -> String {
+        switch page {
+        case 1: "Intervals"
+        case 2: "Warm & Cool"
+        default: ""
+        }
+    }
+}
+
+private extension View {
+    /// A setup page's title. watchOS draws a vertical page's navigation title in the asset
+    /// catalog's AccentColor whatever the page asks for (`tint`, `accentColor` and
+    /// `toolbarForegroundStyle` all left it Classic's blue on watchOS 26.2), so a theme with
+    /// an accent of its own draws the title itself, at the top of the page, where the
+    /// system's title row would be. Classic keeps the system's.
+    func pageTitle(_ page: Int) -> some View {
+        modifier(PageTitle(title: SetupView.pageTitle(page)))
+    }
+}
+
+private struct PageTitle: ViewModifier {
+    let title: String
+    @Environment(\.palette) private var palette
+
+    // Two branches, so a new theme replaces the page rather than updating it, which these
+    // pages, holding no state, can afford.
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let accent = palette.accent {
+            // Inset, so the page's tiles are measured below it as below the system's row.
+            content.safeAreaInset(edge: .top, spacing: 6) {
+                Text(title)
+                    .font(.headline)
+                    .foregroundStyle(accent)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .frame(maxWidth: .infinity, alignment: .trailing)
+                    .scenePadding(.horizontal)
+                    // Up into the clock's row, where the system's title sits.
+                    .padding(.top, -9)
+                    .accessibilityAddTraits(.isHeader)
+            }
+        } else {
+            content.navigationTitle(title)
+        }
+    }
+}
+
 // MARK: - Fields
 
 /// The watch's name for a preset's number: the setup tiles edit `PresetField`, which the
@@ -410,11 +465,13 @@ private struct PhaseTile: View {
 typealias SetupField = PresetField
 
 extension SetupField {
-    /// The crown editor its tile opens. The bookends turn over their own table in 30-second
-    /// steps and say "Off" at zero; everything else keeps the editor's own schedule.
+    /// The crown editor its tile opens, its value in the phase's colour in `palette`. The
+    /// bookends turn over their own table in 30-second steps and say "Off" at zero;
+    /// everything else keeps the editor's own schedule.
     @MainActor
-    func editor(value: Binding<Int>) -> ValueEditorView {
-        switch self {
+    func editor(value: Binding<Int>, palette: Palette = .classic) -> ValueEditorView {
+        let tint = tint(in: palette)
+        return switch self {
         case .rounds:
             ValueEditorView(
                 title: title, systemImage: symbolName, range: range, step: 1, tint: tint,
@@ -442,6 +499,7 @@ struct SetupFieldEditor: View {
     let field: SetupField
 
     @Environment(WorkoutStore.self) private var store
+    @Environment(\.palette) private var palette
 
     var body: some View {
         if field.isPro {
@@ -452,7 +510,7 @@ struct SetupFieldEditor: View {
     }
 
     private var editor: ValueEditorView {
-        field.editor(value: store.selectedBinding(field.keyPath))
+        field.editor(value: store.selectedBinding(field.keyPath), palette: palette)
     }
 }
 

@@ -92,7 +92,7 @@ struct MetadataTests {
     func descriptionNamesThePurchase() throws {
         let description = try Self.field("## Description (4000)").text
         #expect(description.contains(
-            "Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, and stronger taps."
+            "Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, stronger taps, and \(AppTheme.pastel.title), a theme in soft colors."
         ))
         #expect(!description.contains("as many presets"))
     }
@@ -137,6 +137,18 @@ struct MetadataTests {
         #expect(purchase.contains("Tap the Settings button (top right: a gear, or an orange bell if notifications are off)"))
         #expect(purchase.contains("Open Settings the same way, then choose Tap Strength."))
         #expect(!purchase.contains("Tap the gear"))
+    }
+
+    @Test("Both sets of notes say how to see Pastel, in the app's own words, and that it is Pro")
+    func notesNameTheTheme() throws {
+        let theme = ThemeRow.title, pastel = AppTheme.pastel.title, classic = AppTheme.classic.title
+        let version = try Self.field("### Notes for the reviewer (4000)").text
+        #expect(version.contains("Settings > \(theme) switches between \(classic) and \(pastel)"))
+        #expect(version.contains("\(pastel) is part of Intervally Pro"))
+        let purchase = try Self.field("### Review notes (4000)").text
+        #expect(purchase.contains("then choose \(theme), then \(pastel), marked PRO."))
+        #expect(purchase.contains("- \(pastel), a theme in soft colors"))
+        #expect(PaywallContent.features.map(\.title).contains("\(pastel) theme"))
     }
 
     // MARK: - An iPhone app with an Apple Watch app

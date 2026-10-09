@@ -60,6 +60,7 @@ struct WatchStatusView: View {
                     }
                     .buttonStyle(.glass)
                     .buttonBorderShape(.capsule)
+                    .neutralGlass()
                     .accessibilityHint("Sends every workout to your watch again")
                 }
             }
@@ -69,7 +70,7 @@ struct WatchStatusView: View {
             // with the sheet's grey either side.
             .frame(maxWidth: .infinity)
         }
-        .blackCanvas()
+        .appCanvas()
         .navigationTitle("Apple Watch")
         .navigationBarTitleDisplayMode(.inline)
         .sensoryFeedback(.success, trigger: sends)

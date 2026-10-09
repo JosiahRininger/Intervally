@@ -67,13 +67,14 @@ struct HistoryMessage: Equatable {
 /// a watch workout over in its own time.
 struct HistoryView: View {
     @Environment(HistoryModel.self) private var history
+    @Environment(\.palette) private var palette
     @State private var path: [SessionSummary] = []
     @State private var showsSettings = false
 
     var body: some View {
         NavigationStack(path: $path) {
             content
-                .blackCanvas()
+                .appCanvas()
                 .navigationTitle("History")
                 .toolbar {
                     ToolbarItem(placement: .topBarLeading) {
@@ -82,6 +83,7 @@ struct HistoryView: View {
                         } label: {
                             Image(systemName: "gearshape")
                         }
+                        .neutralGlass()
                         .accessibilityLabel("Settings")
                     }
                 }
@@ -173,7 +175,7 @@ struct HistoryView: View {
                     Group {
                         if history.isConnecting {
                             ProgressView()
-                                .tint(Theme.onTint)
+                                .tint(palette.onTint)
                         } else {
                             Text(HistoryMessage.connectTitle)
                         }
@@ -193,6 +195,7 @@ struct HistoryView: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.capsule)
+                .neutralGlass()
             default:
                 EmptyView()
             }

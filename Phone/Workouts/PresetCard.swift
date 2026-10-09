@@ -50,6 +50,7 @@ struct PresetCard: View {
     var isUpNext = false
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.palette) private var palette
 
     var body: some View {
         Group {
@@ -98,7 +99,7 @@ struct PresetCard: View {
                 if isUpNext {
                     Image(systemName: "applewatch")
                         .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Theme.work)
+                        .foregroundStyle(palette.workInk)
                 }
             }
             Text(content.rhythm)

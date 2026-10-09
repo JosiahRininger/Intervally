@@ -90,7 +90,7 @@ FEEL THE CHANGE
 Distinct taps for work and rest, plus a three-second countdown before each change, so you can tell what's next without looking. Skip ahead to the next interval whenever you're ready.
 
 PRESETS FOR HOW YOU TRAIN
-Start with Classic, Tabata, or EMOM and adjust any interval on your iPhone or with the Digital Crown. Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, and stronger taps. Buy it once, on your iPhone or your watch, and it unlocks both.
+Start with Classic, Tabata, or EMOM and adjust any interval on your iPhone or with the Digital Crown. Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, stronger taps, and Pastel, a theme in soft colors. Buy it once, on your iPhone or your watch, and it unlocks both.
 
 COUNTS TOWARD YOUR RINGS
 With Apple Health, every completed workout is saved as High Intensity Interval Training, with each work and rest interval recorded separately so you can see the breakdown in Fitness. Your heart rate shows live while you train.
@@ -153,7 +153,8 @@ Intervally is an interval timer for Apple Watch with a companion iPhone app. No 
 ON IPHONE
 1. Workouts lists the presets. Tap one to edit it: each tile (Work, Rest, Rounds, Get Ready) opens a picker, and changes save as they are made. Put on Watch makes it the workout the watch starts next. + adds a workout.
 2. History reads the interval workouts Intervally on Apple Watch saved to Apple Health. Tap Connect Apple Health; the iPhone app only reads Health. Until the watch has saved a workout, History explains where sessions come from.
-3. Settings (the gear at top left) has Intervally Pro, Apple Watch, Apple Health, Restore Purchases, Redeem Code, Support and the Privacy Policy.
+3. Settings (the gear at top left) has Intervally Pro, Theme, Apple Watch, Apple Health, Restore Purchases, Redeem Code, Support and the Privacy Policy.
+4. Settings > Theme switches between Classic and Pastel. Pastel is part of Intervally Pro, and also changes the Home Screen icon.
 
 ON APPLE WATCH
 1. Tap Start. Allow notifications and Apple Health when asked.
@@ -169,7 +170,6 @@ MORE THAN A TIMER
 - Each work and rest interval is saved to Apple Health as its own segment of one workout, with heart rate.
 - A workout session taps the wrist at every interval change with the screen off.
 - A complication, a Smart Stack widget, Siri, a Control Center control and the Action button on Apple Watch Ultra start the workout or show where it is.
-- The iPhone app edits presets, syncs them to the watch, and shows each session interval by interval.
 
 HEALTHKIT
 Health access is optional on both devices. The watch saves each completed interval workout to Health as a High Intensity Interval Training workout, with each work and rest interval, and any warmup or cooldown, as its own segment, and reads heart rate to display it during the workout. To Health the two apps are one app, so the watch's request also covers what iPhone History reads: workouts, heart rate and active energy. The iPhone app never writes to Health. If Health is declined, the timer still works fully and alerts through notifications instead. No health data leaves the user's devices or goes to iCloud.
@@ -282,11 +282,13 @@ The free app is the complete interval timer with up to 3 presets (the starters C
 - Unlimited presets
 - Optional warmup and cooldown phases in any preset
 - Tap Strength: Strong or Strongest repeats the tap at every interval change. Every change still taps once for free users.
+- Pastel, a theme in soft colors: light on iPhone, with a matching Home Screen icon, and the same colors on the watch's black screen
 
 ON IPHONE (the main way to buy; no Apple Watch needed)
 1. On Workouts, tap + (top right). The 3 starters fill the free limit, so the Intervally Pro screen opens.
 2. Tap a workout, then its Warmup or Cooldown tile, marked PRO.
 3. Tap Settings (the gear at top left), then Intervally Pro (the first row).
+4. Tap Settings, then Theme, then Pastel, marked PRO.
 Settings also has Restore Purchases and Redeem Code, and Request a Refund once Pro is bought.
 
 ON APPLE WATCH
@@ -294,10 +296,11 @@ ON APPLE WATCH
 2. Tap the Settings button (top right: a gear, or an orange bell if notifications are off), then Intervally Pro (the first row).
 3. On the setup screen, turn the Digital Crown down twice to the Warm & Cool page, then tap Warmup, Cooldown, or Unlock Pro.
 4. Open Settings the same way, then choose Tap Strength.
+5. Open Settings the same way, then choose Theme, then Pastel, marked PRO.
 If the App Store can't offer Pro on the watch, its Intervally Pro screen says Pro can also be unlocked in Intervally on iPhone.
 
 BUYING IN THE SANDBOX
-Tap the price button and confirm on the system purchase sheet. The screen you came from then finishes what you started. On iPhone, + opens the new workout's editor, and Warmup or Cooldown opens its picker. On the watch, New Preset creates a copy and opens Rename; Warmup or Cooldown opens its editor; Tap Strength shows Standard, Strong and Strongest. Settings > Intervally Pro then shows Unlocked.
+Tap the price button and confirm on the system purchase sheet. The screen you came from then finishes what you started. On iPhone, + opens the new workout's editor, and Warmup or Cooldown opens its picker. On the watch, New Preset creates a copy and opens Rename; Warmup or Cooldown opens its editor; Tap Strength shows Standard, Strong and Strongest; Pastel applies the Pastel theme on both devices. Settings > Intervally Pro then shows Unlocked.
 
 RESTORE
 Restore Purchases is at the bottom of the Intervally Pro screen on both devices. Purchases are verified on each device with StoreKit 2. A purchase made on iPhone reaches the watch through StoreKit; Restore Purchases on the watch picks it up at once.

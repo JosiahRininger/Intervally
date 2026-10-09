@@ -48,6 +48,7 @@ struct PaywallContentTests {
         (.bookends, "Add a warmup and cooldown to any workout."),
         (.tapStrength, "Stronger taps you can feel through a sleeve."),
         (.settings, "Get more from every workout."),
+        (.themes, "Make Intervally yours with Pastel."),
     ])
     func contextLines(context: PaywallContext, line: String) {
         #expect(make(context: context).contextLine == line)
@@ -233,30 +234,31 @@ struct PaywallContentTests {
     func feelStrongest() {
         #expect(make(context: .tapStrength).offersPreview)
         #expect(make(context: .tapStrength, isPro: true, ownership: .purchased).offersPreview == false)
-        for context in [PaywallContext.presets, .bookends, .settings] {
+        for context in [PaywallContext.presets, .bookends, .settings, .themes] {
             #expect(make(context: context).offersPreview == false)
         }
         #expect(PaywallContent.previewTitle == "Feel Strongest")
     }
 
-    @Test("Fixed copy and the four features, in order")
+    @Test("Fixed copy and the five features, in order")
     func fixedCopy() {
         #expect(PaywallContent.title == "Intervally Pro")
         #expect(PaywallContent.restoreTitle == "Restore Purchases")
         #expect(PaywallContent.features.map(\.title) == [
-            "Unlimited presets", "Warmup & cooldown", "Stronger taps", "Support an indie dev",
+            "Unlimited presets", "Warmup & cooldown", "Stronger taps", "Pastel theme", "Support an indie dev",
         ])
         #expect(PaywallContent.features.map(\.systemImage) == [
-            "square.stack.3d.up.fill", "sunrise.fill", "hand.tap.fill", "heart.fill",
+            "square.stack.3d.up.fill", "sunrise.fill", "hand.tap.fill", "paintpalette.fill", "heart.fill",
         ])
     }
 
     @Test("Guideline 4.10: the copy never sells haptics themselves, only the repeated pattern")
     func neverSellsHaptics() {
-        let contexts: [PaywallContext] = [.presets, .bookends, .tapStrength, .settings]
+        let contexts: [PaywallContext] = [.presets, .bookends, .tapStrength, .settings, .themes]
         let copy = contexts.flatMap { [PaywallContent.contextLine(for: $0), PaywallContent.contextLine(for: $0, platform: .phone)] }
             + PaywallContent.features.map(\.title)
             + [TapStrengthView.footer, TapStrengthRow(stored: .standard, isPro: false).footer]
+            + [ThemeRow(shown: .classic, isPro: false, platform: .watch).footer].compactMap { $0 }
         #expect(copy.allSatisfy { !$0.localizedCaseInsensitiveContains("haptic") })
     }
 }
@@ -293,7 +295,7 @@ struct PaywallLayoutTests {
     }
 
     @Test("The price is above the fold on 40mm from every door, however long the price", arguments: [
-        PaywallContext.presets, .bookends, .tapStrength, .settings,
+        PaywallContext.presets, .bookends, .tapStrength, .settings, .themes,
     ])
     func priceAboveTheFold(context: PaywallContext) throws {
         for price in ["$4.99", "1 099,00 kr", "₹449.00"] {
@@ -306,7 +308,7 @@ struct PaywallLayoutTests {
     }
 
     @Test("Loading and purchasing hold the same place as the price", arguments: [
-        PaywallContext.presets, .bookends, .tapStrength, .settings,
+        PaywallContext.presets, .bookends, .tapStrength, .settings, .themes,
     ])
     func spinnerKeepsThePlace(context: PaywallContext) throws {
         let price = try height(content(context, offer: PaywallContentTests.shareable), width: Self.width40, textSize: .large)

@@ -5,8 +5,11 @@
 
 import SwiftUI
 
-/// The welcome on the first launch, the two tabs on every other.
+/// The welcome on the first launch, the two tabs on every other, in the theme that shows.
 struct PhoneRootView: View {
+    @Environment(ThemeStore.self) private var theme
+    @Environment(ProStore.self) private var pro
+    @Environment(AppIconFollower.self) private var icon
     @AppStorage(Welcome.seenKey, store: SharedDefaults.suite) private var welcomeSeen = false
     /// `-qaWelcome`: shown this launch whatever was seen before. Debug builds only.
     @State private var forceWelcome: Bool
@@ -16,6 +19,11 @@ struct PhoneRootView: View {
     }
 
     var body: some View {
+        let palette = Palette.of(theme.effective(isPro: pro.isPro))
+        // The Home Screen icon follows the theme that is really chosen and paid for: a
+        // `-qaTheme` pin saves nothing, so it changes no icon either.
+        let iconTheme = AppTheme.effective(stored: theme.stored, isPro: pro.isPro)
+
         Group {
             if welcomeSeen && !forceWelcome {
                 PhoneTabs()
@@ -30,7 +38,13 @@ struct PhoneRootView: View {
                 .transition(.opacity)
             }
         }
-        .background(Color.black)
+        .background(palette.canvas)
+        // Read by every screen, sheets and pushed screens included, so a new theme, from
+        // Settings, the watch or Pro lapsing, redraws them all in place.
+        .palette(palette)
+        .onChange(of: iconTheme, initial: true) { _, theme in
+            icon.follow(theme)
+        }
     }
 }
 

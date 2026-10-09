@@ -4,8 +4,8 @@ An interval timer for Apple Watch, with an iPhone app to plan workouts and look 
 them. Set work, rest and rounds; the watch counts you through them with distinct haptics
 for each phase and keeps time correctly whether or not you're looking at your wrist. The
 iPhone edits the same presets, shows each session the watch saved to Health, and sells Pro.
-Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, and
-stronger taps.
+Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases,
+stronger taps, and Pastel, a theme in soft colours.
 
 ## Tech stack
 
@@ -27,8 +27,8 @@ xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'p
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-At 1.0 the watch suite runs 508 tests (24 skipped: the StoreKit suite that can't run in a
-companion watch app, and the opt-in manual QA) and the iPhone suite 231 (2 skipped: the one
+The watch suite runs 564 tests (24 skipped: the StoreKit suite that can't run in a
+companion watch app, and the opt-in manual QA) and the iPhone suite 297 (2 skipped: the one
 purchase Xcode's test server cancels, and its manual QA), all Swift Testing, on Xcode 26.2.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
@@ -90,7 +90,7 @@ real watch (see [Notes for building on device](#notes-for-building-on-device)).
 ## Intervally Pro
 
 One non-consumable In-App Purchase, `com.josiahrininger.intervally.pro`, with Family
-Sharing on. The free app is the whole timer. Pro adds three things, each gated in one place:
+Sharing on. The free app is the whole timer. Pro adds four things, each gated in one place:
 
 - **Unlimited presets.** Free holds three, which the starters fill, so the paywall appears
   only when someone asks for a fourth. Only adding is gated (`ProGating.canAddPreset`): a
@@ -108,6 +108,10 @@ Sharing on. The free app is the whole timer. Pro adds three things, each gated i
   rather than being masked by it. The strength is read at every boundary, so it
   drops to Standard at the next interval change if Pro lapses mid-run. Every change still
   taps once for free users: Pro sells a repeated pattern, never haptics (Guideline 4.10).
+- **Pastel.** A second theme ([Themes](#themes)). `ThemeStore.effective(isPro:)` shows the
+  stored choice with Pro and Classic without, so a refund falls back to Classic and a
+  restore brings Pastel back. A free user's Pastel in Settings > Theme opens the paywall
+  (`PaywallContext.themes`), and a purchase there chooses it.
 
 `ProStore` is the app's only contact with StoreKit, and no SwiftUI file imports StoreKit —
 where both are imported, `Transaction` is ambiguous. `isPro` starts from a cached flag,
@@ -135,11 +139,14 @@ StoreKit is served as the iPhone app's, and Xcode 26.2's test service refuses th
 (the reason is in the suite).
 
 Debug builds accept QA launch flags, none of which exist in Release. On the watch,
-`-qaPro pro|free` pins the entitlement for one launch and
+`-qaPro pro|free` pins the entitlement for one launch, `-qaTheme classic|pastel` pins the
+theme shown for one launch (whatever is stored or bought; nothing is saved or synced, and a
+choice in Settings ends it) and
 `-qaPreset work,rest,rounds[,prepare[,warmup,cooldown]]` rewrites the selected preset. On
-iPhone, `-qaPro pro|free`, `-qaWatch unsupported|unpaired|notInstalled|installed|firstSync`
+iPhone, `-qaPro pro|free`, `-qaTheme classic|pastel` (as on the watch; it never changes the
+Home Screen icon), `-qaWatch unsupported|unpaired|notInstalled|installed|firstSync`
 (a stand-in watch that never reaches a real one), `-qaWelcome YES`, `-qaOpen
-editor|picker|bookends|paywall|settings|watch|pro|health|history|session`,
+editor|picker|bookends|paywall|settings|watch|pro|health|theme|history|session`,
 `-qaHistory sample|empty|connect|unavailable|failed` (History from a fixture; Health is never
 read or written) and `-qaEdit "rename 0 Sprint; warmup 0 300"` (`PhoneQA.swift`,
 `QAEdit.swift`, `SampleHistory.swift`).
@@ -171,8 +178,8 @@ timers". Two tabs, each with a gear for Settings:
   its rounds, heart rate per interval and energy. Read-only: the iPhone never writes to
   Health. To Health the two apps are one app, so the watch's request covers what History
   reads (`HealthAccess`).
-- **Settings.** Intervally Pro, the watch's status, the Apple Health explainer, Restore,
-  Redeem Code and Request a Refund (iOS-only StoreKit sheets), Support and Privacy.
+- **Settings.** Intervally Pro, Theme, the watch's status, the Apple Health explainer,
+  Restore, Redeem Code and Request a Refund (iOS-only StoreKit sheets), Support and Privacy.
 
 Every screen works with no paired watch, and on iPad, where the app runs in compatibility
 mode and `WCSession.isSupported()` is false: only the words about a watch go. The first
@@ -199,9 +206,43 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
 - **The watch in the background.** A WatchConnectivity wake is held until the context has
   merged, and handed back after at most 15 s (`ConnectivityWakes`). The complication reloads
   only when the next workout changed.
+- **The theme** travels beside the document, under a context key of its own
+  (`SyncWire.themeKey`): one last-writer-wins register (`ThemeStore`), stamped later than
+  any choice the device has made or seen. A version that predates themes reads only the
+  document, so it ignores the theme and its document still compares equal; it is never
+  answered for the theme's sake, and a theme never chosen is never a reason to send. A
+  value from a later version is kept and passed on, and shows as Classic.
 - **Never synced:** a run in progress (it carries its own copy of the workout), Pro (StoreKit
-  answers on each device), settings and Health data. A stored document that won't decode
-  suspends sync rather than being overwritten.
+  answers on each device), the other settings and Health data. A stored document that won't
+  decode suspends sync rather than being overwritten.
+
+## Themes
+
+Classic is the free look: black, with blue for work. Pastel, Intervally Pro, puts pink where
+the blue is and soft versions of the other phase colours. One choice, in Settings > Theme on
+either device; the other follows over sync. Each device stores it beside its presets (on the
+watch in the App Group, so the complication wears it too).
+
+- **Every colour comes from a `Palette`** (Theme.swift): fills for rings, flashes and the
+  one tinted control; dimmed fills for Always-On; inks for phase-coloured text; and the
+  iPhone's surfaces. Each root sets `\.palette` from the effective theme, and every view
+  reads it, so a new theme redraws every screen in place, sheets and pushed screens
+  included. `Theme`'s statics stay as Classic's colours.
+- **iPhone Pastel is a light appearance:** warm white canvas, pale pink cards, dark text,
+  deeper inks for coloured text, and `.preferredColorScheme(.light)` at the root so bars,
+  glass and lists follow (the Info.plist keeps the app Dark for Classic). Bar buttons and
+  neutral glass stay in the label colour (`neutralGlass()`), as in Classic. The Home Screen
+  icon follows the theme: Pastel's alternate icon while Pastel shows, the dumbbell otherwise
+  (`AppIconFollower`; a change that lands in the background waits for the foreground).
+- **The watch keeps its black screen** in Pastel, as Apple's watchOS guidance asks of a
+  workout app, and wears Pastel's colours on it: rings, labels, tinted controls, the flash,
+  the completion screen (pink where Classic's is blue) and the Always-On variants. Titles
+  take the accent through `accentTitle()`; Setup's paged titles ignore every SwiftUI tint
+  (watchOS draws them in the asset catalog's AccentColor), so Pastel draws those two itself
+  where the system's go (`PageTitle`). watchOS has no alternate icons.
+- **Contrast** is measured and pinned for both themes (`PaletteContrastTests`): every fill
+  at 7:1 or better on black, black text on every fill and dimmed fill, and every iPhone ink
+  at 5:1 or better on Pastel's cards.
 
 ## Layout
 
@@ -221,6 +262,8 @@ Core/       model compiled into the iPhone app, the watch app and the widget
   HealthAccess.swift       what each app asks Health for: the watch's request covers the
                            iPhone's, since both are one app to Health
   SharedDefaults.swift     the App Group on the watch; the app's own defaults on iPhone
+  Theme.swift              Classic's colours, and every theme's `Palette` for each device
+  ThemeStore.swift         the chosen theme: a last-writer-wins register both devices share
   UnitTestHost.swift       keeps the real ProStore off in either test host
 Shared/     watch app and widget only
   RunProgress.swift        what a persisted run looks like at an instant (drives the widget)
@@ -301,7 +344,13 @@ small watch.
   three tap strengths, and how far apart the repeats feel; the spacing is a starting point.
 - Also only checkable on a watch, or in an Xcode run: a real purchase, restore and Ask to
   Buy; the Rename sheet that opens after a purchase from New Preset; and "COOLDOWN" fitting
-  the 40mm run screen.
+  the 40mm run screen (the 40mm simulator truncates it to "COOLDO…": the label doesn't
+  scale as `RunView` expects).
+- Pastel's Home Screen icon switches in the iPhone simulator, but the simulator can't show
+  iOS's "You have changed the icon" alert: the call reports an error although the icon
+  changes, and after that the simulator's `lsd` can refuse later changes ("Resource
+  temporarily unavailable") until it restarts. Check the alert and both directions on a
+  device.
 - A privacy manifest ships in each bundle: `Supporting/PrivacyInfo.xcprivacy` in the watch
   app and the widget, `Phone/Resources/PrivacyInfo.xcprivacy` in the iPhone app. Nothing is
   collected; presets go only between the user's own devices.

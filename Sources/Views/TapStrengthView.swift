@@ -12,6 +12,7 @@ struct TapStrengthView: View {
     /// For `previewTaps` alone, which plays on the run's own player. Called from a tap and
     /// never read in `body`, so a run going on behind this screen never redraws it.
     @Environment(RunCoordinator.self) private var coordinator
+    @Environment(\.palette) private var palette
 
     nonisolated static let footer = "Repeats the tap at every interval change. On short intervals a countdown tap may be skipped so taps don't run together."
 
@@ -25,6 +26,7 @@ struct TapStrengthView: View {
                 Text(Self.footer)
             }
         }
+        .accentTitle()
         .navigationTitle("Tap Strength")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -50,7 +52,7 @@ struct TapStrengthView: View {
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.footnote.weight(.semibold))
-                        .foregroundStyle(Theme.work)
+                        .foregroundStyle(palette.work)
                 }
             }
         }

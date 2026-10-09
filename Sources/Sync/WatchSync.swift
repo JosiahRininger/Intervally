@@ -21,10 +21,11 @@ struct SyncActivity: Equatable, Sendable {
     static let inactive = SyncActivity(isActive: false, isActivated: false, hasContentPending: false, deliveriesInFlight: 0)
 }
 
-/// Keeps the presets on the iPhone and the watch the same, over WatchConnectivity.
+/// Keeps the presets on the iPhone and the watch the same, over WatchConnectivity, and the
+/// theme the user chose with them.
 ///
 /// One channel, both ways: `updateApplicationContext(_:)` carrying this device's whole
-/// `SyncDocument`. It reaches a counterpart that isn't running, replaces anything older that
+/// `SyncDocument`, and beside it the theme's register (`SyncWire.themeKey`). It reaches a counterpart that isn't running, replaces anything older that
 /// is still undelivered, and works in the Simulator. The receiver merges and never replaces,
 /// then replies only if the merge holds something the sender lacks, so the two settle within
 /// two exchanges. Each device's own store stays primary: with no counterpart, sync idles.
@@ -52,6 +53,8 @@ final class WatchSync: NSObject {
     @ObservationIgnored private(set) var isActive = false
 
     @ObservationIgnored private let store: WorkoutStore
+    /// Nil syncs the presets alone.
+    @ObservationIgnored private let theme: ThemeStore?
     @ObservationIgnored private let transport: any SyncTransport
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
@@ -62,16 +65,20 @@ final class WatchSync: NSObject {
     private nonisolated let inFlight = OSAllocatedUnfairLock(initialState: 0)
     private nonisolated let log = Logger(subsystem: "com.josiahrininger.intervally", category: "sync")
 
-    /// - Parameter debounce: how long local edits settle before they are sent. A crown turn
-    ///   saves on every detent; the other device needs only where it stopped.
+    /// - Parameters:
+    ///   - theme: the theme to keep in step too. Nil syncs the presets alone.
+    ///   - debounce: how long local edits settle before they are sent. A crown turn saves on
+    ///     every detent; the other device needs only where it stopped.
     init(
         store: WorkoutStore,
+        theme: ThemeStore? = nil,
         transport: any SyncTransport = WCSessionTransport(),
         debounce: Duration = .milliseconds(800),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
         now: @escaping () -> Date = Date.init
     ) {
         self.store = store
+        self.theme = theme
         self.transport = transport
         self.debounce = debounce
         self.sleep = sleep
@@ -79,6 +86,7 @@ final class WatchSync: NSObject {
         self.peer = PeerState(transport.snapshot)
         super.init()
         store.onLocalChange = { [weak self] in self?.localDidChange() }
+        theme?.onLocalChange = { [weak self] in self?.localDidChange() }
     }
 
     /// Starts WatchConnectivity, once. Call as early as the app starts, so a context that
@@ -134,13 +142,14 @@ final class WatchSync: NSObject {
             return
         }
         let document = store.document
-        if !force, otherDeviceHolds(document) {
+        let chosen = theme?.register
+        if !force, otherDeviceHolds(document), otherDeviceHolds(chosen) {
             log.debug("not sending: the other device has this already")
             return
         }
         do {
             let sentAt = now()
-            try transport.updateApplicationContext(SyncWire.context(for: document, sentAt: sentAt))
+            try transport.updateApplicationContext(SyncWire.context(for: document, theme: chosen, sentAt: sentAt))
             lastSentAt = sentAt
             log.info("sent \(document.workouts.count) presets\(force ? " (forced)" : "", privacy: .public)")
         } catch {
@@ -156,19 +165,43 @@ final class WatchSync: NSObject {
             || SyncWire.document(from: transport.receivedApplicationContext) == document
     }
 
+    /// The same for the theme. A theme never chosen is older than anything the other device
+    /// can hold, so it is never a reason to send.
+    private func otherDeviceHolds(_ theme: Register<String>?) -> Bool {
+        guard let theme, theme.stamp != .origin else { return true }
+        return SyncWire.theme(from: transport.applicationContext) == theme
+            || SyncWire.theme(from: transport.receivedApplicationContext) == theme
+    }
+
     // MARK: - Receiving
 
     /// A context the other device just delivered; nil if it held no readable document. It is
     /// the sender's state, so if the merge holds more, the sender lacks that, whatever this
     /// device sent it before: the reply is forced, as the sender may have been reinstalled.
     /// Once both hold the same, neither replies, which is what ends the exchange.
-    func receive(_ remote: SyncDocument?) {
+    ///
+    /// - Parameter remoteTheme: the theme beside the document. Nil from a version that
+    ///   predates themes, which is then never answered for the theme's sake: it would only
+    ///   drop it again.
+    func receive(_ remote: SyncDocument?, theme remoteTheme: Register<String>? = nil) {
         guard let remote else {
             log.error("ignored a context that isn't a sync document")
             return
         }
         lastReceivedAt = now()
-        if merge(remote)?.mergedDiffersFromRemote == true { push(force: true) }
+        let presetsLacking = merge(remote)?.mergedDiffersFromRemote == true
+        let themeLacking = mergeTheme(remoteTheme)
+        if presetsLacking || themeLacking { push(force: true) }
+    }
+
+    /// Takes the other device's theme if it is the later choice. True when the sender lacks
+    /// this device's, which is then the later one.
+    private func mergeTheme(_ remote: Register<String>?) -> Bool {
+        guard let theme, let remote else { return false }
+        if theme.merge(remote) {
+            log.info("theme from the other device: \(remote.value, privacy: .public)")
+        }
+        return theme.register != remote
     }
 
     /// Merges, never replaces. A suspended store applies nothing, so an unreadable local copy
@@ -200,6 +233,7 @@ final class WatchSync: NSObject {
         // The last context that arrived, which this launch may not have seen. It may be old,
         // so whether to answer is left to push(), which skips what the other device holds.
         if let pending = SyncWire.document(from: received) { merge(pending) }
+        if let pendingTheme = SyncWire.theme(from: received) { _ = mergeTheme(pendingTheme) }
         push()
     }
 
@@ -243,9 +277,10 @@ extension WatchSync: WCSessionDelegate {
     }
 
     nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
-        // Decoded here: the dictionary isn't Sendable, the document is.
+        // Decoded here: the dictionary isn't Sendable, the document and the theme are.
         let remote = SyncWire.document(from: applicationContext)
-        deliver { $0.receive(remote) }
+        let theme = SyncWire.theme(from: applicationContext)
+        deliver { $0.receive(remote, theme: theme) }
     }
 
     #if os(iOS)

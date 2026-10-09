@@ -85,6 +85,7 @@ struct ValueEditorView: View {
             crown = Double(index)
             if values[index] != value { value = values[index] }
         }
+        .accentTitle()
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {

@@ -22,9 +22,11 @@ struct IntervallyPhoneApp: App {
             root
                 .environment(services.store)
                 .environment(services.pro)
+                .environment(services.theme)
                 .environment(services.sync)
                 .environment(services.history)
                 .environment(services.reviews)
+                .environment(services.icon)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {

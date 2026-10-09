@@ -106,7 +106,7 @@ struct WatchStatusCard: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .tileBackground()
         .accessibilityElement(children: .combine)
     }
 }

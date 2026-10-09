@@ -85,7 +85,7 @@ struct WorkoutsView: View {
             }
             .listStyle(.plain)
             .environment(\.editMode, $editMode)
-            .blackCanvas()
+            .appCanvas()
             .navigationTitle("Workouts")
             .toolbar { toolbar }
             .navigationDestination(for: WorkoutsRoute.self) { route in
@@ -200,15 +200,18 @@ struct WorkoutsView: View {
             } label: {
                 Image(systemName: "gearshape")
             }
+            .neutralGlass()
             .accessibilityLabel("Settings")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(editMode.isEditing ? "Done" : "Edit") {
                 withAnimation { editMode = editMode.isEditing ? .inactive : .active }
             }
+            .neutralGlass()
             Button(action: addNew) {
                 Image(systemName: "plus")
             }
+            .neutralGlass()
             .accessibilityLabel("New Workout")
             .accessibilityHint(actions.canAdd ? "" : "Opens Intervally Pro")
         }

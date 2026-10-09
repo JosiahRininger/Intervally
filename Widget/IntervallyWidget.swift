@@ -45,9 +45,11 @@ struct RunEntry: TimelineEntry {
     let remainingFraction: Double
     /// What the idle face offers to start.
     let preset: IntervalWorkout?
+    /// The theme the app is wearing, read as the timeline was built.
+    var theme: AppTheme = .classic
 
-    static func idle(at date: Date, preset: IntervalWorkout?) -> RunEntry {
-        RunEntry(date: date, run: nil, phaseStart: nil, remainingFraction: 0, preset: preset)
+    static func idle(at date: Date, preset: IntervalWorkout?, theme: AppTheme = .classic) -> RunEntry {
+        RunEntry(date: date, run: nil, phaseStart: nil, remainingFraction: 0, preset: preset, theme: theme)
     }
 }
 
@@ -68,13 +70,15 @@ struct RunProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (RunEntry) -> Void) {
-        completion(entry(at: .now, from: WorkoutStore.activeRun()))
+        completion(entry(at: .now, from: WorkoutStore.activeRun(), theme: ThemeStore.effective()))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<RunEntry>) -> Void) {
         let now = Date()
         let snapshot = WorkoutStore.activeRun()
-        let current = entry(at: now, from: snapshot)
+        // Once per timeline: the app reloads every timeline when the theme changes.
+        let theme = ThemeStore.effective()
+        let current = entry(at: now, from: snapshot, theme: theme)
 
         guard current.run?.isPaused == false, let snapshot else {
             // Nothing counting down, so there is nothing to refresh for. The idle face is
@@ -87,7 +91,7 @@ struct RunProvider: TimelineProvider {
         // between them without waking the extension, but each boundary still needs a real
         // entry — WidgetKit renders entries verbatim, so a placeholder would show
         // "no workout running" for the rest of the workout.
-        let entries = [current] + snapshot.upcomingBoundaries(after: now).map { entry(at: $0, from: snapshot) }
+        let entries = [current] + snapshot.upcomingBoundaries(after: now).map { entry(at: $0, from: snapshot, theme: theme) }
         completion(Timeline(entries: entries, policy: .atEnd))
     }
 
@@ -111,9 +115,9 @@ struct RunProvider: TimelineProvider {
 
     /// Rebuilds the widget's view of the run from the snapshot the app persists.
     /// The derivation itself lives in `RunSnapshot` so it can be tested.
-    private func entry(at date: Date, from snapshot: RunSnapshot?) -> RunEntry {
+    private func entry(at date: Date, from snapshot: RunSnapshot?, theme: AppTheme) -> RunEntry {
         guard let snapshot, let run = snapshot.progress(at: date) else {
-            return .idle(at: date, preset: WorkoutStore.selectedPreset())
+            return .idle(at: date, preset: WorkoutStore.selectedPreset(), theme: theme)
         }
         let position = snapshot.plan.position(atElapsed: snapshot.elapsed(at: date))
         return RunEntry(
@@ -121,7 +125,8 @@ struct RunProvider: TimelineProvider {
             run: run,
             phaseStart: position.phase.map { snapshot.anchor.addingTimeInterval($0.start) },
             remainingFraction: 1 - position.phaseProgress,
-            preset: nil
+            preset: nil,
+            theme: theme
         )
     }
 }
@@ -132,6 +137,8 @@ struct IntervallyWidgetView: View {
     @Environment(\.widgetFamily) private var family
     @Environment(\.widgetRenderingMode) private var renderingMode
     let entry: RunEntry
+
+    private var palette: Palette { .of(entry.theme) }
 
     var body: some View {
         Group {
@@ -176,18 +183,17 @@ struct IntervallyWidgetView: View {
         guard family == .accessoryRectangular, let run = entry.run else {
             return AnyShapeStyle(.fill.tertiary)
         }
-        let tint = run.isPaused ? Theme.dimmed(for: run.phaseKind) : Theme.light(for: run.phaseKind)
-        return AnyShapeStyle(tint.gradient)
+        return AnyShapeStyle(tint(for: run).gradient)
     }
 
     /// Black holds up on every phase tint. In accented rendering the system recolours the
     /// canvas itself, so the text goes back to the default.
     private var onCanvas: Color {
-        renderingMode == .fullColor ? Theme.onTint : Color.primary
+        renderingMode == .fullColor ? palette.onTint : Color.primary
     }
 
     private func tint(for run: RunProgress) -> Color {
-        run.isPaused ? Theme.dimmed(for: run.phaseKind) : Theme.light(for: run.phaseKind)
+        run.isPaused ? palette.dimmed(for: run.phaseKind) : palette.fill(for: run.phaseKind)
     }
 
     // MARK: Pieces

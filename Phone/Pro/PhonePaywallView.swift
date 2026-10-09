@@ -57,7 +57,7 @@ struct PhonePaywallView: View {
                 retry: retry
             )
         }
-        .blackCanvas()
+        .appCanvas()
         // The page carries its own large title.
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -65,6 +65,7 @@ struct PhonePaywallView: View {
             if isSheet {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(role: .close) { dismiss() }
+                        .neutralGlass()
                 }
             }
         }
@@ -128,6 +129,8 @@ struct PhonePaywallPage: View {
     var buy: () -> Void = {}
     var restore: () -> Void = {}
     var retry: () -> Void = {}
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
         VStack(spacing: 24) {
@@ -202,7 +205,7 @@ struct PhonePaywallPage: View {
                         .minimumScaleFactor(0.8)
                 } else {
                     ProgressView()
-                        .tint(Theme.onTint)
+                        .tint(palette.onTint)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 52)
@@ -224,6 +227,7 @@ struct PhonePaywallPage: View {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        .neutralGlass()
     }
 
     private var status: some View {
@@ -232,7 +236,7 @@ struct PhonePaywallPage: View {
             if let icon = action.systemImage {
                 Image(systemName: icon)
                     .font(.title)
-                    .foregroundStyle(action.isOwned ? Theme.work : .secondary)
+                    .foregroundStyle(action.isOwned ? palette.workInk : .secondary)
             }
             Text(action.headline ?? "")
                 .font(.title3.weight(.semibold))
@@ -278,7 +282,7 @@ struct PhonePaywallPage: View {
                 HStack(spacing: 14) {
                     Image(systemName: feature.systemImage)
                         .font(.body.weight(.semibold))
-                        .foregroundStyle(Theme.work)
+                        .foregroundStyle(palette.workInk)
                         .frame(width: 28)
                         .accessibilityHidden(true)
                     Text(feature.title)
@@ -307,6 +311,7 @@ struct PhonePaywallPage: View {
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.capsule)
+        .neutralGlass()
         .disabled(!canRestore)
         .accessibilityLabel(isRestoring ? "Restoring purchases" : PaywallContent.restoreTitle)
     }
@@ -321,7 +326,7 @@ struct PhonePaywallPage: View {
                 isPurchasing: false, lastPurchase: nil, lastRestore: nil, platform: .phone
             ))
         }
-        .blackCanvas()
+        .appCanvas()
     }
 }
 
@@ -333,6 +338,6 @@ struct PhonePaywallPage: View {
                 offer: .idle, isPurchasing: false, lastPurchase: nil, lastRestore: nil, platform: .phone
             ))
         }
-        .blackCanvas()
+        .appCanvas()
     }
 }

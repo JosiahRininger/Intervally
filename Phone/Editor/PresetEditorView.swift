@@ -46,6 +46,7 @@ struct PresetEditorView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.palette) private var palette
 
     @State private var sheet: Sheet?
     @State private var followUp = PaywallFollowUp<FollowUp>()
@@ -88,7 +89,7 @@ struct PresetEditorView: View {
                 editor(workout)
             } else {
                 // Deleted, here or on the watch: the screen closes itself.
-                Color.black
+                palette.canvas
             }
         }
         .onChange(of: workout == nil) { _, gone in
@@ -149,7 +150,7 @@ struct PresetEditorView: View {
         // Inside the pinned bar: the scroll view's frame stops at it and at the navigation bar.
         // (Its proxy still reports both as insets; subtracting them counted them twice.)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
-        .blackCanvas()
+        .appCanvas()
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.hard, for: .bottom)
         // Pinned, so the one thing this screen sends to the watch is never below the fold. A
@@ -338,6 +339,7 @@ struct PresetEditorView: View {
             } label: {
                 Image(systemName: "ellipsis")
             }
+            .neutralGlass()
             .accessibilityLabel("More")
         }
     }

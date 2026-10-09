@@ -59,6 +59,7 @@ struct RootView: View {
     @Environment(RunCoordinator.self) private var coordinator
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
+    @Environment(ThemeStore.self) private var theme
     @Environment(\.scenePhase) private var scenePhase
     @State private var navigation = RootNavigation()
     /// The preset the complication's idle face was last built from.
@@ -71,6 +72,8 @@ struct RootView: View {
     }
 
     var body: some View {
+        let shown = theme.effective(isPro: pro.isPro)
+
         // A path rather than value-free links, so a start can pop whatever is pushed.
         NavigationStack(path: $navigation.path) {
             SetupView(isRunning: isRunning, sheet: $navigation.sheet)
@@ -81,6 +84,13 @@ struct RootView: View {
                     case .run: RunView(isRunning: isRunning)
                     }
                 }
+        }
+        // Read by every screen, sheets and pushed screens included, so a new theme, from
+        // Settings, the iPhone or Pro lapsing, redraws them all in place.
+        .palette(.of(shown))
+        .onChange(of: shown) {
+            // The complication wears the theme too.
+            WidgetCenter.shared.reloadAllTimelines()
         }
         .onAppear {
             // Pick up a run that was still going when the app was last terminated — or one

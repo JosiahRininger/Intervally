@@ -59,8 +59,15 @@ enum PresetField: Hashable, CaseIterable, Sendable {
         }
     }
 
-    /// The phase's colour. Rounds stays white rather than borrowing a meaning it doesn't have.
-    var tint: Color { kind.map(Theme.light(for:)) ?? .white }
+    /// The phase's colour in Classic. Rounds stays white rather than borrowing a meaning it
+    /// doesn't have.
+    var tint: Color { tint(in: .classic) }
+
+    /// The phase's colour as text on `palette`'s canvas: its ink, which on black is the fill.
+    /// Rounds takes the neutral, Classic's white.
+    func tint(in palette: Palette) -> Color {
+        kind.map(palette.ink(for:)) ?? palette.neutral
+    }
 
     /// The editor's glyph: the phase's own, or a loop for rounds.
     var symbolName: String { kind?.symbolName ?? "repeat" }

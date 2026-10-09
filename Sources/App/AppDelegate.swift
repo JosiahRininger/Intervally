@@ -21,6 +21,8 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
     /// Intervally Pro. Created with the delegate, so a background workout recovery has the
     /// cached answer before its first boundary taps.
     let pro = ProStore()
+    /// The theme, chosen here or on the iPhone. In the App Group, so the complication wears it.
+    let theme = ThemeStore()
     private(set) lazy var coordinator = RunCoordinator(
         store: store,
         pro: pro,
@@ -32,7 +34,7 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
     )
     /// Keeps the presets in step with the iPhone. Started with the delegate, so a background
     /// wake that brought a context finds someone to merge it.
-    private(set) lazy var sync = WatchSync(store: store)
+    private(set) lazy var sync = WatchSync(store: store, theme: theme)
     /// WatchConnectivity wakes, held until sync has merged what they brought.
     private lazy var connectivityWakes = ConnectivityWakes(activity: { [weak self] in self?.sync.activity ?? .inactive })
 
@@ -48,6 +50,7 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
         Self.current = self
         applyQAPreset()
         applyQAPro()
+        applyQATheme()
         #endif
         // Also runs on a background workout-recovery relaunch, which is when a transaction
         // that finished while the app was away (an Ask to Buy approval, a refund) arrives.
@@ -65,6 +68,12 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
             log.info("complication reloaded: the iPhone changed the selected preset")
         }
         sync.onStateChange = { [weak self] in self?.connectivityWakes.reevaluate() }
+        // The complication wears the theme. A choice made here reloads it from RootView; one
+        // from the iPhone can land while no view exists, in a background wake.
+        theme.onRemoteChange = { [log] in
+            WidgetCenter.shared.reloadAllTimelines()
+            log.info("complication reloaded: the iPhone changed the theme")
+        }
         sync.activate()
     }
 
@@ -139,6 +148,16 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
               let isPro = Self.qaProOverride(spec) else { return }
         pro.overrideForQA(isPro)
         log.info("QA Pro override applied: \(spec, privacy: .public)")
+    }
+
+    /// QA hook for screenshots: `-qaTheme classic` or `-qaTheme pastel` pins the theme shown
+    /// for this launch, whatever is stored or bought. Nothing is saved or synced. Debug
+    /// builds only, like `-qaPro`.
+    private func applyQATheme() {
+        guard let spec = UserDefaults.standard.string(forKey: "qaTheme"),
+              let pinned = AppTheme.qaOverride(spec) else { return }
+        theme.pinForQA(pinned)
+        log.info("QA theme pinned: \(spec, privacy: .public)")
     }
 
     /// The entitlement a `-qaPro` value pins, or nil for anything but "pro" or "free", so a

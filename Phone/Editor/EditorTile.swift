@@ -35,6 +35,8 @@ struct EditorTile: View {
     let content: EditorTileContent
     let action: () -> Void
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         let field = content.field
 
@@ -47,7 +49,7 @@ struct EditorTile: View {
                             .foregroundStyle(.secondary)
                     } icon: {
                         Image(systemName: field.symbolName)
-                            .foregroundStyle(field.tint)
+                            .foregroundStyle(field.tint(in: palette))
                     }
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -67,7 +69,7 @@ struct EditorTile: View {
                 if let value = content.value {
                     Text(value)
                         .font(.system(.largeTitle, design: .rounded).weight(.bold).monospacedDigit())
-                        .foregroundStyle(field.tint)
+                        .foregroundStyle(field.tint(in: palette))
                         .lineLimit(1)
                         .minimumScaleFactor(0.6)
                 } else {
@@ -98,6 +100,7 @@ struct ValuePickerSheet: View {
 
     @State private var selection: Int
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.palette) private var palette
 
     /// Starts on the table value nearest `value`. A stored value that isn't on the table is
     /// only shown at its neighbour, never rewritten, until the wheel is turned.
@@ -113,7 +116,7 @@ struct ValuePickerSheet: View {
                 ForEach(field.values, id: \.self) { value in
                     Text(Self.rowText(field, value))
                         .font(.system(.title2, design: .rounded).weight(.semibold).monospacedDigit())
-                        .foregroundStyle(field.tint)
+                        .foregroundStyle(field.tint(in: palette))
                         .accessibilityLabel(field.spoken(value))
                         .tag(value)
                 }
@@ -132,7 +135,7 @@ struct ValuePickerSheet: View {
             }
         }
         .presentationDetents([.medium])
-        .presentationBackground(.black)
+        .presentationBackground(palette.canvas)
         .onChange(of: selection) { _, new in onPick(new) }
     }
 

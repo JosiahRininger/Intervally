@@ -122,6 +122,8 @@ struct PaywallPage: View {
     var retry: () -> Void = {}
     var feelStrongest: () -> Void = {}
 
+    @Environment(\.palette) private var palette
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             PaywallHeader(content: content, buy: buy, retry: retry)
@@ -169,7 +171,7 @@ struct PaywallPage: View {
     private func featureRow(_ feature: PaywallContent.Feature) -> some View {
         HStack(spacing: 8) {
             Image(systemName: feature.systemImage)
-                .foregroundStyle(Theme.work)
+                .foregroundStyle(palette.work)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             Text(feature.title)
@@ -193,7 +195,7 @@ struct PaywallPage: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(Theme.work)
+        .foregroundStyle(palette.work)
         .disabled(!canRestore)
         .accessibilityLabel(isRestoring ? "Restoring purchases" : PaywallContent.restoreTitle)
     }
@@ -209,7 +211,7 @@ struct PaywallPage: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
-        .foregroundStyle(Theme.work)
+        .foregroundStyle(palette.work)
     }
 }
 
@@ -219,6 +221,8 @@ struct PaywallHeader: View {
     let content: PaywallContent
     var buy: () -> Void = {}
     var retry: () -> Void = {}
+
+    @Environment(\.palette) private var palette
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -268,15 +272,15 @@ struct PaywallHeader: View {
                         .minimumScaleFactor(0.8)
                 } else {
                     ProgressView()
-                        .tint(Theme.onTint)
+                        .tint(palette.onTint)
                 }
             }
             .frame(maxWidth: .infinity, minHeight: 44)
         }
         .buttonStyle(.glassProminent)
         .buttonBorderShape(.capsule)
-        .tint(Theme.work)
-        .foregroundStyle(Theme.onTint)
+        .tint(palette.work)
+        .foregroundStyle(palette.onTint)
         // Not `.disabled`: that greys the capsule out from under its own spinner. Hit
         // testing stops touches only, so VoiceOver is told separately that a spinner does
         // nothing, and `buy()` refuses it either way.
@@ -302,7 +306,7 @@ struct PaywallHeader: View {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if let icon = action.systemImage {
                     Image(systemName: icon)
-                        .foregroundStyle(action.isOwned ? Theme.work : .secondary)
+                        .foregroundStyle(action.isOwned ? palette.work : .secondary)
                 }
                 Text(action.headline ?? "")
                     .font(.headline)
@@ -339,13 +343,15 @@ struct ProGate<Content: View>: View {
 /// Marks a control that opens the paywall rather than doing its job, for a free user.
 /// Hidden from VoiceOver: the control's hint says the same thing in words.
 struct ProBadge: View {
+    @Environment(\.palette) private var palette
+
     var body: some View {
         Text("PRO")
             .font(.caption2.weight(.bold))
-            .foregroundStyle(Theme.onTint)
+            .foregroundStyle(palette.onTint)
             .padding(.horizontal, 5)
             .padding(.vertical, 1)
-            .background(Capsule().fill(Theme.work))
+            .background(Capsule().fill(palette.work))
             .fixedSize()
             .accessibilityHidden(true)
     }

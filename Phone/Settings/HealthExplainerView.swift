@@ -92,7 +92,7 @@ struct HealthExplainerView: View {
             }
             .padding(20)
         }
-        .blackCanvas()
+        .appCanvas()
         .navigationTitle("Apple Health")
         .navigationBarTitleDisplayMode(.inline)
         // Whether to offer Connect is History's to know; this is where it finds out.

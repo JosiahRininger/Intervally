@@ -16,12 +16,14 @@ enum SettingsKey {
 
 /// App-wide preferences, presented as a sheet from the setup screen's gear.
 ///
-/// Small on purpose: Intervally Pro, the two haptic preferences, the alert status explained
-/// where it can be acted on, and the links App Review and users look for. Nothing here is a
+/// Small on purpose: Intervally Pro, the two haptic preferences, the theme, the alert status
+/// explained where it can be acted on, and the links App Review and users look for. Nothing here is a
 /// placeholder — a "Coming soon" row is the kind of incomplete-feature content review
 /// rejects.
 struct SettingsView: View {
     @Environment(ProStore.self) private var pro
+    @Environment(ThemeStore.self) private var theme
+    @Environment(\.palette) private var palette
     @AppStorage(SettingsKey.countdownTaps, store: SharedDefaults.suite) private var countdownTaps = true
     @AppStorage(SettingsKey.tapStrength, store: SharedDefaults.suite) private var tapStrength: TapStrength = .standard
     @State private var alertsOff = false
@@ -38,6 +40,7 @@ struct SettingsView: View {
 
     var body: some View {
         let strengthRow = TapStrengthRow(stored: tapStrength, isPro: pro.isPro)
+        let themeRow = ThemeRow(shown: theme.effective(isPro: pro.isPro), isPro: pro.isPro, platform: .watch)
 
         List {
             Section {
@@ -70,6 +73,17 @@ struct SettingsView: View {
                 Text(strengthRow.footer)
             }
 
+            Section {
+                // Open to everyone: Classic is free. Pastel opens the paywall from there.
+                NavigationLink {
+                    ThemeView()
+                } label: {
+                    valueLabel(ThemeRow.title, value: themeRow.value)
+                }
+                .accessibilityLabel(ThemeRow.title)
+                .accessibilityValue(themeRow.value)
+            }
+
             if alertsOff {
                 Section {
                     Label("Alerts are off", systemImage: "bell.slash.fill")
@@ -94,6 +108,7 @@ struct SettingsView: View {
                 Text("Intervally \(version)")
             }
         }
+        .accentTitle()
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
         .task {
@@ -105,7 +120,7 @@ struct SettingsView: View {
     private func proRow(_ row: ProStatusRow) -> some View {
         HStack(spacing: 8) {
             Image(systemName: row.systemImage)
-                .foregroundStyle(Theme.work)
+                .foregroundStyle(palette.work)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
                 Text(ProStatusRow.title)
@@ -121,17 +136,21 @@ struct SettingsView: View {
     }
 
     /// Title over value: "Tap Strength" and "Strongest" side by side don't fit a 40mm row.
+    private func valueLabel(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
+            Text(value)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+    }
+
     private func tapStrengthLabel(_ row: TapStrengthRow) -> some View {
         HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Tap Strength")
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-                Text(row.value)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
+            valueLabel("Tap Strength", value: row.value)
             Spacer(minLength: 0)
             if row.isLocked {
                 Image(systemName: "lock.fill")
@@ -161,6 +180,7 @@ struct TapStrengthRow: Equatable, Sendable {
     let pro = ProStore()
     NavigationStack { SettingsView() }
         .environment(pro)
+        .environment(ThemeStore(defaults: UserDefaults(suiteName: "preview.theme")!))
         // The paywall and Tap Strength, a push away, play their previews through it.
         .environment(RunCoordinator(
             store: WorkoutStore(defaults: UserDefaults(suiteName: "preview")!),

@@ -23,7 +23,7 @@ struct PhoneMetadataTests {
         #expect(notes.contains("Tap \(HistoryMessage.connectTitle);"))
         let store = PhoneSettingsView.StoreAction.self
         #expect(notes.contains(
-            "Settings (the gear at top left) has \(ProStatusRow.title), Apple Watch, Apple Health, "
+            "Settings (the gear at top left) has \(ProStatusRow.title), \(ThemeRow.title), Apple Watch, Apple Health, "
                 + "\(store.restore.title), \(store.redeem.title), Support and the Privacy Policy."
         ))
     }
@@ -33,6 +33,7 @@ struct PhoneMetadataTests {
         let notes = try Self.block("### Review notes (4000)")
         let store = PhoneSettingsView.StoreAction.self
         #expect(notes.contains("Tap Settings (the gear at top left), then \(ProStatusRow.title) (the first row)."))
+        #expect(notes.contains("Tap Settings, then \(ThemeRow.title), then \(AppTheme.pastel.title), marked PRO."))
         #expect(notes.contains("then its \(PresetField.warmup.title) or \(PresetField.cooldown.title) tile, marked PRO."))
         #expect(notes.contains(
             "Settings also has \(store.restore.title) and \(store.redeem.title), and \(store.refund.title) once Pro is bought."

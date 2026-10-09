@@ -55,7 +55,7 @@ struct WelcomeView: View {
             .frame(maxWidth: 560)
             .frame(maxWidth: .infinity)
         }
-        .blackCanvas()
+        .appCanvas()
         .safeAreaBar(edge: .bottom) {
             Button(action: onContinue) {
                 Text("Continue")

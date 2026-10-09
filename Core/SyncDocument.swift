@@ -369,13 +369,35 @@ enum SyncWire {
     /// Makes every context distinct, so a forced re-send after a reinstall is never
     /// coalesced away as unchanged.
     static let sentAtKey = "sentAt"
+    /// The theme the user chose (`ThemeStore`), as a JSON `Register<String>`. A key of its own
+    /// beside the document rather than a field in it: a version that predates themes reads
+    /// only `doc`, so it never sees the theme, never re-encodes it away, and its document
+    /// still compares equal to this version's.
+    static let themeKey = "theme"
 
-    static func context(for document: SyncDocument, sentAt: Date = Date()) throws -> [String: Any] {
+    /// - Parameter theme: nil sends presets only, as a version that predates themes did.
+    static func context(
+        for document: SyncDocument, theme: Register<String>? = nil, sentAt: Date = Date()
+    ) throws -> [String: Any] {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
         let json = try encoder.encode(document)
         let compressed = try (json as NSData).compressed(using: .lzfse) as Data
-        return [documentKey: compressed, schemaKey: SyncDocument.currentSchema, sentAtKey: sentAt]
+        var context: [String: Any] = [documentKey: compressed, schemaKey: SyncDocument.currentSchema, sentAtKey: sentAt]
+        if let theme {
+            context[themeKey] = try encoder.encode(theme)
+        }
+        return context
+    }
+
+    /// The theme in `context`, or nil where there is none: from a version that predates
+    /// themes, or one that won't decode. Like `document(from:)`, meant for the delegate queue.
+    static func theme(from context: [String: Any]) -> Register<String>? {
+        guard let data = context[themeKey] as? Data,
+              let theme = try? JSONDecoder().decode(Register<String>.self, from: data),
+              !theme.value.isEmpty
+        else { return nil }
+        return theme
     }
 
     /// The document in `context`, or nil for anything that isn't one. Meant to run on the

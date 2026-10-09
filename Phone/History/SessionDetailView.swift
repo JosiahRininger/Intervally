@@ -15,6 +15,7 @@ struct SessionDetailView: View {
     @Environment(HistoryModel.self) private var history
     @Environment(ReviewLedger.self) private var reviews
     @Environment(\.requestReview) private var requestReview
+    @Environment(\.palette) private var palette
 
     var body: some View {
         ScrollView {
@@ -35,7 +36,7 @@ struct SessionDetailView: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
         }
-        .blackCanvas()
+        .appCanvas()
         .navigationTitle(session.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
@@ -153,14 +154,14 @@ struct SessionDetailView: View {
                 x: .value("Interval", "\(interval.id)"),
                 y: .value("Heart Rate", interval.averageHeartRate ?? 0)
             )
-            .foregroundStyle(Theme.light(for: interval.kind))
+            .foregroundStyle(palette.fill(for: interval.kind))
             .accessibilityLabel(interval.title)
             .accessibilityValue("\(interval.averageHeartRate ?? 0) beats per minute")
         }
         .chartXAxis(.hidden)
         .chartYAxis {
             AxisMarks(position: .leading) { _ in
-                AxisGridLine().foregroundStyle(.white.opacity(0.15))
+                AxisGridLine().foregroundStyle(palette.neutral.opacity(0.15))
                 AxisValueLabel()
             }
         }
@@ -197,6 +198,7 @@ private struct IntervalRow: View {
     let interval: SessionSummary.Interval
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.palette) private var palette
 
     var body: some View {
         Group {
@@ -224,7 +226,7 @@ private struct IntervalRow: View {
     private var title: some View {
         HStack(spacing: 12) {
             Image(systemName: interval.kind.symbolName)
-                .foregroundStyle(Theme.light(for: interval.kind))
+                .foregroundStyle(palette.ink(for: interval.kind))
                 .frame(width: 24)
                 .accessibilityHidden(true)
             Text(interval.title)
