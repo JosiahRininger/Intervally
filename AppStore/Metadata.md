@@ -209,6 +209,7 @@ The same five shots from an iPhone 17 Pro simulator.
 | `3-pro-editor.png` | INTERVALLY PRO · Add a warmup and a cooldown | EMOM with a 5-minute warmup and a 3-minute cooldown. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
 | `4-history.png` | HISTORY · Every session, interval by interval | History grouped by week, an early end included |
 | `5-session.png` | SESSION · Your heart rate, every interval | A session's ring, totals and heart rate per interval |
+| `6-pastel.png` | INTERVALLY PRO · Make it yours with Pastel | Workouts in the Pastel theme. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
 
 The captions are drawn by `AppStore/Screenshots/compose.py`, which turns the raw captures
 into these files at the same size. To retake them, in a Debug build:

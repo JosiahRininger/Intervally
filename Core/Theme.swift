@@ -329,6 +329,15 @@ extension View {
         modifier(PaletteRoot(palette: palette))
     }
 
+    /// A sheet's content. A sheet already on screen keeps the appearance it was presented
+    /// with, whatever the root asks later, so a theme chosen inside Settings (or arriving
+    /// from the watch, or a lapse of Pro) left an open sheet in the old light or dark mode:
+    /// Pastel's canvas under white text, or black text on black. Each sheet asks for the
+    /// palette's own appearance and tint. Nothing on the watch, whose screens stay dark.
+    func paletteSheet() -> some View {
+        modifier(PaletteSheet())
+    }
+
     /// A bar button or a neutral glass control: grey glass with the label in the label
     /// colour, in every theme, as Classic draws it, rather than in the root's accent.
     func neutralGlass() -> some View {
@@ -361,6 +370,20 @@ private struct NeutralGlass: ViewModifier {
 
     func body(content: Content) -> some View {
         content.tint(palette.glassTint)
+    }
+}
+
+private struct PaletteSheet: ViewModifier {
+    @Environment(\.palette) private var palette
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        content
+            .tint(palette.accent)
+            .preferredColorScheme(palette.colorScheme)
+        #else
+        content
+        #endif
     }
 }
 

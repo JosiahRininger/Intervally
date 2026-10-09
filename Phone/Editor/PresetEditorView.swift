@@ -102,6 +102,7 @@ struct PresetEditorView: View {
                     ValuePickerSheet(field: field, value: workout[keyPath: field.keyPath]) { value in
                         set(field, to: value)
                     }
+                    .paletteSheet()
                 }
             case .paywall(let context):
                 NavigationStack {
@@ -110,6 +111,7 @@ struct PresetEditorView: View {
                         self.sheet = nil
                     }
                 }
+                .paletteSheet()
             }
         }
         #if DEBUG

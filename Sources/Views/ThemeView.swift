@@ -35,11 +35,20 @@ struct ThemeView: View {
         .navigationBarTitleDisplayMode(.inline)
         // Pushed inside Settings' own stack, like every way into the paywall.
         .navigationDestination(isPresented: $showsPaywall) {
-            PaywallView(context: .themes) {
-                theme.paywallUnlocked()
-                showsPaywall = false
-            }
+            PaywallView(context: .themes) { finishPaywall() }
         }
+        // Pro can also arrive while the paywall is open without its buttons: an Ask to Buy
+        // approval, the iPhone's purchase, Family Sharing. It finishes the same way.
+        .onChange(of: pro.isPro) { _, isPro in
+            if isPro { finishPaywall() }
+        }
+    }
+
+    /// Once, however Pro arrived: chooses Pastel and closes the paywall.
+    private func finishPaywall() {
+        guard showsPaywall else { return }
+        theme.paywallUnlocked()
+        showsPaywall = false
     }
 
     private func optionRow(_ option: AppTheme, shown: AppTheme) -> some View {

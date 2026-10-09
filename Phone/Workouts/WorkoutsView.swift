@@ -106,8 +106,10 @@ struct WorkoutsView: View {
                         self.sheet = nil
                     }
                 }
+                .paletteSheet()
             case .settings:
                 PhoneSettingsView()
+                    .paletteSheet()
             }
         }
         #if DEBUG

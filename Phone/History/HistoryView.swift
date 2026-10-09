@@ -93,6 +93,7 @@ struct HistoryView: View {
         }
         .sheet(isPresented: $showsSettings) {
             PhoneSettingsView()
+                .paletteSheet()
         }
         .onAppear {
             Task { await history.appear() }

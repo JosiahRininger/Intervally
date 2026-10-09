@@ -27,6 +27,7 @@ SHOTS = [
     ('3-pro-editor', 'INTERVALLY PRO', ['Add a warmup', 'and a cooldown'], True),
     ('4-history', 'HISTORY', ['Every session,', 'interval by interval'], False),
     ('5-session', 'SESSION', ['Your heart rate,', 'every interval'], False),
+    ('6-pastel', 'INTERVALLY PRO', ['Make it yours', 'with Pastel'], True),
 ]
 
 # Fractions of the canvas width, so both display sizes share one layout.

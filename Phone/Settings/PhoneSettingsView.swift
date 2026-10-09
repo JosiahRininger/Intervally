@@ -62,6 +62,13 @@ struct PhoneSettingsView: View {
         return "\(short) (\(build))"
     }
 
+    /// Once, however Pro arrived: chooses Pastel and goes back to the picker.
+    private func finishThemePaywall() {
+        guard path.last == .themePaywall else { return }
+        theme.paywallUnlocked()
+        path.removeLast()
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             List {
@@ -144,11 +151,13 @@ struct PhoneSettingsView: View {
                 case .theme: ThemePickerView { path.append(.themePaywall) }
                 case .themePaywall:
                     // A purchase here applies what was reached for, then goes back to the
-                    // picker to show it chosen.
-                    PhonePaywallView(context: .themes) {
-                        theme.paywallUnlocked()
-                        if path.last == .themePaywall { path.removeLast() }
-                    }
+                    // picker to show it chosen. Pro can also arrive while this is open without
+                    // its buttons (an Ask to Buy approval, the other device's purchase, Family
+                    // Sharing), and finishes the same way.
+                    PhonePaywallView(context: .themes) { finishThemePaywall() }
+                        .onChange(of: pro.isPro) { _, isPro in
+                            if isPro { finishThemePaywall() }
+                        }
                 }
             }
             .alert(notice?.title ?? "", isPresented: isShowingNotice, presenting: notice) { _ in

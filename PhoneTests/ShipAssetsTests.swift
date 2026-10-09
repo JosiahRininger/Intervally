@@ -55,7 +55,7 @@ struct ShipAssetsTests {
         let large = try Self.pngs(in: "iPhone-6.9").map(\.lastPathComponent)
         let small = try Self.pngs(in: "iPhone-6.3").map(\.lastPathComponent)
         #expect(large == small)
-        #expect(large.count == 5)
+        #expect(large.count == 6)
     }
 
     @Test("The In-App Purchase review screenshot is a 6.9-inch capture with no alpha")
