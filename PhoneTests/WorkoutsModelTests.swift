@@ -174,13 +174,13 @@ struct WorkoutsModelTests {
 
     // MARK: - The watch on the Workouts screen
 
-    @Test("Up next names the watch only when there is one")
-    func upNextTitle() {
-        #expect(WorkoutsContent.upNextTitle(peer: .ready) == "Up next on your watch")
-        #expect(WorkoutsContent.upNextTitle(peer: .appNotInstalled) == "Up next on your watch")
-        #expect(WorkoutsContent.upNextTitle(peer: .activating) == "Up next on your watch")
-        #expect(WorkoutsContent.upNextTitle(peer: .notPaired) == "Up next")
-        #expect(WorkoutsContent.upNextTitle(peer: .unsupported) == "Up next")
+    /// The workout up next is the one either device starts, so the words are the same with a
+    /// watch or without; the card adds the watch's glyph where there is one.
+    @Test("Up next reads the same with a watch or without", arguments: [
+        PeerState.unsupported, .activating, .notPaired, .appNotInstalled, .ready,
+    ])
+    func upNextTitle(peer: PeerState) {
+        #expect(WorkoutsContent.upNextTitle(peer: peer) == "Up next")
     }
 
     /// On iPad, or an iPhone with no watch paired, nothing is removed from any watch.

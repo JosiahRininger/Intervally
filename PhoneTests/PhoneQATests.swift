@@ -21,6 +21,13 @@ struct PhoneQATests {
         #expect(options == PhoneQAOptions(pro: true, watch: .notInstalled, welcome: true, screen: .editor))
     }
 
+    @Test("A run in progress, for screenshots: seconds since it started, never negative")
+    func runElapsed() {
+        #expect(PhoneQAOptions.parse(["-qaRunElapsed", "95"]).runElapsed == 95)
+        #expect(PhoneQAOptions.parse(["-qaRunElapsed", "-5"]).runElapsed == nil, "Reads as a flag")
+        #expect(PhoneQAOptions.parse(["-qaRunElapsed", "soon"]).runElapsed == nil)
+    }
+
     @Test("No flags, no overrides")
     func none() {
         #expect(PhoneQAOptions.parse(["IntervallyPhone"]) == PhoneQAOptions())

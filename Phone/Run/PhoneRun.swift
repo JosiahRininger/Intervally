@@ -19,6 +19,7 @@ final class PhoneRun {
     let coordinator: RunCoordinator
     @ObservationIgnored let cues: PhoneCuePlayer
     @ObservationIgnored let activity: LiveActivityPresenter
+    @ObservationIgnored private let presenter: any RunPresenting
     @ObservationIgnored private let store: WorkoutStore
     @ObservationIgnored private let defaults: UserDefaults
 
@@ -37,6 +38,7 @@ final class PhoneRun {
         output: (any CueOutput)? = nil,
         workout: (any WorkoutSessioning)? = nil,
         notifications: (any BoundaryScheduling)? = nil,
+        presenter: (any RunPresenting)? = nil,
         defaults: UserDefaults = SharedDefaults.suite
     ) {
         self.store = store
@@ -45,6 +47,8 @@ final class PhoneRun {
         let activity = LiveActivityPresenter { theme.effective(isPro: pro.isPro) }
         self.cues = cues
         self.activity = activity
+        // A test's stand-in sees what the Live Activity would have been shown.
+        self.presenter = presenter ?? activity
         self.coordinator = RunCoordinator(
             store: store,
             pro: pro,
@@ -53,12 +57,12 @@ final class PhoneRun {
             notifications: notifications ?? NotificationScheduler(),
             playCue: { cues.transport($0) },
             reloadWidgets: {},
-            presenter: activity
+            presenter: self.presenter
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
     }
 
-    /// Runs on finished on this iPhone.
+    /// Runs finished on this iPhone.
     var finishedRuns: Int { defaults.integer(forKey: Key.finishedRuns) }
 
     /// Starts `workout`: it becomes the one up next, here and on the watch, and the run screen

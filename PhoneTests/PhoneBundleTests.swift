@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import HealthKit
 import Testing
 import UIKit
 @testable import IntervallyPhone
@@ -19,16 +20,23 @@ struct PhoneBundleTests {
         #expect(info["ITSAppUsesNonExemptEncryption"] as? Bool == false)
     }
 
-    /// Read-only is pinned where it is decided, in what History asks Health for. The write
-    /// reason is still declared: App Store Connect wants both purpose strings from any binary
-    /// that links HealthKit's authorization call (ITMS-90683), whatever it asks for.
-    @Test("Health is read-only on iPhone, and both purpose strings say so")
-    func healthIsReadOnly() throws {
-        #expect(HealthHistory.shareTypes.isEmpty)
+    /// A run on iPhone saves its workout, so both purpose strings say what they are for, and
+    /// the write one no longer says the iPhone only reads.
+    @Test("Both Health purpose strings say what they are for")
+    func healthPurposes() throws {
+        #expect(HealthHistory.shareTypes == [HKObjectType.workoutType()])
         let read = try #require(info["NSHealthShareUsageDescription"] as? String)
-        #expect(!read.isEmpty)
+        #expect(read.contains("interval workouts"))
         let write = try #require(info["NSHealthUpdateUsageDescription"] as? String)
-        #expect(write.contains("only reads"))
+        #expect(write.contains("saves your interval sessions"))
+        #expect(!write.contains("only reads"))
+    }
+
+    @Test("Runs keep going locked: the audio mode for cues, and Live Activities on")
+    func runCapabilities() throws {
+        let modes = try #require(info["UIBackgroundModes"] as? [String])
+        #expect(modes == ["audio"])
+        #expect(info["NSSupportsLiveActivities"] as? Bool == true)
     }
 
     @Test("The icon comes from the asset catalog")

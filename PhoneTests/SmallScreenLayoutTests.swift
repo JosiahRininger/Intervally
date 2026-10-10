@@ -14,25 +14,25 @@ import Testing
 @MainActor
 struct SmallScreenLayoutTests {
 
-    /// Visible heights above Continue, measured in the simulators: iPhone 17 Pro Max, 17 Pro
-    /// and SE (3rd generation).
+    /// Visible heights above Continue, measured in the simulators: iPhone 17 Pro Max and
+    /// 17 Pro. Under the ring, without a watch: the words and the highlights, about 380 points.
     @Test("The welcome ring stays full size on today's iPhones", arguments: [780.0, 700.0])
     func fullRing(height: CGFloat) {
-        #expect(Welcome.ringSide(forHeight: height) == 220)
+        #expect(Welcome.ringSide(visibleHeight: height, belowRing: 380) == 220)
     }
 
-    @Test("On an iPhone SE the ring gives the watch's install steps room above Continue")
-    func smallRing() {
-        let side = Welcome.ringSide(forHeight: 568)
-        #expect(side == 158)
-        // What the words need, at the default size, with the ring at that side.
-        #expect(side + 410 <= 568)
+    @Test("With the watch's card as well, the ring gives up what the card needs")
+    func ringMakesRoom() {
+        // An iPhone 17 Pro with the install card: about 470 points under the ring.
+        let side = Welcome.ringSide(visibleHeight: 700, belowRing: 470)
+        #expect(side == 170)
+        #expect(side + 470 + Welcome.chrome <= 700)
     }
 
-    @Test("The ring never shrinks below 140 points, however little room is left")
-    func smallestRing() {
-        #expect(Welcome.ringSide(forHeight: 300) == 140)
-        #expect(Welcome.ringSide(forHeight: 0) == 140)
+    @Test("The ring is full size until measured, and never below 120 points")
+    func ringBounds() {
+        #expect(Welcome.ringSide(visibleHeight: 0, belowRing: 0) == 220)
+        #expect(Welcome.ringSide(visibleHeight: 568, belowRing: 520) == 120)
     }
 
     @Test("The editor's ring is full size until it is measured, and wherever there is room")

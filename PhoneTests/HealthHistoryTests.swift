@@ -73,10 +73,14 @@ struct HealthHistoryTests {
         ])
     }
 
-    @Test("History never asks to write, and reads exactly what the watch also asks to read")
-    func requestMatchesTheWatch() {
-        #expect(HealthHistory.shareTypes.isEmpty)
+    /// Health treats both apps, and a run and History, as one: the newest request for a type
+    /// decides it. So all of them ask for exactly the same thing (`HealthAccess`).
+    @Test("History asks Health for exactly what a run asks for")
+    func requestMatchesTheRun() {
+        #expect(Set(HealthHistory.shareTypes.map(\.identifier)) == HealthAccess.watchWrites)
+        #expect(HealthHistory.shareTypes == WorkoutSessionController.typesToShare)
         #expect(Set(HealthHistory.readTypes.map(\.identifier)) == HealthAccess.historyReads)
+        #expect(Set(WorkoutSessionController.typesToRead.map(\.identifier)) == HealthAccess.historyReads)
     }
 
     @Test("The Health explainer lists exactly what History asks to read")

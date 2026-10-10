@@ -57,11 +57,11 @@ struct PaywallContentPhoneTests {
     func owned() {
         #expect(make(isPro: true, ownership: .purchased).action == .owned(
             title: "You have Pro",
-            detail: "Unlocked. Add more workouts and warmups here; choose Tap Strength on your watch."
+            detail: "Unlocked. Add more workouts and warmups, hear the voice coach on every run, and choose Tap Strength on your watch."
         ))
         #expect(make(isPro: true, ownership: .familyShared).action == .owned(
             title: "Pro is shared by your family",
-            detail: "Unlocked through Family Sharing. Add more workouts and warmups here; choose Tap Strength on your watch."
+            detail: "Unlocked through Family Sharing. Add more workouts and warmups, hear the voice coach on every run, and choose Tap Strength on your watch."
         ))
         // The cache or a QA override, before StoreKit answers: bought outright.
         #expect(make(isPro: true, ownership: .none) == make(isPro: true, ownership: .purchased))
@@ -77,10 +77,12 @@ struct PaywallContentPhoneTests {
                 platform: .phone, hasWatch: false
             ).action
         }
-        #expect(owned(.purchased) == .owned(title: "You have Pro", detail: "Unlocked. Add more workouts and warmups."))
+        #expect(owned(.purchased) == .owned(
+            title: "You have Pro", detail: "Unlocked. Add more workouts and warmups, and hear the voice coach on every run."
+        ))
         #expect(owned(.familyShared) == .owned(
             title: "Pro is shared by your family",
-            detail: "Unlocked through Family Sharing. Add more workouts and warmups."
+            detail: "Unlocked through Family Sharing. Add more workouts and warmups, and hear the voice coach on every run."
         ))
         // The watch's own paywall never asks.
         #expect(PaywallContent.make(
@@ -160,11 +162,40 @@ struct PaywallContentPhoneTests {
         }
     }
 
-    @Test("Guideline 4.10: the iPhone's copy never sells haptics either")
-    func neverSellsHaptics() {
+    @Test("Guideline 4.10: the iPhone's copy never sells haptics or sounds")
+    func neverSellsHapticsOrSounds() {
         let owned = make(isPro: true, ownership: .purchased)
-        let copy = [make().companionLine, owned.statusDetail, make(canMakePayments: false).statusDetail]
-            .compactMap { $0 } + PaywallContent.features.map(\.title)
-        #expect(copy.allSatisfy { !$0.localizedCaseInsensitiveContains("haptic") })
+        let copy = [make().companionLine, owned.statusDetail, make(canMakePayments: false).statusDetail,
+                    PaywallContent.contextLine(for: .voice, platform: .phone)]
+            .compactMap { $0 } + PaywallContent.features(on: .phone, hasWatch: true).map(\.title)
+        for word in ["haptic", "sound", "beep", "speaker"] {
+            #expect(copy.allSatisfy { !$0.localizedCaseInsensitiveContains(word) }, "\(word)")
+        }
+    }
+
+    private func phone(hasWatch: Bool) -> PaywallContent {
+        PaywallContent.make(
+            context: .voice, isPro: false, ownership: .none, canMakePayments: true, offer: Self.shareable,
+            isPurchasing: false, lastPurchase: nil, lastRestore: nil, platform: .phone, hasWatch: hasWatch
+        )
+    }
+
+    @Test("The iPhone sells the voice coach, and the watch's taps only with a watch")
+    func phoneFeatures() {
+        #expect(phone(hasWatch: false).features.map(\.title) == [
+            "Unlimited presets", "Warmup & cooldown", "Voice coach", "Pastel theme", "Support an indie dev",
+        ])
+        #expect(phone(hasWatch: true).features.map(\.title) == [
+            "Unlimited presets", "Warmup & cooldown", "Voice coach", "Stronger watch taps", "Pastel theme",
+            "Support an indie dev",
+        ])
+        #expect(make(platform: .watch).features == PaywallContent.features, "The watch's list is unchanged")
+    }
+
+    @Test("Without a watch the iPhone promises none")
+    func noWatchNoWatchLine() {
+        #expect(phone(hasWatch: false).companionLine == nil)
+        #expect(phone(hasWatch: true).companionLine == "Also unlocks Intervally on your Apple Watch.")
+        #expect(phone(hasWatch: false).contextLine == "Hear every interval called out, even over your music.")
     }
 }

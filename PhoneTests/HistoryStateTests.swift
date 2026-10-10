@@ -270,10 +270,10 @@ struct HistoryMessageTests {
         #expect(HistoryMessage(.needsAccess)?.title == "See every session, interval by interval")
     }
 
-    @Test("Connect promises only to read, and that it stays on the iPhone")
+    @Test("Connect names both devices' sessions, and that what it reads stays on the iPhone")
     func connectPromise() throws {
         let detail = try #require(HistoryMessage(.needsAccess)).detail
-        #expect(detail.contains("only reads"))
+        #expect(detail.contains("on this iPhone or your Apple Watch"))
         #expect(detail.contains("stays on this iPhone"))
     }
 
@@ -293,7 +293,7 @@ struct HistoryMessageTests {
     func settingsSubtitles() {
         #expect(HistoryMessage.settingsSubtitle(for: .unavailable) == "Not available on this device")
         #expect(HistoryMessage.settingsSubtitle(for: .needsAccess) == "Not connected")
-        #expect(HistoryMessage.settingsSubtitle(for: .loaded) == "Reads your watch's workouts")
-        #expect(HistoryMessage.settingsSubtitle(for: .empty) == "Reads your watch's workouts")
+        #expect(HistoryMessage.settingsSubtitle(for: .loaded) == "Saves and reads your workouts")
+        #expect(HistoryMessage.settingsSubtitle(for: .empty) == "Saves and reads your workouts")
     }
 }

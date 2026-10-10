@@ -23,10 +23,10 @@ struct WatchStatusContentTests {
         #expect(content.syncedLine() == nil)
     }
 
-    @Test("No watch here, or none paired: building workouts still works")
+    @Test("No watch here, or none paired: workouts run on the iPhone")
     func noWatch() {
-        #expect(WatchStatusContent(peer: .unsupported, lastSentAt: nil, lastReceivedAt: nil).detail == "You can still build workouts here.")
-        #expect(WatchStatusContent(peer: .notPaired, lastSentAt: nil, lastReceivedAt: nil).detail == "Your workouts will be waiting.")
+        #expect(WatchStatusContent(peer: .unsupported, lastSentAt: nil, lastReceivedAt: nil).detail == "Your workouts run right here.")
+        #expect(WatchStatusContent(peer: .notPaired, lastSentAt: nil, lastReceivedAt: nil).detail == "Your workouts run right here, and they'll be waiting for a watch.")
     }
 
     @Test("Not installed: the steps to install it from the Watch app")

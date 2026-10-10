@@ -44,6 +44,14 @@ struct ReviewPromptTests {
         #expect(ReviewPolicy.shouldAsk(.lookedBackAtSession(sessionCount: sessions), ledger: snapshot, version: "1.0", now: day(5), calendar: calendar) == asks)
     }
 
+    @Test("Done after a workout finished here, from the third one on", arguments: [(2, false), (3, true), (20, true)])
+    func afterFinishedWorkouts(finished: Int, asks: Bool) {
+        let snapshot = ledger(openedOn: [0]).snapshot
+        #expect(ReviewPolicy.shouldAsk(.finishedWorkout(count: finished), ledger: snapshot, version: "1.1", now: day(5), calendar: calendar) == asks)
+        // Still never in the first three days.
+        #expect(!ReviewPolicy.shouldAsk(.finishedWorkout(count: 9), ledger: snapshot, version: "1.1", now: day(2), calendar: calendar))
+    }
+
     @Test("After Put on Watch, only once the app has been opened on five different days")
     func afterFiveActiveDays() {
         let four = ledger(openedOn: [0, 1, 2, 3]).snapshot
@@ -98,6 +106,7 @@ struct ReviewPromptTests {
 
     @Test("Any QA flag marks the launch as driven", arguments: [
         ["-qaPro", "free"], ["-qaHistory", "sample"], ["-qaWelcome", "YES"], ["-qaOpen", "editor"],
+        ["-qaRunElapsed", "95"],
     ])
     func qaLaunchesAreActive(arguments: [String]) {
         #expect(PhoneQAOptions.parse(["IntervallyPhone"] + arguments).isActive)

@@ -194,8 +194,8 @@ struct PaywallContent: Equatable, Sendable {
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing." : "Thanks for supporting Intervally.")
         case .phone:
             let next = hasWatch
-                ? "Add more workouts and warmups, turn on the voice coach in Sounds, and choose Tap Strength on your watch."
-                : "Add more workouts and warmups, and turn on the voice coach in Sounds."
+                ? "Add more workouts and warmups, hear the voice coach on every run, and choose Tap Strength on your watch."
+                : "Add more workouts and warmups, and hear the voice coach on every run."
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing. \(next)" : "Unlocked. \(next)")
         }
     }
