@@ -29,6 +29,10 @@ final class PhoneRun {
 
     /// Whether the run screen is showing.
     var isPresented = false
+    /// Whether it shows the watch's run rather than this iPhone's. Said outright, not worked
+    /// out from which engine is active: a finished run here still owns its summary, and Start
+    /// here must start a run here even while the watch runs one.
+    private(set) var showsWatchRun = false
 
     /// Start on Watch, from tap to the watch's run showing here.
     enum WatchStart: Equatable {
@@ -42,6 +46,10 @@ final class PhoneRun {
     private(set) var watchStart = WatchStart.idle
     /// Sends the start request over sync, beside the presets (`WatchSync.requestStart`).
     @ObservationIgnored var requestWatchStart: (UUID) -> Bool = { _ in false }
+    /// Takes back a start request the watch hasn't acted on: the presets sent again without
+    /// it replace it in WatchConnectivity. Otherwise a watch reached within its minute would
+    /// still start the workout, perhaps beside the same one started here instead.
+    @ObservationIgnored var withdrawWatchStart: () -> Void = {}
     @ObservationIgnored private var watchStartTimeout: Task<Void, Never>?
     /// Wakes the watch app to run a workout (`HKHealthStore.startWatchApp`); throws when the
     /// watch can't be reached. A test's stand-in decides.
@@ -90,25 +98,35 @@ final class PhoneRun {
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
         resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
-        // The iPhone's own run comes first: a watch run shows only while it has none.
+        // The iPhone's own run comes first: a watch run takes the screen only from no run
+        // here at all, and the Lock Screen only while nothing here is showing.
         mirror.onShow = { [weak self] in
-            guard let self, !self.coordinator.engine.isActive else { return }
+            guard let self, !self.ownRunOnScreen, !self.coordinator.engine.isActive else { return }
             self.watchStartTimeout?.cancel()
             self.watchStart = .idle
+            self.showsWatchRun = true
             self.isPresented = true
         }
         mirror.onPresentation = { [weak self] run in
-            guard let self, !self.coordinator.engine.isActive else { return }
+            guard let self, self.showsWatchRun || (!self.isPresented && !self.coordinator.engine.isActive) else { return }
             self.presenter.present(run)
+        }
+        mirror.onEnded = { [weak self] in
+            guard let self, self.showsWatchRun else { return }
+            self.showsWatchRun = false
+            self.isPresented = false
         }
     }
 
     // MARK: - What the run screen shows
 
-    /// The screen shows the watch's run: there is one, and none on this iPhone.
+    /// The screen shows the watch's run.
     var isMirroring: Bool {
-        mirror.engine != nil && !coordinator.engine.isActive
+        showsWatchRun && mirror.engine != nil
     }
+
+    /// The screen is up for a run of this iPhone's: starting, running or finished.
+    private var ownRunOnScreen: Bool { isPresented && !showsWatchRun }
 
     /// The run on screen: this iPhone's, or the watch's.
     var engine: TimerEngine {
@@ -120,12 +138,18 @@ final class PhoneRun {
         isMirroring ? mirror.summary : coordinator.summary
     }
 
+    /// To the watch as what the button showed, so a tap that crosses a change on the watch
+    /// in flight can't do the opposite.
     func togglePause() {
-        isMirroring ? mirror.send(.togglePause) : coordinator.togglePause()
+        guard isMirroring else { return coordinator.togglePause() }
+        mirror.send(engine.status == .running ? .pause : .resume)
     }
 
+    /// To the watch with the interval it skips, so a tap at the end of one can't skip the next.
     func skip() {
-        isMirroring ? mirror.send(.skip) : coordinator.skip()
+        guard isMirroring else { return coordinator.skip() }
+        guard let phase = engine.position.phaseIndex else { return }
+        mirror.send(.skip(phase: phase))
     }
 
     /// End, confirmed. A watch run is ended on the watch, and its screen here closes at once,
@@ -136,6 +160,7 @@ final class PhoneRun {
             mirror.send(.end)
             mirror.close()
             presenter.present(nil)
+            showsWatchRun = false
             isPresented = false
         } else {
             close()
@@ -146,6 +171,7 @@ final class PhoneRun {
     func done() {
         if isMirroring {
             mirror.close()
+            showsWatchRun = false
             isPresented = false
         } else {
             close()
@@ -159,6 +185,7 @@ final class PhoneRun {
     func startOnWatch(_ workout: IntervalWorkout) {
         // This iPhone's own run comes first, as with Start.
         guard !coordinator.engine.isActive else {
+            showsWatchRun = false
             isPresented = true
             return
         }
@@ -174,6 +201,7 @@ final class PhoneRun {
                 // Unless the watch's run already showed up regardless.
                 guard let self, self.watchStart == .starting else { return }
                 self.watchStartTimeout?.cancel()
+                self.withdrawWatchStart()
                 self.watchStart = .failed
                 return
             }
@@ -184,6 +212,7 @@ final class PhoneRun {
             self.watchStartTimeout = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(12))
                 guard let self, !Task.isCancelled, self.watchStart == .starting else { return }
+                self.withdrawWatchStart()
                 self.watchStart = .idle
             }
         }
@@ -228,6 +257,7 @@ final class PhoneRun {
     /// Starts `workout`: it becomes the one up next, here and on the watch, and the run screen
     /// opens and starts it.
     func start(_ workout: IntervalWorkout) {
+        showsWatchRun = false
         guard !coordinator.engine.isActive else {
             isPresented = true
             return
@@ -240,7 +270,14 @@ final class PhoneRun {
     func close() {
         coordinator.stopAndExit()
         cues.release()
-        isPresented = false
+        // A run still going on the watch takes the screen back, as it would have had there
+        // been none here.
+        if let watchRun = mirror.engine, watchRun.isActive {
+            showsWatchRun = true
+            presenter.present(RunPresentation(engine: watchRun))
+        } else {
+            isPresented = false
+        }
     }
 
     /// Counted when the summary is first shown.

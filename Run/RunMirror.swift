@@ -29,8 +29,15 @@ enum RunMirrorMessage: Codable, Equatable, Sendable {
 
 /// What the iPhone asks of a run on the watch: its buttons, and on connecting, the run as it
 /// stands, as whatever was sent before the iPhone was listening is gone.
-enum RunMirrorCommand: String, Codable, Equatable, Sendable {
-    case togglePause, skip, end, refresh
+///
+/// Each button says what it saw rather than toggling: the watch may have moved on while the
+/// message was in flight, and then the tap is dropped rather than turned into its opposite
+/// or into skipping the next interval as well.
+enum RunMirrorCommand: Codable, Equatable, Sendable {
+    case pause, resume
+    /// Skips the interval at `phase` in the plan, and only that one.
+    case skip(phase: Int)
+    case end, refresh
 }
 
 /// The watch's run, in enough detail to rebuild it exactly.

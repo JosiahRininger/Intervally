@@ -65,14 +65,25 @@ struct HistoryRow: View {
             Text(session.title)
                 .font(.headline)
             // With the time: two sessions on one day are otherwise the same row. On one line
-            // where it fits; where it doesn't, the rounds go under the date whole, rather than
-            // wrapping after the separator and leaving "8/8" on a line alone.
-            let date = session.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+            // where it fits; where it doesn't, broken between whole phrases, never mid-date or
+            // after the separator with "8/8" left on a line alone. An iPhone SE takes the third.
+            let day = session.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+            let time = session.start.formatted(.dateTime.hour().minute())
+            let dayAndTime = session.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
             ViewThatFits(in: .horizontal) {
-                Text("\(date) · \(session.roundsReachedText)")
+                Text("\(dayAndTime) · \(session.roundsReachedText)")
                     .lineLimit(1)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(date)
+                    Text(dayAndTime).lineLimit(1)
+                    Text(session.roundsLineText).lineLimit(1)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(day).lineLimit(1)
+                    Text("\(time) · \(session.roundsReachedText)").lineLimit(1)
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(day)
+                    Text(time)
                     Text(session.roundsLineText)
                 }
             }

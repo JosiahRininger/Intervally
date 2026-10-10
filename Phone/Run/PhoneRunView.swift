@@ -114,6 +114,9 @@ struct PhoneRunView: View {
         }
         .onDisappear { UIApplication.shared.isIdleTimerDisabled = false }
         .onChange(of: engine.status) { _, status in
+            // An End still being confirmed when the run finishes would close the summary
+            // unseen, under words that say the finished, saved workout won't be saved.
+            if status == .finished { confirmingEnd = false }
             guard status == .finished, !countedFinish else { return }
             countedFinish = true
             run.recordFinish()

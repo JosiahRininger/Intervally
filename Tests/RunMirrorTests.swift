@@ -24,7 +24,7 @@ struct RunMirrorTests {
             workout: IntervalWorkout(name: "Tabata", workSeconds: 20, restSeconds: 10, rounds: 8),
             status: .paused, anchor: nil, pausedElapsed: 42.5, health: .saving
         )
-        for message in [RunMirrorMessage.state(state), .command(.skip), .command(.refresh)] {
+        for message in [RunMirrorMessage.state(state), .command(.skip(phase: 3)), .command(.pause), .command(.refresh)] {
             let data = try #require(message.encoded())
             #expect(RunMirrorMessage.decoded(data) == message)
         }
@@ -60,16 +60,22 @@ struct RunMirrorTests {
         await settle(coordinator)
         #expect(session.mirrored.last?.status == .running)
 
-        session.onRemoteCommand?(.togglePause)
+        session.onRemoteCommand?(.pause)
         #expect(coordinator.engine.status == .paused)
         #expect(session.mirrored.last?.status == .paused)
+        session.onRemoteCommand?(.pause)
+        #expect(coordinator.engine.status == .paused, "A second Pause, sent before the first was seen, doesn't resume")
 
-        session.onRemoteCommand?(.togglePause)
+        session.onRemoteCommand?(.resume)
         #expect(coordinator.engine.status == .running)
+        session.onRemoteCommand?(.resume)
+        #expect(coordinator.engine.status == .running, "Nor does a second Resume pause")
 
         let phase = try #require(coordinator.engine.position.phaseIndex)
-        session.onRemoteCommand?(.skip)
+        session.onRemoteCommand?(.skip(phase: phase))
         #expect(coordinator.engine.position.phaseIndex == phase + 1)
+        session.onRemoteCommand?(.skip(phase: phase))
+        #expect(coordinator.engine.position.phaseIndex == phase + 1, "A skip of an interval already over skips nothing more")
 
         let sent = session.mirrored.count
         session.onRemoteCommand?(.refresh)

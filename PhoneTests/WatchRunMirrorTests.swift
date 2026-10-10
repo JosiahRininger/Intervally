@@ -69,6 +69,7 @@ struct WatchRunMirrorTests {
         #expect(run.isMirroring == false)
         #expect(run.mirror.engine == nil)
         #expect(presenter.shown.last == .some(nil))
+        #expect(run.isPresented == false, "Not left on an idle screen of another preset")
     }
 
     @Test("A finished watch run shows its summary until Done, without a Health claim it can't check")
@@ -121,6 +122,56 @@ struct WatchRunMirrorTests {
         run.mirror.sessionEnded()
         #expect(run.mirror.engine == nil)
         #expect(presenter.shown.last == .some(nil))
+        #expect(run.isPresented == false)
+    }
+
+    @Test("Done on a watch run's summary stays done when the watch's own finish arrives after")
+    func doneStaysDone() {
+        let (run, _) = makeRun()
+        let total = IntervalPlan(workout: tabata).totalDuration
+        // This side's count reaches the end first.
+        run.mirror.apply(state(.running, anchor: Date().addingTimeInterval(-(total + 1))))
+        _ = run.mirror.engine?.advance()
+        #expect(run.engine.status == .finished)
+        run.done()
+        run.mirror.apply(state(.finished, health: .saving))
+        #expect(run.isPresented == false)
+        #expect(run.mirror.engine == nil)
+
+        // The next run on the watch shows as usual.
+        run.mirror.apply(state(.running, anchor: Date()))
+        #expect(run.isPresented)
+    }
+
+    @Test("A finished run here keeps its summary while the watch's run goes on, and gets it back after Done")
+    func finishedHereKeepsItsSummary() async throws {
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        run.mirror.apply(state(.running, anchor: Date()))
+        let end = Date().addingTimeInterval(run.coordinator.engine.plan.totalDuration + 1)
+        run.coordinator.engine.now = { end }
+        run.coordinator.advance()
+        #expect(run.coordinator.engine.status == .finished)
+
+        run.mirror.apply(state(.paused, pausedElapsed: 20))
+        #expect(run.isMirroring == false, "The summary here isn't replaced by the watch's run")
+
+        run.done()
+        #expect(run.isPresented, "The watch's run, still going, takes the screen back")
+        #expect(run.isMirroring)
+    }
+
+    @Test("Start here while the watch's run shows starts a run here")
+    func startHereWhileWatchRuns() async {
+        let (run, store) = makeRun()
+        run.mirror.apply(state(.running, anchor: Date()))
+        #expect(run.isMirroring)
+        run.start(store.workouts[1])
+        #expect(run.isMirroring == false)
+        #expect(run.isPresented)
+        #expect(store.selectedID == store.workouts[1].id)
     }
 
     @Test("The iPhone's own run keeps the screen and the Lock Screen while the watch runs too")
@@ -164,10 +215,13 @@ struct WatchRunMirrorTests {
         let (run, store) = makeRun()
         struct Unreachable: Error {}
         run.wakeWatch = { throw Unreachable() }
+        var withdrawn = 0
+        run.withdrawWatchStart = { withdrawn += 1 }
         let preset = store.workouts[1]
 
         run.startOnWatch(preset)
         #expect(await waitUntil { run.watchStart == .failed })
+        #expect(withdrawn == 1, "The request a waking watch would still act on is taken back")
 
         run.startHereInstead()
         #expect(run.watchStart == .idle)

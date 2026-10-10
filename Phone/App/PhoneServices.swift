@@ -60,6 +60,7 @@ final class PhoneServices {
         self.run = run ?? PhoneRun(store: store, pro: pro, theme: theme)
         let sync = self.sync
         self.run.requestWatchStart = { sync.requestStart(of: $0) }
+        self.run.withdrawWatchStart = { sync.push(force: true) }
     }
 
     /// The app's own services, started. The only place the app creates them.

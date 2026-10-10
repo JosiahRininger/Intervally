@@ -29,6 +29,12 @@ final class WatchRunMirror {
     @ObservationIgnored var onShow: (() -> Void)?
     /// The run as the Lock Screen should show it, or nil once it is gone.
     @ObservationIgnored var onPresentation: ((RunPresentation?) -> Void)?
+    /// The watch's run is over before its end, ended there or lost with the connection: the
+    /// run screen showing it closes. A finished run waits for Done instead.
+    @ObservationIgnored var onEnded: (() -> Void)?
+    /// Done closed this session's finished run; the watch's own "finished", arriving after
+    /// this side's count got there first, must not bring it back.
+    @ObservationIgnored private var closedFinish = false
 
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var session: HKWorkoutSession?
@@ -52,6 +58,7 @@ final class WatchRunMirror {
         self.session = session
         self.delegate = delegate
         isConnected = true
+        closedFinish = false
         // Whatever the watch sent before this delegate was set is gone: ask again.
         send(.refresh)
     }
@@ -60,11 +67,14 @@ final class WatchRunMirror {
 
     /// The watch's run as it now stands.
     func apply(_ state: RunMirrorState) {
+        if state.status == .finished, closedFinish { return }
+        if state.status == .running || state.status == .paused { closedFinish = false }
         self.state = state
         guard state.status != .stopped else {
             log.info("the watch ended its run")
             clear()
             onPresentation?(nil)
+            onEnded?()
             return
         }
         let isNew = engine == nil
@@ -104,6 +114,7 @@ final class WatchRunMirror {
         log.info("the watch's session ended")
         clear()
         onPresentation?(nil)
+        onEnded?()
     }
 
     // MARK: - From the buttons here
@@ -122,6 +133,7 @@ final class WatchRunMirror {
 
     /// Done on a finished watch run: the screen closes; the Lock Screen keeps its summary.
     func close() {
+        if engine?.status == .finished { closedFinish = true }
         clear()
     }
 

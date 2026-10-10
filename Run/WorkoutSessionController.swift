@@ -554,7 +554,7 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
         guard !commands.isEmpty else { return }
         Task { @MainActor in
             for command in commands {
-                self.log.info("command from the iPhone: \(command.rawValue, privacy: .public)")
+                self.log.info("command from the iPhone: \(String(describing: command), privacy: .public)")
                 self.onRemoteCommand?(command)
             }
         }

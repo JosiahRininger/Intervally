@@ -117,6 +117,11 @@ final class LiveActivityPresenter: RunPresenting {
         // Only an app in front may start one; a restore in the background waits for the
         // next change made in front.
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+        // A finished run's card lingers on its own for a while; a new run replaces it rather
+        // than sitting beside it.
+        for lingering in Activity<RunActivityAttributes>.activities {
+            await lingering.end(nil, dismissalPolicy: .immediate)
+        }
         do {
             activity = try Activity.request(attributes: RunActivityAttributes(update.run), content: content)
         } catch {

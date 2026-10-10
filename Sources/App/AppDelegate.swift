@@ -70,7 +70,11 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
         }
         sync.onStateChange = { [weak self] in self?.connectivityWakes.reevaluate() }
         // Start on Watch: the same door as Siri and Control Center.
-        sync.onStartRequest = { id in PendingStart.request(workoutID: id) }
+        sync.onStartRequest = { [weak self] id in
+            // The request itself arrived: nothing left to guess.
+            self?.phoneStartFallback?.cancel()
+            PendingStart.request(workoutID: id)
+        }
         // The complication wears the theme. A choice made here reloads it from RootView; one
         // from the iPhone can land while no view exists, in a background wake.
         theme.onRemoteChange = { [log] in
@@ -176,17 +180,29 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
 
     /// Start on Watch launched the app (`HKHealthStore.startWatchApp`). Which preset to run
     /// comes with the presets, over sync (`WatchSync.onStartRequest`), usually before this.
-    /// If it hasn't in a moment, the preset up next starts, which the iPhone made the one
-    /// it asked for: a launch that started nothing would leave the user tapping Start.
+    /// If it never comes, the preset up next starts, which the iPhone made the one it asked
+    /// for: a launch that started nothing would leave the user tapping Start. Only once sync
+    /// has settled, though: the selection travels with the request, so guessing while it is
+    /// still on its way would start whatever was up next before.
     func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
         log.info("the iPhone launched the app to start a workout")
         phoneStartFallback?.cancel()
         phoneStartFallback = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(2.5))
+            var waited: Duration = .zero
+            while waited < Self.phoneStartPatience {
+                try? await Task.sleep(for: .milliseconds(500))
+                waited += .milliseconds(500)
+                guard let self, !Task.isCancelled, !self.coordinator.engine.isActive else { return }
+                let activity = self.sync.activity
+                if waited >= .seconds(3), activity.isActivated, !activity.hasContentPending { break }
+            }
             guard let self, !Task.isCancelled, !self.coordinator.engine.isActive else { return }
             PendingStart.request(workoutID: nil)
         }
     }
+
+    /// The longest Start on Watch waits for its request before starting the preset up next.
+    static let phoneStartPatience: Duration = .seconds(10)
 
     private var phoneStartFallback: Task<Void, Never>?
 

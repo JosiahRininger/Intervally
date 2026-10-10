@@ -490,10 +490,15 @@ final class RunCoordinator {
     /// What the iPhone's mirror asked for.
     private func handleRemote(_ command: RunMirrorCommand) {
         switch command {
-        case .togglePause:
+        case .pause:
+            guard engine.status == .running else { return }
             togglePause()
-        case .skip:
-            guard engine.status == .running || engine.status == .paused else { return }
+        case .resume:
+            guard engine.status == .paused else { return }
+            togglePause()
+        case .skip(let phase):
+            guard engine.status == .running || engine.status == .paused,
+                  engine.position.phaseIndex == phase else { return }
             skip()
         case .end:
             guard engine.isActive else { return }
