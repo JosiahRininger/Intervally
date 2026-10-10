@@ -156,17 +156,20 @@ Purchases with an Apple Watch app version, which is why Intervally ships as an i
 that embeds the watch app: Apple's "Creating independent watchOS apps" says a watch app's
 purchases are shared with its companion iOS app. Nothing about Pro crosses WatchConnectivity.
 Each device asks StoreKit, whose `Transaction.updates` also delivers a purchase made on the
-other device, and the watch keeps Restore. Whether App Store Connect accepts the first
-purchase with an iOS version whose build embeds a StoreKit-using watch app is still to be
-checked: the ship gate at the top of `AppStore/Metadata.md` says how.
+other device, and the watch keeps Restore. App Store Connect took the first purchase with
+iOS 1.0, whose build embeds the watch app, in one review submission (2026-10-09; the ship
+gate at the top of `AppStore/Metadata.md`). On iPhone, Pro adds the voice coach; on the
+watch, stronger taps.
 
 ## The iPhone app
 
-The iPhone is where workouts are planned, looked back on and paid for. Workouts only ever
-run on the watch: there is no phone timer, which keeps clear of Guideline 4.3(b)'s "simple
-timers". Two tabs, each with a gear for Settings:
+The iPhone is where workouts are planned, run, looked back on and paid for. Since 1.1 a
+workout runs on whichever device it is started on. Guideline 4.3(b) turns away "simple
+timers"; Intervally answers it with the watch app, sync, Health and a Live Activity. Two
+tabs, each with a gear for Settings:
 
-- **Workouts.** The preset the watch starts next, then the library. A preset's editor has a
+- **Workouts.** The workout up next with Start, then the library, each card with a play
+  button. Starting a workout makes it the one up next, here and on the watch. A preset's editor has a
   tile per number; each opens a wheel with exactly the values the crown turns over
   (`PresetField`, `ValueSteps`). Put on Watch makes it the watch's next workout. The
   editor hides the tab bar and sizes its ring to fit (`EditorLayout`), so on a 6.3" iPhone
@@ -174,12 +177,39 @@ timers". Two tabs, each with a gear for Settings:
   chevron, and until the first tile is tapped a line under the name says the name and
   tiles can be changed. Adding is
   gated as on the watch, and a purchase finishes what the paywall interrupted.
-- **History.** The interval workouts the watch saved to Health, grouped by week, each with
-  its rounds, heart rate per interval and energy. Read-only: the iPhone never writes to
-  Health. To Health the two apps are one app, so the watch's request covers what History
-  reads (`HealthAccess`).
-- **Settings.** Intervally Pro, Theme, the watch's status, the Apple Health explainer,
-  Restore, Redeem Code and Request a Refund (iOS-only StoreKit sheets), Support and Privacy.
+- **History.** The interval workouts either device saved to Health, grouped by week, each
+  with its rounds, heart rate per interval and energy. History itself only reads. To Health
+  the two apps are one app, and the newest request for a type decides it, so every request,
+  a run's or History's, on either device, asks for the same types (`HealthAccess`).
+- **Settings.** Intervally Pro, Theme, Sounds & Voice, the watch's status, the Apple Health
+  explainer, Restore, Redeem Code and Request a Refund (iOS-only StoreKit sheets), Support
+  and Privacy.
+
+### Running on iPhone
+
+The run is the watch's own `RunCoordinator`, compiled into both apps from `Run/` with the
+engine, the Health workout session and the notification backstop. Only the edges differ:
+
+- **What keeps it going.** iOS 26 runs an `HKWorkoutSession` on iPhone, which keeps the app
+  executing with the phone locked and saves the workout, segmented by interval, to Health.
+  With Health declined there is no second tier (`ForegroundRuntime`): the run counts in front
+  and the notification backstop marks each change while the app is away. iOS hands back a
+  session that outlived a crash through `UIScene.ConnectionOptions.shouldHandleActiveWorkoutRecovery`
+  (`PhoneAppDelegate`), and a run interrupted by a termination is restored from its snapshot.
+- **Cues** (`PhoneCuePlayer`, `CuePlan`, `CueAudio`). Synthesized tones, higher for work and
+  lower for rest, a 3-2-1 tick, a finish chime, and with Pro the voice coach ("Work", "Rest",
+  "Last round"). The audio session ducks other audio only while a cue sounds. The `audio`
+  background mode is for those cues: the app never plays silence to stay running. A change
+  announced late, after the app was away, plays nothing.
+- **Live Activity** (`IntervallyPhoneWidget`, `LiveActivityPresenter`). The phase, its
+  countdown and bar on the Lock Screen, in the Dynamic Island and in a paired watch's Smart
+  Stack, updated at each change through one serial chain. Its stale date is a moment after
+  the phase ends, when it falls back to the whole workout's countdown, which no update can
+  make wrong. Leftover activities are settled at launch, before a run is restored.
+- **The screen** (`PhoneRunView`). The watch's dial at iPhone size, with End, Pause and Skip,
+  a flash of the phase's colour at each change, and the screen kept awake (Settings > Sounds
+  & Voice). Never close a simulator's app mid-run in QA: the simulator keeps the dead
+  process's workout session until it is rebooted.
 
 Every screen works with no paired watch, and on iPad, where the app runs in compatibility
 mode and `WCSession.isSupported()` is false: only the words about a watch go. The first

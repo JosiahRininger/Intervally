@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UserNotifications
 import os
 
 /// Owns the iPhone app's long-lived services.
@@ -103,6 +104,14 @@ final class PhoneServices {
         reviews.recordOpen()
         // After Pro, so a restored run's plan is read with the entitlement already cached.
         run.restoreAtLaunch()
+        Self.clearDeliveredCues()
+    }
+
+    /// The notification backstop's banners mark interval changes while the app is away. Once
+    /// it is in front again they are only clutter in Notification Center: "Work, Round 3 of 8"
+    /// from a run that has moved on. The ones still to come stay scheduled.
+    static func clearDeliveredCues() {
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
     }
 
     /// The app came forward. Reads the entitlement again, so a purchase or refund made on
@@ -112,6 +121,7 @@ final class PhoneServices {
     func handleForeground() async {
         reviews.recordOpen()
         run.handleForeground()
+        Self.clearDeliveredCues()
         // An icon change that arrived in the background, from the watch or a refund.
         icon.cameForward()
         async let history: Void = history.handleForeground()

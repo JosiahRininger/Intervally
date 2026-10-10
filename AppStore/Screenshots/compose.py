@@ -7,7 +7,7 @@ wants for one display (1320x2868 on an iPhone 17 Pro Max, 1206x2622 on an iPhone
 Each comes out at that same size: a caption on the app icon's navy, over the capture with
 its screen corners, flattened to RGB because App Store Connect rejects an alpha channel.
 
-The captures are the real app, unedited. Only the caption is added, and the one shot that
+The captures are the real app, unedited. Only the caption is added, and every shot that
 shows a Pro feature says so in it (Guideline 2.3.2). No shot shows a price (2.3.7).
 """
 import os
@@ -22,12 +22,14 @@ WHITE = (0xFF, 0xFF, 0xFF)
 
 # (capture name, eyebrow, headline lines, eyebrow drawn as a capsule)
 SHOTS = [
-    ('1-workouts', 'WORKOUTS', ['Plan on iPhone.', 'Train on your wrist.'], False),
-    ('2-editor', 'EDITOR', ['Build it here.', 'Put it on your watch.'], False),
-    ('3-pro-editor', 'INTERVALLY PRO', ['Add a warmup', 'and a cooldown'], True),
-    ('4-history', 'HISTORY', ['Every session,', 'interval by interval'], False),
-    ('5-session', 'SESSION', ['Your heart rate,', 'every interval'], False),
-    ('6-pastel', 'INTERVALLY PRO', ['Make it yours', 'with Pastel'], True),
+    ('1-run', 'TRAIN ON IPHONE', ['Press Start.', 'Hear every interval.'], False),
+    ('2-lock', 'LOCK SCREEN', ['Your countdown,', 'phone locked'], False),
+    ('3-workouts', 'WORKOUTS', ['Every workout,', 'one tap from Start'], False),
+    ('4-editor', 'EDITOR', ['Build it here.', 'Start it anywhere.'], False),
+    ('5-history', 'HISTORY', ['Every session,', 'interval by interval'], False),
+    ('6-session', 'SESSION', ['Your heart rate,', 'every interval'], False),
+    ('7-pro-editor', 'INTERVALLY PRO', ['Add a warmup', 'and a cooldown'], True),
+    ('8-pastel', 'INTERVALLY PRO', ['Make it yours', 'with Pastel'], True),
 ]
 
 # Fractions of the canvas width, so both display sizes share one layout.

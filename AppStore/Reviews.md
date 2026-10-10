@@ -25,7 +25,7 @@ The iPhone asks only when all of these hold (`ReviewPolicy`):
 | Installed for at least | 3 days |
 | Not already asked in | this version |
 | Last ask at least | 120 days ago |
-| Moment | back from a session in History with **3+ sessions** saved, or just after **Put on Watch** once the app has been opened on **5 different days** (for people without Health) |
+| Moment | **Done** after a workout finished on iPhone, from the **third** one; back from a session in History with **3+ sessions** saved; or just after **Put on Watch** once the app has been opened on **5 different days** (for people without Health) |
 
 It asks a second after the moment, so the prompt never lands mid-transition, and counts the
 ask whether or not the system showed anything, so it never nags. QA launches never ask.

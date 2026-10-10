@@ -20,9 +20,9 @@ struct ShipAssetsTests {
         let height: Int
     }
 
-    /// Each screenshot folder and the one size App Store Connect takes for it.
+    /// Each screenshot folder and the one size App Store Connect takes for it. One iPhone
+    /// set: App Store Connect uses the medium display's shots for every iPhone size.
     static let sets: [String: Size] = [
-        "iPhone-6.9": Size(width: 1320, height: 2868),
         "iPhone-6.3": Size(width: 1206, height: 2622),
         "Watch": Size(width: 416, height: 496),
     ]
@@ -50,12 +50,17 @@ struct ShipAssetsTests {
         }
     }
 
-    @Test("Both iPhone sizes show the same shots, in the same order")
-    func iPhoneSetsMatch() throws {
-        let large = try Self.pngs(in: "iPhone-6.9").map(\.lastPathComponent)
-        let small = try Self.pngs(in: "iPhone-6.3").map(\.lastPathComponent)
-        #expect(large == small)
-        #expect(large.count == 6)
+    @Test("The iPhone set leads with a run on iPhone, and names Pro wherever it shows it")
+    func iPhoneSet() throws {
+        let shots = try Self.pngs(in: "iPhone-6.3").map(\.lastPathComponent)
+        #expect(shots == [
+            "1-run.png", "2-lock.png", "3-workouts.png", "4-editor.png",
+            "5-history.png", "6-session.png", "7-pro-editor.png", "8-pastel.png",
+        ])
+        let compose = try String(contentsOf: Self.screenshots.appendingPathComponent("compose.py"), encoding: .utf8)
+        for pro in ["7-pro-editor", "8-pastel"] {
+            #expect(compose.contains("('\(pro)', 'INTERVALLY PRO'"), "\(pro) is captioned Intervally Pro (2.3.2)")
+        }
     }
 
     @Test("The In-App Purchase review screenshot is a 6.9-inch capture with no alpha")

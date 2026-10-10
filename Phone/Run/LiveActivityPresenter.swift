@@ -80,13 +80,15 @@ final class LiveActivityPresenter: RunPresenting {
         }
     }
 
+    /// Keeps the newest activity still showing, for a run that is coming back, and ends every
+    /// other one: a finished run's lingering one, or one whose run is gone.
     nonisolated private func adoptOrEnd(hasRun: Bool) async {
         let existing = Activity<RunActivityAttributes>.activities
-        if hasRun, let first = existing.first {
-            activity = first
-            for extra in existing.dropFirst() { await extra.end(nil, dismissalPolicy: .immediate) }
-        } else if !hasRun {
-            for leftover in existing { await leftover.end(nil, dismissalPolicy: .immediate) }
+        let live = existing.filter { $0.activityState == .active || $0.activityState == .stale }
+        let keep = hasRun ? live.last : nil
+        activity = keep
+        for other in existing where other.id != keep?.id {
+            await other.end(nil, dismissalPolicy: .immediate)
         }
     }
 

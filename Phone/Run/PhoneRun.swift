@@ -90,10 +90,19 @@ final class PhoneRun {
     // MARK: - Launch
 
     /// A run that was under way when the app was last terminated comes back, on screen.
+    ///
+    /// The Live Activity is settled first, so the restored run's first update lands on the
+    /// activity it keeps: settled after, the restore's own request was the one ended, and the
+    /// Lock Screen kept the dead process's activity, stuck at 0:00.
     func restoreAtLaunch() {
+        activity.reconcile(hasRun: store.loadActiveRun() != nil)
         let restored = coordinator.restoreIfNeeded()
-        activity.reconcile(hasRun: restored)
-        if restored { isPresented = true }
+        if restored {
+            isPresented = true
+        } else {
+            // A snapshot that turned out to be finished: nothing to show.
+            activity.present(nil)
+        }
     }
 
     /// iOS relaunched the app to hand back a workout session that outlived it.

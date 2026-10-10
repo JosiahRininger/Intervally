@@ -192,36 +192,38 @@ Apple Watch app:
 Every file is a real capture of the app, flattened to RGB (`sips -g hasAlpha` says no).
 None shows a price (Guideline 2.3.7). Upload each set in numeric order.
 
-### iPhone 6.9" — 1320 × 2868, `AppStore/Screenshots/iPhone-6.9/`
+### iPhone — 1206 × 2622, `AppStore/Screenshots/iPhone-6.3/`
 
-Captured on an iPhone 17 Pro Max simulator (iOS 26.3), with the status bar at 9:41 and a
-full battery. The 6.9" set is the one App Store Connect requires.
-
-### iPhone 6.3" — 1206 × 2622, `AppStore/Screenshots/iPhone-6.3/`
-
-The same five shots from an iPhone 17 Pro simulator.
+Captured on an iPhone 17 Pro simulator (iOS 26.3), with the status bar at 9:41 and a full
+battery, on the "iPhone with Dynamic Island (medium display)" tab. App Store Connect uses
+these for every iPhone size, so there is no 6.9" set. 1.1's set leads with a run on iPhone.
 
 | File | Caption | Shows |
 |---|---|---|
-| `1-workouts.png` | WORKOUTS · Plan on iPhone. Train on your wrist. | The library, and the workout up next on the watch |
-| `2-editor.png` | EDITOR · Build it here. Put it on your watch. | Tabata's editor: its ring, a tile per number, Put on Watch; Warmup and Cooldown marked PRO |
-| `3-pro-editor.png` | INTERVALLY PRO · Add a warmup and a cooldown | EMOM with a 5-minute warmup and a 3-minute cooldown. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
-| `4-history.png` | HISTORY · Every session, interval by interval | History grouped by week, an early end included |
-| `5-session.png` | SESSION · Your heart rate, every interval | A session's ring, totals and heart rate per interval |
-| `6-pastel.png` | INTERVALLY PRO · Make it yours with Pastel | Workouts in the Pastel theme. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
+| `1-run.png` | TRAIN ON IPHONE · Press Start. Hear every interval. | Classic running on iPhone: work, round 3 of 8, the depleting ring, End, Pause and Skip |
+| `2-lock.png` | LOCK SCREEN · Your countdown, phone locked | The run's Live Activity on the Lock Screen: the phase, its countdown and bar, the next interval |
+| `3-workouts.png` | WORKOUTS · Every workout, one tap from Start | The workout up next with Start, and the library with a play button on each |
+| `4-editor.png` | EDITOR · Build it here. Start it anywhere. | Tabata's editor: its ring, a tile per number, Start and Put on Watch; Warmup and Cooldown marked PRO |
+| `5-history.png` | HISTORY · Every session, interval by interval | History grouped by week, an early end included |
+| `6-session.png` | SESSION · Your heart rate, every interval | A session's ring, totals and heart rate per interval |
+| `7-pro-editor.png` | INTERVALLY PRO · Add a warmup and a cooldown | EMOM with a 5-minute warmup and a 3-minute cooldown. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
+| `8-pastel.png` | INTERVALLY PRO · Make it yours with Pastel | A run in the Pastel theme. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
 
 The captions are drawn by `AppStore/Screenshots/compose.py`, which turns the raw captures
 into these files at the same size. To retake them, in a Debug build:
 
-- Launch with `-phone.welcomeSeen.v1 YES -qaWatch installed` and `-qaPro free`, or
-  `-qaPro pro` for shot 3.
-- Shot 3 sets its bookends with `-qaEdit "warmup 2 300; cooldown 2 180"`. Open Tabata
-  (shot 2) and EMOM (shot 3) from the library. Nothing needs scrolling: the editor hides
-  the tab bar and sizes its ring so the whole editor fits on both phones.
-- Shots 4 and 5 use `-qaHistory sample -qaOpen history` and `-qaOpen session`. The sample
-  sessions are a fixture: nothing is read from or written to Health (Guideline 5.1.3(ii)).
 - Override the status bar with `simctl status_bar <udid> override --time 9:41
-  --batteryState discharging --batteryLevel 100`.
+  --batteryState discharging --batteryLevel 100 --wifiBars 3 --cellularMode active
+  --cellularBars 4`. Launch with `-phone.welcomeSeen.v1 YES -phone.editorTipSeen.v1 YES
+  -qaWatch installed` and `-qaPro free`, or `-qaPro pro` for shots 7 and 8.
+- Shots 1, 2 and 8: `-qaRunElapsed 103` restores Classic three rounds in (8 adds
+  `-qaTheme pastel`). Allow notifications, Health and Live Activities once. For shot 2,
+  lock the simulator. End each run with End, never by quitting the app: a simulator
+  whose app was killed mid-workout keeps a stuck workout session until it is rebooted.
+- Shots 4 and 7: open Tabata and EMOM from the library. Shot 7 sets EMOM's bookends with
+  `-qaEdit "warmup 2 300; cooldown 2 180"`.
+- Shots 5 and 6 use `-qaHistory sample -qaOpen history` and `-qaOpen session`. The sample
+  sessions are a fixture: nothing is read from or written to Health (Guideline 5.1.3(ii)).
 
 ### Apple Watch — 416 × 496, `AppStore/Screenshots/Watch/`
 
