@@ -35,8 +35,9 @@ final class RunCoordinator {
     @ObservationIgnored private let store: WorkoutStore
     @ObservationIgnored private let pro: any ProGating
     @ObservationIgnored private let haptics: any BoundaryHaptics
-    @ObservationIgnored private let playCue: @MainActor (Haptics.Cue) -> Void
+    @ObservationIgnored private let playCue: @MainActor (TransportCue) -> Void
     @ObservationIgnored private let reloadWidgets: () -> Void
+    @ObservationIgnored private let presenter: any RunPresenting
     @ObservationIgnored private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "run")
 
     /// Which mechanism is keeping the run alive. This is not cosmetic: it decides whether
@@ -137,10 +138,11 @@ final class RunCoordinator {
         pro: any ProGating,
         haptics: any BoundaryHaptics,
         workout: any WorkoutSessioning = WorkoutSessionController(),
-        runtime: any RuntimeSessioning = ExtendedRuntimeController(),
+        runtime: any RuntimeSessioning = RunPlatform.makeRuntime(),
         notifications: any BoundaryScheduling = NotificationScheduler(),
-        playCue: @escaping @MainActor (Haptics.Cue) -> Void = Haptics.play(cue:),
-        reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() }
+        playCue: @escaping @MainActor (TransportCue) -> Void = RunPlatform.play(cue:),
+        reloadWidgets: @escaping () -> Void = { WidgetCenter.shared.reloadAllTimelines() },
+        presenter: any RunPresenting = NoRunPresenter()
     ) {
         self.store = store
         self.pro = pro
@@ -150,6 +152,7 @@ final class RunCoordinator {
         self.notifications = notifications
         self.playCue = playCue
         self.reloadWidgets = reloadWidgets
+        self.presenter = presenter
         self.engine = TimerEngine(workout: store.selected.effective(isPro: pro.isPro))
     }
 
@@ -394,12 +397,14 @@ final class RunCoordinator {
         persistSnapshot()
     }
 
+    #if os(watchOS)
     /// Plays `strength` for Settings' picker or the paywall's Feel Strongest, through the
     /// run's own player. A run can still be going behind those screens, and on one player
     /// its next boundary replaces the preview instead of being masked by it.
     func previewTaps(_ strength: TapStrength) {
         haptics.preview(strength)
     }
+    #endif
 
     /// How late `event` is being announced, and how long the phase it opens will run, for
     /// the boundary haptics: a catch-up after a suspension taps once rather than bursting,
@@ -444,12 +449,20 @@ final class RunCoordinator {
             case .phaseBegan(let phase):
                 // Segment the Health workout at the same boundaries the user feels.
                 if tier == .workout { workout.beginActivity(for: phase) }
+                present()
             case .finished:
                 finish()
             case .countdown:
                 break
             }
         }
+    }
+
+    /// Hands the run as it now stands to the surface outside the app. Every change of shape
+    /// goes through `persistSnapshot()`, which calls this; a phase running out changes
+    /// nothing persisted, so `dispatch` calls it as well.
+    private func present() {
+        presenter.present(RunPresentation(engine: engine))
     }
 
 
@@ -568,6 +581,7 @@ final class RunCoordinator {
         // until the user resumed.
         if engine.status == .running { startTicking() }
         attachBackgroundSupport(recovering: true)
+        present()
         return true
     }
 
@@ -629,5 +643,6 @@ final class RunCoordinator {
         // changes. Between these points `Text(timerInterval:)` carries the countdown on
         // its own, so there is nothing to reload every second.
         reloadWidgets()
+        present()
     }
 }

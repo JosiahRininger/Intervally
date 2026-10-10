@@ -33,6 +33,9 @@ targets:
     sources:
       - path: Phone
       - path: Core
+      # The run itself: engine, coordinator, Health session and notification backstop,
+      # shared with the watch. The iPhone runs workouts on its own as well.
+      - path: Run
       - path: Sources/Pro
       # WatchConnectivity sync; the watch app gets it through Sources.
       - path: Sources/Sync
@@ -97,6 +100,7 @@ targets:
     sources:
       - path: Sources
       - path: Core
+      - path: Run
       - path: Shared
       - path: Supporting/PrivacyInfo.xcprivacy
     dependencies:

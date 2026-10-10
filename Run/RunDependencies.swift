@@ -64,18 +64,35 @@ protocol BoundaryScheduling: Sendable {
     func cancelAll() async
 }
 
-/// The taps at each boundary. A stronger tap repeats after the call that starts it returns,
-/// so the coordinator must be able to silence the rest when the run pauses, stops or starts
-/// over — and its tests need to see what it asked for and how late.
+/// What marks each boundary: taps on the watch, sounds, a voice and taps on iPhone. A
+/// stronger tap repeats after the call that starts it returns, so the coordinator must be
+/// able to silence the rest when the run pauses, stops or starts over — and its tests need
+/// to see what it asked for and how late.
 @MainActor
 protocol BoundaryHaptics: AnyObject {
     func play(_ event: TimerEvent, context: BoundaryContext)
+    #if os(watchOS)
     /// Plays a work boundary at `strength`, whatever is saved: Settings' picker and the
     /// paywall's Feel Strongest. On the same player as the boundaries, so each replaces
     /// the other's repeats rather than cutting into them.
     func preview(_ strength: TapStrength)
-    /// Drops any repeats still waiting to play.
+    #endif
+    /// Drops anything still waiting to play.
     func cancelPending()
+}
+
+/// Shows the run outside the app: the iPhone's Live Activity. The watch's complication reads
+/// the run snapshot instead, so the watch takes the default, which shows nothing.
+@MainActor
+protocol RunPresenting: AnyObject {
+    /// The run as it stands, or nil once it is over and gone.
+    func present(_ run: RunPresentation?)
+}
+
+/// Shows nothing.
+@MainActor
+final class NoRunPresenter: RunPresenting {
+    func present(_ run: RunPresentation?) {}
 }
 
 // MARK: - Conformances
@@ -84,7 +101,9 @@ extension WorkoutSessionController: WorkoutSessioning {
     var isSupported: Bool { Self.isSupported }
 }
 
+#if os(watchOS)
 extension ExtendedRuntimeController: RuntimeSessioning {}
+#endif
 
 extension NotificationScheduler: BoundaryScheduling {
     func schedule(plan: IntervalPlan, anchor: Date) async {

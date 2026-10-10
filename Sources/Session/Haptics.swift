@@ -13,18 +13,8 @@ import WatchKit
 /// plays is decided by the pure `plan(for:strength:context:)` and played by `HapticPlayer`.
 enum Haptics {
 
-    /// Transport feedback, named by intent so the runtime seam never has to traffic in
-    /// `WKHapticType`.
-    enum Cue {
-        case start, stop
-
-        var type: WKHapticType {
-            switch self {
-            case .start: .start
-            case .stop: .stop
-            }
-        }
-    }
+    /// Transport feedback (`TransportCue`, shared with the iPhone's run).
+    typealias Cue = TransportCue
 
     @MainActor
     static func play(cue: Cue) {
@@ -46,6 +36,15 @@ enum Haptics {
     @MainActor
     static func play(_ type: WKHapticType) {
         WKInterfaceDevice.current().play(type)
+    }
+}
+
+extension TransportCue {
+    var type: WKHapticType {
+        switch self {
+        case .start: .start
+        case .stop: .stop
+        }
     }
 }
 
@@ -106,19 +105,6 @@ enum TapStrength: String, CaseIterable, Identifiable, Sendable {
 struct HapticStep: Equatable, Sendable {
     let offset: Duration
     let type: WKHapticType
-}
-
-/// What only the coordinator knows about a boundary.
-struct BoundaryContext: Equatable, Sendable {
-    /// Seconds between the boundary and its announcement. The ticker alone accounts for up
-    /// to half a second; a catch-up after a suspension for far more.
-    var lateness: TimeInterval
-    /// How long the phase that just began will run; nil for the finish, which has nothing
-    /// after it to keep clear of.
-    var phaseDuration: TimeInterval?
-
-    /// On time, with nothing after it: a countdown tick.
-    static let immediate = BoundaryContext(lateness: 0, phaseDuration: nil)
 }
 
 /// Everything one boundary will play, decided up front so the timing rules are testable
