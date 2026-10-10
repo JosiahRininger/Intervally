@@ -23,17 +23,17 @@ struct HistoryMessage: Equatable {
         case .needsAccess:
             systemImage = "heart.text.square"
             title = "See every session, interval by interval"
-            detail = "Connect Apple Health to see the workouts your Apple Watch saves: each interval, "
-                + "your heart rate and the energy you burned. Intervally only reads, and what it reads "
-                + "stays on this iPhone."
+            detail = "Connect Apple Health to see every session you finish, on this iPhone or your "
+                + "Apple Watch: each interval, your heart rate and the energy you burned. What "
+                + "Intervally reads stays on this iPhone."
         case .empty:
             // Never "you denied access": HealthKit doesn't say, and most often the watch just
             // hasn't finished a workout yet, or Health hasn't brought it over.
             systemImage = "applewatch"
             title = "No sessions yet"
-            detail = "Workouts you finish in Intervally on your Apple Watch show up here once Health "
-                + "brings them to this iPhone. If one is missing, check that Intervally can read "
-                + "workouts. \(Self.whereToCheck)"
+            detail = "Workouts you finish in Intervally show up here: from this iPhone right away, "
+                + "from your Apple Watch once Health brings them over. If one is missing, check that "
+                + "Intervally can read workouts. \(Self.whereToCheck)"
         case .unavailable:
             systemImage = "heart.slash"
             title = "Apple Health isn't available"
@@ -56,12 +56,12 @@ struct HistoryMessage: Equatable {
         case .loading: "What History reads"
         case .unavailable: "Not available on this device"
         case .needsAccess: "Not connected"
-        case .empty, .loaded, .failed: "Reads your watch's workouts"
+        case .empty, .loaded, .failed: "Saves and reads your workouts"
         }
     }
 }
 
-/// History: the sessions the watch saved to Health, by week, newest first.
+/// History: the sessions saved to Health, from this iPhone or the watch, by week, newest first.
 ///
 /// Read again whenever it appears, the app comes forward or the list is pulled: Health brings
 /// a watch workout over in its own time.

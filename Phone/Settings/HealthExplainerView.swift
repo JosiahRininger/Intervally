@@ -19,11 +19,11 @@ struct HealthReadItem: Identifiable {
     static let all: [HealthReadItem] = [
         HealthReadItem(
             type: HKObjectType.workoutType(), systemImage: "figure.highintensity.intervaltraining",
-            title: "Workouts", detail: "The interval sessions your Apple Watch saves, with each interval in them."
+            title: "Workouts", detail: "The interval sessions Intervally saves, with each interval in them."
         ),
         HealthReadItem(
             type: HKQuantityType(.heartRate), systemImage: "heart",
-            title: "Heart Rate", detail: "Your average and highest for each session, and your average for each interval."
+            title: "Heart Rate", detail: "Your average and highest for each session, and your average for each interval, when your Apple Watch or a heart rate monitor measured it."
         ),
         HealthReadItem(
             type: HKQuantityType(.activeEnergyBurned), systemImage: "flame",
@@ -32,15 +32,15 @@ struct HealthReadItem: Identifiable {
     ]
 }
 
-/// Settings > Apple Health: what History reads, that it stays on this iPhone, and where to
-/// change it.
+/// Settings > Apple Health: what Intervally saves and reads, that it stays in Health, and
+/// where to change it.
 struct HealthExplainerView: View {
     @Environment(HistoryModel.self) private var history
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
-                Text("History shows the workouts your Apple Watch saves to Apple Health. Intervally only reads Health on this iPhone, and never writes to it.")
+                Text("Intervally saves each session you finish to Apple Health as a workout, on this iPhone or on your Apple Watch, and History reads them back.")
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -70,8 +70,12 @@ struct HealthExplainerView: View {
                     .tileBackground()
                 }
 
+                block("What Intervally Saves") {
+                    paragraph("Each workout you finish on this iPhone, interval by interval, so it counts toward your activity rings. A workout you end early isn't saved. Your Apple Watch saves the ones it runs.")
+                }
+
                 block("Where It Stays") {
-                    paragraph("On this iPhone. Intervally has no account and no server. Your watch saves each session to Health, and Health brings it to your iPhone on its own.")
+                    paragraph("In Health, on your own devices. Intervally has no account and no server. Health brings the sessions your watch saves to your iPhone on its own.")
                 }
 
                 block("Changing Access") {

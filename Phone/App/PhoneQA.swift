@@ -22,6 +22,8 @@ import WatchConnectivity
 ///   (`SampleHistory`) instead of Health, which is never read or written.
 /// - `-qaTheme classic|pastel` pins the theme shown for the launch, whatever is stored or
 ///   bought. Nothing is saved or synced, and choosing a theme in Settings ends it.
+/// - `-qaRunElapsed <seconds>` launches into a run of the preset up next that started that
+///   many seconds ago, for screenshots of the run screen and its Live Activity.
 struct PhoneQAOptions: Equatable {
     var pro: Bool?
     var watch: QAWatchState?
@@ -29,10 +31,12 @@ struct PhoneQAOptions: Equatable {
     var screen: QAScreen?
     var history: QAHistory?
     var theme: AppTheme?
+    var runElapsed: TimeInterval?
 
     /// Any QA flag at all: such a launch is being driven or captured, never really used.
     var isActive: Bool {
         pro != nil || watch != nil || welcome || screen != nil || history != nil || theme != nil
+            || runElapsed != nil
     }
 
     static let current = parse(ProcessInfo.processInfo.arguments)
@@ -55,6 +59,7 @@ struct PhoneQAOptions: Equatable {
         options.screen = value(after: "-qaOpen").flatMap(QAScreen.init(rawValue:))
         options.history = value(after: "-qaHistory").flatMap(QAHistory.init(rawValue:))
         options.theme = value(after: "-qaTheme").flatMap(AppTheme.qaOverride)
+        options.runElapsed = value(after: "-qaRunElapsed").flatMap(TimeInterval.init).map { max(0, $0) }
         return options
     }
 
@@ -143,6 +148,8 @@ enum QAScreen: String, CaseIterable, Sendable {
     case health
     /// Settings > Theme.
     case theme
+    /// Settings > Sounds & Voice.
+    case sounds
     /// The History tab.
     case history
     /// The History tab, with its newest session open.
@@ -187,7 +194,7 @@ struct WorkoutsQAOpen: ViewModifier {
             switch screen {
             case .editor, .picker, .bookends: path = [.editor(store.selected.id, isNew: false)]
             case .paywall: sheet = .paywall
-            case .settings, .watch, .pro, .health, .theme: sheet = .settings
+            case .settings, .watch, .pro, .health, .theme, .sounds: sheet = .settings
             case .history, .session: break
             }
         }
@@ -224,6 +231,7 @@ struct SettingsQAOpen: ViewModifier {
             case .pro: .pro
             case .health: .health
             case .theme: .theme
+            case .sounds: .sounds
             default: nil
             }
             guard let route, QAScreen.open(.settings) else { return }

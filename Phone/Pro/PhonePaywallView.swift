@@ -278,7 +278,7 @@ struct PhonePaywallPage: View {
 
     private var features: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ForEach(PaywallContent.features) { feature in
+            ForEach(content.features) { feature in
                 HStack(spacing: 14) {
                     Image(systemName: feature.systemImage)
                         .font(.body.weight(.semibold))

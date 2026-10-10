@@ -25,7 +25,7 @@ struct WatchStatusContent: Equatable {
         case .unsupported:
             systemImage = "applewatch.slash"
             title = "Apple Watch isn't available"
-            detail = "You can still build workouts here."
+            detail = "Your workouts run right here."
         case .activating:
             systemImage = "applewatch"
             title = "Looking for your Apple Watch"
@@ -33,7 +33,7 @@ struct WatchStatusContent: Equatable {
         case .notPaired:
             systemImage = "applewatch.slash"
             title = "No Apple Watch paired"
-            detail = "Your workouts will be waiting."
+            detail = "Your workouts run right here, and they'll be waiting for a watch."
         case .appNotInstalled:
             systemImage = "applewatch"
             title = "Intervally isn't on your watch yet"

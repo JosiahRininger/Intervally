@@ -76,6 +76,11 @@ final class PhoneServices {
         services.applyQAEdits()
         if let isPro = qa.pro { services.pro.overrideForQA(isPro) }
         if let pinned = qa.theme { services.theme.pinForQA(pinned) }
+        if let elapsed = qa.runElapsed {
+            // Restored by `start()`, exactly as a run interrupted by a termination would be.
+            let workout = store.selected.effective(isPro: services.pro.isPro)
+            store.saveActiveRun(RunSnapshot(workout: workout, anchor: Date().addingTimeInterval(-elapsed), pausedElapsed: nil))
+        }
         #else
         let services = PhoneServices()
         #endif

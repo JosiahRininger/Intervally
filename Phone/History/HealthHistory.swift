@@ -6,14 +6,15 @@
 import Foundation
 import HealthKit
 
-/// History from Apple Health: the interval workouts the watch saved, once Health has brought
-/// them to this iPhone. Read only; the iPhone never writes to Health.
+/// History from Apple Health: the interval workouts saved by a run on this iPhone, or by the
+/// watch once Health has brought them over. History itself only reads.
 final class HealthHistory: HistorySource {
     private let store = HKHealthStore()
 
-    /// Nothing: the iPhone only reads. The watch asks to write workouts, and to read all of
-    /// these as well, so neither app's request undoes the other's (`HealthAccess`).
-    static let shareTypes: Set<HKSampleType> = []
+    /// Workouts, which History never writes but a run on this iPhone saves. Asked here as
+    /// well, so Connect and a run's first Start ask for exactly the same thing and neither
+    /// request undoes the other's (`HealthAccess`).
+    static let shareTypes: Set<HKSampleType> = [HKObjectType.workoutType()]
 
     /// Only what History shows: the workouts, and the heart rate and energy inside them.
     static let readTypes: Set<HKObjectType> = [

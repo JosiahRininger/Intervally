@@ -11,6 +11,8 @@ enum PaywallContext: Hashable, Sendable {
     case presets, bookends, tapStrength, settings
     /// Pastel, chosen by a free user in Theme.
     case themes
+    /// The voice coach, turned on by a free user in the iPhone's Sounds settings.
+    case voice
 }
 
 /// Which device's paywall. The copy differs only where the devices do: what the other one
@@ -44,6 +46,8 @@ struct PaywallContent: Equatable, Sendable {
     }
 
     let platform: PaywallPlatform
+    /// What Pro adds, as this device sells it.
+    let features: [Feature]
     let contextLine: String
     let action: Action
     /// The terms under the price: shown only once there is a price.
@@ -74,6 +78,30 @@ struct PaywallContent: Equatable, Sendable {
         Feature(systemImage: "heart.fill", title: "Support an indie dev"),
     ]
 
+    /// The iPhone sells what its runs get, the voice coach, and the watch's stronger taps
+    /// only to someone with a watch to feel them on. The beeps stay free, so the copy only
+    /// ever describes the coach (Guideline 4.10): never "unlock sounds".
+    static func features(on platform: PaywallPlatform, hasWatch: Bool) -> [Feature] {
+        switch platform {
+        case .watch:
+            return features
+        case .phone:
+            var list = [
+                Feature(systemImage: "square.stack.3d.up.fill", title: "Unlimited presets"),
+                Feature(systemImage: "sunrise.fill", title: "Warmup & cooldown"),
+                Feature(systemImage: "waveform", title: "Voice coach"),
+            ]
+            if hasWatch {
+                list.append(Feature(systemImage: "hand.tap.fill", title: "Stronger watch taps"))
+            }
+            list += [
+                Feature(systemImage: "paintpalette.fill", title: "Pastel theme"),
+                Feature(systemImage: "heart.fill", title: "Support an indie dev"),
+            ]
+            return list
+        }
+    }
+
     /// - Parameters:
     ///   - isPro: Pro with `ownership == .none` — from the cache before StoreKit answers,
     ///     or a QA override — still reads as owned.
@@ -101,13 +129,14 @@ struct PaywallContent: Equatable, Sendable {
         )
         return PaywallContent(
             platform: platform,
+            features: features(on: platform, hasWatch: hasWatch),
             contextLine: contextLine(for: context, platform: platform),
             action: action,
             footnote: footnote(for: action, offer: offer),
             note: isPro ? nil : note(for: action, lastPurchase: lastPurchase, lastRestore: lastRestore),
             offersRestore: !isPro,
             offersPreview: platform == .watch && context == .tapStrength && !isPro,
-            companionLine: companionLine(for: action, platform: platform)
+            companionLine: companionLine(for: action, platform: platform, hasWatch: hasWatch)
         )
     }
 
@@ -124,6 +153,7 @@ struct PaywallContent: Equatable, Sendable {
         case .settings: "Get more from every workout."
         // Shorter than the bookends' line, so the 40mm price stays above the fold.
         case .themes: "Make Intervally yours with Pastel."
+        case .voice: "Hear every interval called out, even over your music."
         }
     }
 
@@ -164,8 +194,8 @@ struct PaywallContent: Equatable, Sendable {
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing." : "Thanks for supporting Intervally.")
         case .phone:
             let next = hasWatch
-                ? "Add more workouts and warmups here; choose Tap Strength on your watch."
-                : "Add more workouts and warmups."
+                ? "Add more workouts and warmups, turn on the voice coach in Sounds, and choose Tap Strength on your watch."
+                : "Add more workouts and warmups, and turn on the voice coach in Sounds."
             return .owned(title: title, detail: shared ? "Unlocked through Family Sharing. \(next)" : "Unlocked. \(next)")
         }
     }
@@ -202,13 +232,14 @@ struct PaywallContent: Equatable, Sendable {
         }
     }
 
-    /// The iPhone promises the watch only beside something to buy. The watch points to the
-    /// iPhone only where it can't sell Pro itself: the App Store may not offer an Apple
-    /// Watch app's purchase there at all (README, "Intervally Pro").
-    private static func companionLine(for action: Action, platform: PaywallPlatform) -> String? {
+    /// The iPhone promises the watch only beside something to buy, and only to someone with a
+    /// watch. The watch points to the iPhone only where it can't sell Pro itself: the App
+    /// Store may not offer an Apple Watch app's purchase there at all (README, "Intervally
+    /// Pro").
+    private static func companionLine(for action: Action, platform: PaywallPlatform, hasWatch: Bool) -> String? {
         switch (platform, action) {
         case (.phone, .buy), (.phone, .loading), (.phone, .purchasing):
-            "Also unlocks Intervally on your Apple Watch."
+            hasWatch ? "Also unlocks Intervally on your Apple Watch." : nil
         case (.watch, .unavailable), (.watch, .loadFailed):
             "You can also unlock Pro in Intervally on iPhone."
         default:

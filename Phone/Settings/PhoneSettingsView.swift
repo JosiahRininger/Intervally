@@ -8,14 +8,16 @@ import UIKit
 
 /// A screen pushed inside Settings.
 enum SettingsRoute: Hashable {
-    case pro, watch, health, theme
+    case pro, watch, health, theme, sounds
     /// The paywall, opened by a free user's Pastel in Theme.
     case themePaywall
+    /// The paywall, opened by a free user turning on the voice coach in Sounds.
+    case voicePaywall
 }
 
-/// The iPhone's Settings sheet: Intervally Pro, the watch, Apple Health, the App Store's
-/// purchase sheets, and the links App Review and users look for. Nothing here is a
-/// placeholder.
+/// The iPhone's Settings sheet: Intervally Pro, the theme, sounds, the watch, Apple Health,
+/// the App Store's purchase sheets, and the links App Review and users look for. Nothing here
+/// is a placeholder.
 ///
 /// The paywall is pushed here rather than presented: this is already a sheet.
 struct PhoneSettingsView: View {
@@ -24,6 +26,9 @@ struct PhoneSettingsView: View {
     @Environment(WatchSync.self) private var sync
     @Environment(HistoryModel.self) private var history
     @Environment(\.dismiss) private var dismiss
+    /// Read here so the Sounds row's subtitle follows a change made in Sounds.
+    @AppStorage(CueSettings.Key.beeps, store: SharedDefaults.suite) private var beeps = true
+    @AppStorage(CueSettings.Key.voice, store: SharedDefaults.suite) private var voice = true
     @Environment(\.palette) private var palette
 
     @State private var path: [SettingsRoute] = []
@@ -69,6 +74,13 @@ struct PhoneSettingsView: View {
         path.removeLast()
     }
 
+    /// Once, however Pro arrived: turns the voice coach on and goes back to Sounds.
+    private func finishVoicePaywall() {
+        guard path.last == .voicePaywall else { return }
+        SharedDefaults.suite.set(true, forKey: CueSettings.Key.voice)
+        path.removeLast()
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             List {
@@ -80,6 +92,14 @@ struct PhoneSettingsView: View {
                         row(
                             systemImage: ThemeRow.systemImage, title: ThemeRow.title,
                             subtitle: theme.effective(isPro: pro.isPro).title
+                        )
+                    }
+                    NavigationLink(value: SettingsRoute.sounds) {
+                        row(
+                            systemImage: SoundsRow.systemImage, title: SoundsRow.title,
+                            subtitle: SoundsRow.subtitle(
+                                CueSettings(beeps: beeps, voice: voice).effective(isPro: pro.isPro)
+                            )
                         )
                     }
                     NavigationLink(value: SettingsRoute.watch) {
@@ -149,6 +169,12 @@ struct PhoneSettingsView: View {
                 case .watch: WatchStatusView()
                 case .health: HealthExplainerView()
                 case .theme: ThemePickerView { path.append(.themePaywall) }
+                case .sounds: SoundsSettingsView { path.append(.voicePaywall) }
+                case .voicePaywall:
+                    PhonePaywallView(context: .voice) { finishVoicePaywall() }
+                        .onChange(of: pro.isPro) { _, isPro in
+                            if isPro { finishVoicePaywall() }
+                        }
                 case .themePaywall:
                     // A purchase here applies what was reached for, then goes back to the
                     // picker to show it chosen. Pro can also arrive while this is open without

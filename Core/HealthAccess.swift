@@ -10,9 +10,8 @@ import Foundation
 /// To Health the watch app and the iPhone app are one app, and the newest request for a type
 /// decides what that app has asked for (paired simulators). The iPhone's read-only request
 /// left the watch unable to save workouts ("Not authorized"), and the watch's write-only one
-/// sent History back to Connect. So the watch asks to read everything History reads as well
-/// as to write workouts: once it has asked, the iPhone has nothing left to ask, and the
-/// iPhone never asks to write.
+/// sent History back to Connect. So every request asks for the same thing: to read
+/// everything History reads, and to write workouts, which a run saves on either device.
 enum HealthAccess {
     /// What History on the iPhone reads.
     static let historyReads: Set<String> = [
@@ -20,6 +19,6 @@ enum HealthAccess {
         "HKQuantityTypeIdentifierHeartRate",
         "HKQuantityTypeIdentifierActiveEnergyBurned",
     ]
-    /// What the watch writes: each session, as a workout.
+    /// What a run writes, on the watch or on iPhone: each session, as a workout.
     static let watchWrites: Set<String> = ["HKWorkoutTypeIdentifier"]
 }
