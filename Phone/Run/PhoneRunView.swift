@@ -132,6 +132,9 @@ struct PhoneRunView: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()
+                .multilineTextAlignment(.center)
+                // Grows with the text size, but not so far that it crowds the controls.
+                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
                 .padding(.top, 24)
                 .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
             Spacer(minLength: 12)
@@ -161,6 +164,8 @@ struct PhoneRunView: View {
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
         }
+        .multilineTextAlignment(.center)
+        .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .padding(.top, 8)
         .accessibilityElement(children: .combine)
     }
@@ -198,8 +203,10 @@ struct PhoneRunView: View {
             Button {
                 confirmingEnd = true
             } label: {
+                // Fixed, like the circle it sits in: at the largest text sizes a scaled glyph
+                // outgrew Pause's.
                 Image(systemName: "xmark")
-                    .font(.title2.weight(.semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .frame(width: 64, height: 64)
             }
             .buttonStyle(.glass)
@@ -230,7 +237,7 @@ struct PhoneRunView: View {
                 coordinator.skip()
             } label: {
                 Image(systemName: "forward.end.fill")
-                    .font(.title2.weight(.semibold))
+                    .font(.system(size: 22, weight: .semibold))
                     .frame(width: 64, height: 64)
             }
             .buttonStyle(.glass)
