@@ -234,7 +234,7 @@ enum ActivityText {
     }
 
     static func round(state: RunActivityAttributes.ContentState, totalRounds: Int) -> String? {
-        guard let phase = state.phase, !phase.isBookend, totalRounds > 1 else { return nil }
+        guard let phase = state.phase, phase == .work || phase == .rest, totalRounds > 1 else { return nil }
         return "Round \(state.round) of \(totalRounds)"
     }
 

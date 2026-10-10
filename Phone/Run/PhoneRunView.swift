@@ -21,10 +21,10 @@ enum RunScreenLayout {
         return "Next: \(next.kind.title) \(DurationFormat.timer(Int(next.duration)))"
     }
 
-    /// "Round 3 of 8", where a round means something: never in the warmup or cooldown, and
-    /// never for a single round.
+    /// "Round 3 of 8", where a round means something: never while getting ready, in the
+    /// warmup or the cooldown, and never for a single round.
     static func roundLine(for phase: IntervalPhase?, totalRounds: Int) -> String? {
-        guard let phase, !phase.kind.isBookend, totalRounds > 1 else { return nil }
+        guard let phase, phase.kind == .work || phase.kind == .rest, totalRounds > 1 else { return nil }
         return "Round \(phase.round) of \(totalRounds)"
     }
 }
@@ -56,6 +56,9 @@ struct PhoneRunView: View {
                     RunSummaryView(summary: summary, workoutName: engine.plan.workout.name) {
                         done()
                     } repeatRun: {
+                        // A tap landing while Done closes the screen must not start a run
+                        // with nothing showing it.
+                        guard run.isPresented, engine.status == .finished else { return }
                         countedFinish = false
                         coordinator.restart()
                     }
@@ -253,6 +256,7 @@ struct PhoneRunView: View {
     /// Back to the workouts. A good moment to ask for a rating, once someone has finished a
     /// few: the system decides whether to show anything.
     private func done() {
+        guard run.isPresented, engine.status == .finished else { return }
         run.close()
         reviews.ask(.finishedWorkout(count: run.finishedRuns), using: requestReview)
     }

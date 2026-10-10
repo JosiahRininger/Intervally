@@ -172,15 +172,16 @@ struct WorkoutsView: View {
                 Button {
                     run.start(workout)
                 } label: {
+                    // Drawn at an exact size, unlike a glass button style, which pads the
+                    // circle past the room the card leaves for it.
                     Image(systemName: "play.fill")
                         .font(.body.weight(.bold))
-                        .frame(width: 44, height: 44)
+                        .foregroundStyle(palette.onTint)
+                        .frame(width: PresetCard.startSide, height: PresetCard.startSide)
+                        .glassEffect(.regular.tint(palette.brand).interactive(), in: .circle)
                 }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .tint(palette.brand)
-                .foregroundStyle(palette.onTint)
-                .padding(.trailing, 12)
+                .buttonStyle(.plain)
+                .padding(.trailing, PresetCard.startMargin)
                 .accessibilityLabel("Start \(workout.name)")
             }
         }

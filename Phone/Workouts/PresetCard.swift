@@ -51,8 +51,9 @@ struct PresetCard: View {
     /// Leaves room at the trailing edge for the play button the library lays over the card.
     var reservesStart = false
 
-    /// The play button's width and its margin.
-    static let startSpace: CGFloat = 44 + 12
+    /// The library's play button, laid over the card's trailing edge.
+    static let startSide: CGFloat = 46
+    static let startMargin: CGFloat = 12
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.palette) private var palette
@@ -81,7 +82,8 @@ struct PresetCard: View {
             }
         }
         .padding(16)
-        .padding(.trailing, reservesStart ? Self.startSpace - 4 : 0)
+        // The play button and its margin, less the card's own padding, plus a gap.
+        .padding(.trailing, reservesStart ? Self.startSide + Self.startMargin - 16 + 10 : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tileBackground()
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
