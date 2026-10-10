@@ -56,7 +56,7 @@ struct MetadataTests {
         "## Promotional text (170)",
         "## Description (4000)",
         "## Keywords (100)",
-        "## What's New in 1.0 (4000)",
+        "## What's New in 1.1 (4000)",
         "### Notes for the reviewer (4000)",
         "Display Name (30)",
         "Description (45)",
@@ -92,7 +92,7 @@ struct MetadataTests {
     func descriptionNamesThePurchase() throws {
         let description = try Self.field("## Description (4000)").text
         #expect(description.contains(
-            "Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, stronger taps, and \(AppTheme.pastel.title), a theme in soft colors."
+            "Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, a voice coach that calls out every interval on iPhone, stronger taps on Apple Watch, and \(AppTheme.pastel.title), a theme in soft colors."
         ))
         #expect(!description.contains("as many presets"))
     }
@@ -172,16 +172,16 @@ struct MetadataTests {
         }
     }
 
-    @Test("The description says where the data stays, and that workouts run on the watch")
+    @Test("The description says where the data stays, and that workouts run on either device")
     func descriptionSaysWhereDataStays() throws {
         let description = try Self.field("## Description (4000)").text
         #expect(description.contains("stay on your iPhone and Apple Watch and in Apple Health"))
-        #expect(description.contains("Workouts run on Apple Watch."))
+        #expect(description.contains("Workouts run on iPhone or Apple Watch, whichever you start them on."))
     }
 
     @Test("The purchase goes in with the iOS version, and its notes start on the iPhone")
     func purchaseRidesWithTheIOSVersion() throws {
-        #expect(try Self.listing().contains("add Intervally Pro to the same submission as iOS version 1.0"))
+        #expect(try Self.listing().contains("Intervally Pro was reviewed with version 1.0; nothing to add for 1.1."))
         let purchase = try Self.field("### Review notes (4000)").text
         let iPhone = try #require(purchase.range(of: "ON IPHONE (the main way to buy; no Apple Watch needed)"))
         let watch = try #require(purchase.range(of: "ON APPLE WATCH"))

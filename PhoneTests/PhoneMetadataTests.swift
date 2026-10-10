@@ -20,12 +20,23 @@ struct PhoneMetadataTests {
         let tiles = [PresetField.work, .rest, .rounds, .prepare].map(\.title).joined(separator: ", ")
         #expect(notes.contains("each tile (\(tiles)) opens a picker"))
         #expect(notes.contains("\(WorkoutsContent.putOnWatchTitle) makes it the workout the watch starts next"))
-        #expect(notes.contains("Tap \(HistoryMessage.connectTitle);"))
+        #expect(notes.contains("Tap \(HistoryMessage.connectTitle)."))
         let store = PhoneSettingsView.StoreAction.self
         #expect(notes.contains(
-            "Settings (the gear at top left) has \(ProStatusRow.title), \(ThemeRow.title), Apple Watch, Apple Health, "
-                + "\(store.restore.title), \(store.redeem.title), Support and the Privacy Policy."
+            "Settings (the gear at top left) has \(ProStatusRow.title), \(ThemeRow.title), \(SoundsRow.title), Apple Watch, "
+                + "Apple Health, \(store.restore.title), \(store.redeem.title), Support and the Privacy Policy."
         ))
+    }
+
+    @Test("The notes run a workout on iPhone with the app's own controls")
+    func runNotes() throws {
+        let notes = try Self.block("### Notes for the reviewer (4000)")
+        #expect(notes.contains("Tap \(WorkoutsContent.startTitle) on the workout up next, or the play button on any workout"))
+        #expect(notes.contains("Settings > \(SoundsRow.title) turns the beeps, the 3-2-1 countdown and Keep Screen On"))
+        #expect(notes.contains("Its Voice Coach, which calls out each interval as it starts, is part of Intervally Pro."))
+        // The bundle's background modes are exactly what the notes explain.
+        #expect(Bundle.main.object(forInfoDictionaryKey: "UIBackgroundModes") as? [String] == ["audio"])
+        #expect(notes.contains("- audio: each interval change is a tone, or the voice coach's words"))
     }
 
     @Test("Every iPhone way into the purchase is named in the app's own words")
