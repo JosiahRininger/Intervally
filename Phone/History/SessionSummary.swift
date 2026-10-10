@@ -34,6 +34,8 @@ struct RawWorkout: Equatable, Sendable {
     /// Kilocalories.
     var activeEnergy: Double?
     var activities: [Activity]
+    /// What Health recorded it as; nil for a type the picker doesn't offer.
+    var activity: WorkoutActivity? = nil
 }
 
 /// What History shows for one session, worked out here so the views only lay it out.
@@ -77,6 +79,8 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
     let activeEnergy: Double?
     /// In the order they ran. An activity whose phase this version doesn't know is left out.
     let intervals: [Interval]
+    /// What Health recorded it as.
+    let activity: WorkoutActivity?
 
     init(_ raw: RawWorkout) {
         id = raw.id
@@ -88,6 +92,7 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
         averageHeartRate = raw.averageHeartRate.map { Int($0.rounded()) }
         maximumHeartRate = raw.maximumHeartRate.map { Int($0.rounded()) }
         activeEnergy = raw.activeEnergy
+        activity = raw.activity
 
         let known = raw.activities
             .sorted { $0.start < $1.start }

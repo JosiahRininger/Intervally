@@ -51,13 +51,10 @@ final class PhoneRun {
     /// still start the workout, perhaps beside the same one started here instead.
     @ObservationIgnored var withdrawWatchStart: () -> Void = {}
     @ObservationIgnored private var watchStartTimeout: Task<Void, Never>?
-    /// Wakes the watch app to run a workout (`HKHealthStore.startWatchApp`); throws when the
-    /// watch can't be reached. A test's stand-in decides.
-    @ObservationIgnored var wakeWatch: @MainActor () async throws -> Void = {
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .highIntensityIntervalTraining
-        configuration.locationType = .indoor
-        try await HKHealthStore().startWatchApp(toHandle: configuration)
+    /// Wakes the watch app to run a workout (`HKHealthStore.startWatchApp`), with its own
+    /// activity; throws when the watch can't be reached. A test's stand-in decides.
+    @ObservationIgnored var wakeWatch: @MainActor (IntervalWorkout) async throws -> Void = { workout in
+        try await HKHealthStore().startWatchApp(toHandle: workout.activityKind.configuration)
     }
     /// The media volume the cues play at, as last reported while the run held the audio.
     private(set) var mediaVolume: Float = 1
@@ -196,7 +193,7 @@ final class PhoneRun {
         let wake = wakeWatch
         Task { [weak self] in
             do {
-                try await wake()
+                try await wake(workout)
             } catch {
                 // Unless the watch's run already showed up regardless.
                 guard let self, self.watchStart == .starting else { return }

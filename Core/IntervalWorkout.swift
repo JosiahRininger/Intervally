@@ -23,6 +23,10 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
     /// Pro. An easy phase straight after the final work interval, with no rest before it.
     /// Zero is off.
     var cooldownSeconds: Int
+    /// What Health records it as. Nil until chosen, and always nil from a version that
+    /// predates the choice, which is how a merge tells "never set" from a choice
+    /// (`PresetRecord.merged`). Read `activityKind`.
+    var activity: WorkoutActivity?
 
     init(
         id: UUID = UUID(),
@@ -32,7 +36,8 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         workSeconds: Int = 30,
         restSeconds: Int = 15,
         rounds: Int = 8,
-        cooldownSeconds: Int = 0
+        cooldownSeconds: Int = 0,
+        activity: WorkoutActivity? = nil
     ) {
         self.id = id
         self.name = name
@@ -42,9 +47,13 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         self.restSeconds = restSeconds
         self.rounds = rounds
         self.cooldownSeconds = cooldownSeconds
+        self.activity = activity
     }
 
     static let `default` = IntervalWorkout()
+
+    /// What Health records it as: HIIT until chosen.
+    var activityKind: WorkoutActivity { activity ?? .standard }
 
     // MARK: - Decoding
 
@@ -52,6 +61,9 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
     /// saved — every stored property must be listed.
     private enum CodingKeys: String, CodingKey {
         case id, name, prepareSeconds, warmupSeconds, workSeconds, restSeconds, rounds, cooldownSeconds
+        // Optional, so encoded only once chosen: a preset never given one encodes exactly
+        // as it did before there was a choice.
+        case activity
     }
 
     /// Decodes field by field, falling back to defaults.
@@ -71,7 +83,9 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
             workSeconds: (try? container.decode(Int.self, forKey: .workSeconds)) ?? fallback.workSeconds,
             restSeconds: (try? container.decode(Int.self, forKey: .restSeconds)) ?? fallback.restSeconds,
             rounds: (try? container.decode(Int.self, forKey: .rounds)) ?? fallback.rounds,
-            cooldownSeconds: (try? container.decode(Int.self, forKey: .cooldownSeconds)) ?? fallback.cooldownSeconds
+            cooldownSeconds: (try? container.decode(Int.self, forKey: .cooldownSeconds)) ?? fallback.cooldownSeconds,
+            // One a later version added reads as never chosen, rather than failing the preset.
+            activity: try? container.decodeIfPresent(WorkoutActivity.self, forKey: .activity)
         )
     }
 

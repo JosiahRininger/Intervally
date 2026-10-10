@@ -196,7 +196,8 @@ struct WatchRunMirrorTests {
         let (run, store) = makeRun()
         var requested: [UUID] = []
         run.requestWatchStart = { requested.append($0); return true }
-        run.wakeWatch = {}
+        var woken: [IntervalWorkout] = []
+        run.wakeWatch = { woken.append($0) }
         let preset = store.workouts[1]
 
         run.startOnWatch(preset)
@@ -204,6 +205,7 @@ struct WatchRunMirrorTests {
         #expect(requested == [preset.id])
         #expect(run.watchStart == .starting)
         #expect(run.isPresented == false, "Nothing shows here until the watch's run does")
+        #expect(await waitUntil { woken.map(\.id) == [preset.id] }, "The watch is woken for that preset's activity")
 
         run.mirror.apply(state(.running, anchor: Date()))
         #expect(run.watchStart == .idle)
@@ -214,7 +216,7 @@ struct WatchRunMirrorTests {
     func startOnWatchFails() async throws {
         let (run, store) = makeRun()
         struct Unreachable: Error {}
-        run.wakeWatch = { throw Unreachable() }
+        run.wakeWatch = { _ in throw Unreachable() }
         var withdrawn = 0
         run.withdrawWatchStart = { withdrawn += 1 }
         let preset = store.workouts[1]

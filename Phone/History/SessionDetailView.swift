@@ -101,6 +101,13 @@ struct SessionDetailView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+            // As Health and Fitness file it.
+            if let activity = session.activity {
+                Label(activity.title, systemImage: activity.symbolName)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(palette.workInk)
+                    .padding(.top, 2)
+            }
         }
         .fixedSize(horizontal: false, vertical: true)
     }

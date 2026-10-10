@@ -80,7 +80,11 @@ extension RawWorkout {
             maximumHeartRate: heartRate?.maximumQuantity()?.doubleValue(for: .beatsPerMinute),
             activeEnergy: workout.statistics(for: HKQuantityType(.activeEnergyBurned))?
                 .sumQuantity()?.doubleValue(for: .kilocalorie()),
-            activities: workout.workoutActivities.map(Activity.init)
+            activities: workout.workoutActivities.map(Activity.init),
+            activity: WorkoutActivity(
+                workout.workoutActivityType,
+                indoor: (workout.metadata?[HKMetadataKeyIndoorWorkout] as? NSNumber)?.boolValue
+            )
         )
     }
 

@@ -237,6 +237,13 @@ final class WorkoutStore {
         update(workout)
     }
 
+    /// Sets what Health records a preset as, on the preset as it stands now, as `rename` does.
+    func setActivity(_ id: UUID, to activity: WorkoutActivity) {
+        guard var workout = workouts.first(where: { $0.id == id }) else { return }
+        workout.activity = activity
+        update(workout)
+    }
+
     /// Adds a preset at the end of the list. On the watch it is also selected, as the setup
     /// screen shows the selected preset; the iPhone passes `select: false`, where only Put on
     /// Watch changes what the watch starts next.

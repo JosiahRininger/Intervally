@@ -297,9 +297,9 @@ final class WorkoutSessionController: NSObject {
         await awaitTeardown(seconds: 8)
         guard Self.isSupported, session == nil else { return isRunning }
 
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .highIntensityIntervalTraining
-        configuration.locationType = .indoor
+        // The preset's own activity: what Fitness shows it as, and on the watch what its
+        // calories are estimated for.
+        let configuration = (workout?.activityKind ?? .standard).configuration
 
         do {
             let session = try HKWorkoutSession(healthStore: store, configuration: configuration)
@@ -344,9 +344,8 @@ final class WorkoutSessionController: NSObject {
     /// instead of one undifferentiated block.
     func beginActivity(for phase: IntervalPhase, at date: Date = Date()) {
         guard let session, let builder else { return }
-        let configuration = HKWorkoutConfiguration()
-        configuration.activityType = .highIntensityIntervalTraining
-        configuration.locationType = .indoor
+        // Each interval is the session's own activity, a recovered session's included.
+        let configuration = session.workoutConfiguration
 
         if builder.currentWorkoutActivity != nil {
             session.endCurrentActivity(on: date)

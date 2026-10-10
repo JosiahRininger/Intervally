@@ -56,7 +56,7 @@ actor SampleHistory: HistorySource {
 
     private static let hillRepeats = IntervalWorkout(
         name: "Hill Repeats", prepareSeconds: 10, warmupSeconds: 300, workSeconds: 60,
-        restSeconds: 90, rounds: 6, cooldownSeconds: 180
+        restSeconds: 90, rounds: 6, cooldownSeconds: 180, activity: .outdoorRun
     )
 
     private static let specs: [Spec] = {
@@ -113,7 +113,8 @@ actor SampleHistory: HistorySource {
             averageHeartRate: rates.isEmpty ? nil : weighted,
             maximumHeartRate: rates.map(\.0).max().map { $0 + 6 },
             activeEnergy: activities.compactMap(\.activeEnergy).reduce(0, +),
-            activities: activities
+            activities: activities,
+            activity: spec.workout.activityKind
         )
     }
 

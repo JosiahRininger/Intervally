@@ -67,6 +67,7 @@ struct PresetEditorView: View {
 
     enum Sheet: Hashable, Identifiable {
         case picker(PresetField)
+        case activity
         case paywall(PaywallContext)
         var id: Self { self }
     }
@@ -108,6 +109,13 @@ struct PresetEditorView: View {
                     }
                     .paletteSheet()
                 }
+            case .activity:
+                if let workout {
+                    ActivityPickerSheet(current: workout.activityKind) { activity in
+                        store.setActivity(workout.id, to: activity)
+                    }
+                    .paletteSheet()
+                }
             case .paywall(let context):
                 NavigationStack {
                     PhonePaywallView(context: context, isSheet: true) {
@@ -132,6 +140,7 @@ struct PresetEditorView: View {
                 VStack(spacing: 24) {
                     VStack(spacing: 10) {
                         nameField(workout)
+                        activityButton(workout)
                         if !tipSeen {
                             Text(EditorLayout.tip)
                                 .font(.footnote)
@@ -257,6 +266,36 @@ struct PresetEditorView: View {
             }
             .onDisappear { commitName() }
             .accessibilityLabel("Name")
+    }
+
+    // MARK: - Activity
+
+    /// What Health records it as, under the name: small, as most presets keep HIIT.
+    private func activityButton(_ workout: IntervalWorkout) -> some View {
+        let activity = workout.activityKind
+        return Button {
+            tipSeen = true
+            sheet = .activity
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: activity.symbolName)
+                    .foregroundStyle(palette.workInk)
+                Text(activity.title)
+                    .foregroundStyle(.primary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 9)
+            .background(palette.card, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Activity, \(activity.title)")
+        .accessibilityHint("Changes what Apple Health records this workout as")
     }
 
     /// Saved when typing ends rather than on every key, so a rename is one edit to sync. An
