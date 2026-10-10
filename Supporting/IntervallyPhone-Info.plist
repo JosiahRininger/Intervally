@@ -25,14 +25,20 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSHealthShareUsageDescription</key>
-	<string>Intervally shows the interval workouts your Apple Watch saved to Health: each interval, your heart rate, and the active energy you burned.</string>
+	<string>Intervally shows your interval workouts from Health: each interval, your heart rate, and the active energy you burned.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>Your Apple Watch saves your interval sessions to Health as workouts. Intervally on iPhone only reads them.</string>
+	<string>Intervally saves your interval sessions to Health as workouts, so they count toward your activity rings.</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 	</dict>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

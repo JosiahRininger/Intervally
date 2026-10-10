@@ -48,6 +48,11 @@ struct PresetCard: View {
     let content: PresetCardContent
     /// The preset the watch starts next, marked so the library agrees with the card above it.
     var isUpNext = false
+    /// Leaves room at the trailing edge for the play button the library lays over the card.
+    var reservesStart = false
+
+    /// The play button's width and its margin.
+    static let startSpace: CGFloat = 44 + 12
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @Environment(\.palette) private var palette
@@ -76,6 +81,7 @@ struct PresetCard: View {
             }
         }
         .padding(16)
+        .padding(.trailing, reservesStart ? Self.startSpace - 4 : 0)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tileBackground()
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))

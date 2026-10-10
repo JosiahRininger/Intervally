@@ -7,7 +7,7 @@ import Foundation
 import Observation
 
 /// How Intervally looks. Classic is the free look; Pastel is Intervally Pro.
-enum AppTheme: String, CaseIterable, Identifiable, Sendable {
+enum AppTheme: String, Codable, CaseIterable, Identifiable, Sendable {
     /// Raw values are stored, and travel between the devices: never rename them.
     case classic, pastel
 

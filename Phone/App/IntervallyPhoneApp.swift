@@ -3,14 +3,16 @@
 //  IntervallyPhone
 //
 
+import HealthKitUI
 import SwiftUI
 
-/// The iPhone companion: where workouts are planned, looked back on and Pro is bought.
-/// Workouts only ever run on the watch.
+/// Intervally on iPhone: where workouts are planned, run, looked back on, and Pro is bought.
+/// A workout runs here or on the watch, whichever it is started on.
 @main
 struct IntervallyPhoneApp: App {
     /// Created in `init`, so the store is listening before the first view appears.
     @State private var services: PhoneServices
+    @UIApplicationDelegateAdaptor(PhoneAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
@@ -27,6 +29,7 @@ struct IntervallyPhoneApp: App {
                 .environment(services.history)
                 .environment(services.reviews)
                 .environment(services.icon)
+                .environment(services.run)
         }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else {
@@ -44,5 +47,20 @@ struct IntervallyPhoneApp: App {
         #else
         PhoneRootView()
         #endif
+    }
+}
+
+/// Hands back a workout session that outlived the app: iOS relaunches an app whose session
+/// was still running when it crashed or was terminated, and says so as the scene connects.
+final class PhoneAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        if options.shouldHandleActiveWorkoutRecovery {
+            PhoneServices.live?.run.recoverWorkoutSession()
+        }
+        return UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
     }
 }

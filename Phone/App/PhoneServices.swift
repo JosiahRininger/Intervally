@@ -27,6 +27,11 @@ final class PhoneServices {
     let reviews: ReviewLedger
     /// The Home Screen icon, which follows the theme. Off until `start()`.
     let icon = AppIconFollower()
+    /// Workouts run on this iPhone: the run, its cues and its Live Activity.
+    let run: PhoneRun
+
+    /// The app's own services, for the app delegate's workout recovery. Never a test's.
+    private(set) static weak var live: PhoneServices?
 
     #if DEBUG
     /// The services the running app was launched with, so the unit tests can check that the
@@ -42,7 +47,8 @@ final class PhoneServices {
         theme: ThemeStore = ThemeStore(),
         sync: WatchSync? = nil,
         history: HistoryModel? = nil,
-        reviews: ReviewLedger = ReviewLedger()
+        reviews: ReviewLedger = ReviewLedger(),
+        run: PhoneRun? = nil
     ) {
         self.store = store
         self.pro = pro
@@ -50,6 +56,7 @@ final class PhoneServices {
         self.sync = sync ?? WatchSync(store: store, theme: theme)
         self.history = history ?? HistoryModel(source: HealthHistory())
         self.reviews = reviews
+        self.run = run ?? PhoneRun(store: store, pro: pro, theme: theme)
     }
 
     /// The app's own services, started. The only place the app creates them.
@@ -72,6 +79,7 @@ final class PhoneServices {
         #else
         let services = PhoneServices()
         #endif
+        live = services
         services.start()
         return services
     }
@@ -88,6 +96,8 @@ final class PhoneServices {
         pro.start()
         sync.activate()
         reviews.recordOpen()
+        // After Pro, so a restored run's plan is read with the entitlement already cached.
+        run.restoreAtLaunch()
     }
 
     /// The app came forward. Reads the entitlement again, so a purchase or refund made on
@@ -96,6 +106,7 @@ final class PhoneServices {
     /// a workout meanwhile.
     func handleForeground() async {
         reviews.recordOpen()
+        run.handleForeground()
         // An icon change that arrived in the background, from the watch or a refund.
         icon.cameForward()
         async let history: Void = history.handleForeground()

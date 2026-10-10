@@ -7,7 +7,7 @@ import SwiftUI
 
 /// The editor's ring: as large as lets the whole editor fit on screen, from 160 to 220 points.
 /// At a fixed 220, a 6.3-inch iPhone had to scroll to reach Warmup and Cooldown, which sat
-/// under Put on Watch.
+/// under the pinned buttons.
 enum EditorLayout {
     static let ringSides: ClosedRange<CGFloat> = 160...220
     /// The first-run line under the name, and where its dismissal is kept (per iPhone).
@@ -42,6 +42,7 @@ struct PresetEditorView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
+    @Environment(PhoneRun.self) private var run
     @Environment(ReviewLedger.self) private var reviews
     @Environment(\.requestReview) private var requestReview
     @Environment(\.dismiss) private var dismiss
@@ -79,9 +80,9 @@ struct PresetEditorView: View {
 
     private var actions: PresetActions { PresetActions(store: store, pro: pro) }
 
-    /// At the accessibility sizes the capsule wraps to two lines and a pinned one would cover
-    /// a third of the screen, so it follows the tiles instead.
-    private var pinsPutOnWatch: Bool { !typeSize.isAccessibilitySize }
+    /// At the accessibility sizes the capsules wrap to two lines and pinned ones would cover
+    /// a third of the screen, so they follow the tiles instead.
+    private var pinsActions: Bool { !typeSize.isAccessibilitySize }
 
     var body: some View {
         Group {
@@ -140,8 +141,8 @@ struct PresetEditorView: View {
                         SectionLabel("Warmup & Cooldown")
                         tiles(workout, fields: [.warmup, .cooldown])
                     }
-                    if sync.peer.hasWatch && !pinsPutOnWatch {
-                        putOnWatch(workout)
+                    if !pinsActions {
+                        actions(workout, stacked: true)
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { belowRing = $0 }
@@ -155,13 +156,12 @@ struct PresetEditorView: View {
         .appCanvas()
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.hard, for: .bottom)
-        // Pinned, so the one thing this screen sends to the watch is never below the fold. A
-        // bar rather than an inset, so the tiles fade out under it instead of showing through
-        // its glass.
+        // Pinned, so Start is never below the fold. A bar rather than an inset, so the tiles
+        // fade out under it instead of showing through its glass.
         .safeAreaBar(edge: .bottom) {
             // Not while the name is typed: it would ride on the keyboard over the tiles.
-            if sync.peer.hasWatch && pinsPutOnWatch && !nameFocused {
-                putOnWatch(workout)
+            if pinsActions && !nameFocused {
+                actions(workout, stacked: false)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
             }
@@ -295,18 +295,42 @@ struct PresetEditorView: View {
         store.update(workout)
     }
 
-    // MARK: - Put on Watch
+    // MARK: - Start and Put on Watch
 
-    /// The screen's one tinted control while it does something. Once this is the preset the
-    /// watch starts next it says so, in neutral glass: there is nothing left to tap.
+    /// Start, the screen's one tinted control, and beside it, with a watch, Put on Watch.
+    private func actions(_ workout: IntervalWorkout, stacked: Bool) -> some View {
+        let layout = stacked ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+        return layout {
+            Button {
+                // A name still being typed is part of the workout that starts.
+                commitName()
+                run.start(workout)
+            } label: {
+                Label(WorkoutsContent.startTitle, systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .prominentCapsule()
+            .accessibilityLabel("Start \(workout.name)")
+            if sync.peer.hasWatch {
+                putOnWatch(workout)
+            }
+        }
+    }
+
+    /// Neutral glass beside Start. Once this is the preset the watch starts next it says so,
+    /// with nothing left to tap.
     @ViewBuilder
     private func putOnWatch(_ workout: IntervalWorkout) -> some View {
         if actions.isUpNext(workout) {
-            Label("Up next on your watch", systemImage: "checkmark")
+            Label("On your watch", systemImage: "checkmark")
                 .font(.headline)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .glassEffect(.regular, in: .capsule)
                 .accessibilityElement(children: .combine)
+                .accessibilityLabel("Up next on your watch")
         } else {
             Button {
                 actions.putOnWatch(workout)
@@ -314,9 +338,13 @@ struct PresetEditorView: View {
             } label: {
                 Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
                     .font(.headline)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
                     .frame(maxWidth: .infinity, minHeight: 52)
             }
-            .prominentCapsule()
+            .buttonStyle(.glass)
+            .buttonBorderShape(.capsule)
+            .neutralGlass()
             .accessibilityHint("Makes this the workout your watch starts next")
         }
     }

@@ -16,9 +16,13 @@ enum WorkoutsContent {
     static let watchHint = "Open Intervally on your watch to bring your presets over."
     /// Makes a preset the one the watch starts next, from the library's menu and the editor.
     static let putOnWatchTitle = "Put on Watch"
+    /// Runs a workout on this iPhone.
+    static let startTitle = "Start"
 
+    /// The same words with a watch or without: the workout up next is the one either device
+    /// starts. Where there is a watch the card adds its glyph.
     static func upNextTitle(peer: PeerState) -> String {
-        peer.hasWatch ? "Up next on your watch" : "Up next"
+        "Up next"
     }
 
     /// Under the delete confirmation. Only an iPhone with a watch has one to remove it from.
@@ -33,17 +37,20 @@ enum WorkoutsContent {
     }
 }
 
-/// The preset library: the preset the watch starts next, then every preset.
+/// The preset library: the workout up next with Start, then every preset, each with its own
+/// play button.
 ///
 /// A list rather than a scroll view of cards, for swipe to delete and Edit's reorder. Only
 /// adding is gated: + and Duplicate at the free limit open the paywall first, and finish
 /// once a purchase there unlocks Pro.
 struct WorkoutsView: View {
     @Environment(WorkoutStore.self) private var store
+    @Environment(PhoneRun.self) private var run
     @Environment(ProStore.self) private var pro
     @Environment(ReviewLedger.self) private var reviews
     @Environment(\.requestReview) private var requestReview
     @Environment(WatchSync.self) private var sync
+    @Environment(\.palette) private var palette
 
     @State private var path: [WorkoutsRoute] = []
     @State private var sheet: Sheet?
@@ -137,17 +144,13 @@ struct WorkoutsView: View {
 
     private var upNext: some View {
         let selected = store.selected
-        return Button {
-            path.append(.editor(selected.id, isNew: false))
-        } label: {
-            UpNextCard(
-                content: PresetCardContent(workout: selected, isPro: pro.isPro),
-                title: WorkoutsContent.upNextTitle(peer: sync.peer),
-                showsWatch: sync.peer.hasWatch
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the editor")
+        return UpNextCard(
+            content: PresetCardContent(workout: selected, isPro: pro.isPro),
+            title: WorkoutsContent.upNextTitle(peer: sync.peer),
+            showsWatch: sync.peer.hasWatch,
+            open: { path.append(.editor(selected.id, isNew: false)) },
+            start: { run.start(selected) }
+        )
     }
 
     private func libraryCard(_ workout: IntervalWorkout) -> some View {
@@ -156,10 +159,31 @@ struct WorkoutsView: View {
         } label: {
             PresetCard(
                 content: PresetCardContent(workout: workout, isPro: pro.isPro),
-                isUpNext: sync.peer.hasWatch && actions.isUpNext(workout)
+                isUpNext: sync.peer.hasWatch && actions.isUpNext(workout),
+                reservesStart: !editMode.isEditing
             )
         }
         .buttonStyle(.plain)
+        .accessibilityHint("Opens the editor")
+        // Over the card, not inside its button: a button in another button's label takes
+        // neither tap reliably in a list row.
+        .overlay(alignment: .trailing) {
+            if !editMode.isEditing {
+                Button {
+                    run.start(workout)
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.body.weight(.bold))
+                        .frame(width: 44, height: 44)
+                }
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .tint(palette.brand)
+                .foregroundStyle(palette.onTint)
+                .padding(.trailing, 12)
+                .accessibilityLabel("Start \(workout.name)")
+            }
+        }
         .swipeActions(edge: .trailing) {
             if actions.canDelete {
                 Button(role: .destructive) {
@@ -170,6 +194,11 @@ struct WorkoutsView: View {
             }
         }
         .contextMenu {
+            Button {
+                run.start(workout)
+            } label: {
+                Label(WorkoutsContent.startTitle, systemImage: "play.fill")
+            }
             if sync.peer.hasWatch, !actions.isUpNext(workout) {
                 Button {
                     actions.putOnWatch(workout)

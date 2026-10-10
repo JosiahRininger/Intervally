@@ -14,6 +14,9 @@ import Observation
 /// times a year whatever the app asks. So the iPhone asks rarely, and only once someone has
 /// trained with Intervally for real.
 enum ReviewMoment: Equatable, Sendable {
+    /// Done, after a workout finished on this iPhone: the best moment there is. `count`
+    /// includes the one just finished.
+    case finishedWorkout(count: Int)
     /// Back from a session in History: a workout's payoff, seen on the iPhone.
     case lookedBackAtSession(sessionCount: Int)
     /// Just after Put on Watch, the iPhone's own job done. For the people who never connect
@@ -42,6 +45,7 @@ enum ReviewPolicy {
             return false
         }
         switch moment {
+        case .finishedWorkout(let count): return count >= minimumSessions
         case .lookedBackAtSession(let count): return count >= minimumSessions
         case .sentToWatch: return ledger.activeDays >= minimumActiveDays
         }

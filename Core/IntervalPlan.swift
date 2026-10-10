@@ -9,7 +9,7 @@ import Foundation
 /// a cooldown.
 struct IntervalPhase: Equatable, Sendable, Identifiable {
     /// Raw values are written to Health as workout metadata, so they must never be renamed.
-    enum Kind: String, Equatable, Sendable {
+    enum Kind: String, Codable, Equatable, Sendable {
         case prepare, warmup, work, rest, cooldown
 
         var title: String {

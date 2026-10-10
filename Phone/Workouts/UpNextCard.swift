@@ -5,14 +5,18 @@
 
 import SwiftUI
 
-/// The preset the watch starts next: the hero of the Workouts screen, drawn like the watch's
-/// own dial, with the total inside its ring.
+/// The workout up next: the hero of the Workouts screen, drawn like the watch's own dial with
+/// the total inside its ring, and Start under it. The same workout is the one the watch
+/// starts next.
 struct UpNextCard: View {
     let content: PresetCardContent
-    /// "Up next on your watch", or just "Up next" with no watch to speak of.
     let title: String
-    /// The watch's glyph beside the title, only where there is a watch.
+    /// The watch's glyph beside the title, only where there is a watch: the watch starts this
+    /// one next too.
     var showsWatch = true
+    /// Opens the editor: a tap anywhere on the card above Start.
+    var open: () -> Void = {}
+    var start: () -> Void = {}
 
     @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .title) private var ringSide: CGFloat = 104
@@ -20,27 +24,44 @@ struct UpNextCard: View {
     var body: some View {
         let ring = ringWithTotal
 
-        Group {
-            switch CardArrangement(typeSize: typeSize) {
-            case .row:
-                HStack(spacing: 18) {
-                    ring
-                    words
-                    Spacer(minLength: 0)
+        VStack(spacing: 16) {
+            Button(action: open) {
+                Group {
+                    switch CardArrangement(typeSize: typeSize) {
+                    case .row:
+                        HStack(spacing: 18) {
+                            ring
+                            words
+                            Spacer(minLength: 0)
+                        }
+                    case .stacked:
+                        VStack(alignment: .leading, spacing: 14) {
+                            ring
+                            words
+                        }
+                    }
                 }
-            case .stacked:
-                VStack(alignment: .leading, spacing: 14) {
-                    ring
-                    words
-                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("\(title). \(content.spokenSummary)")
+            .accessibilityValue(showsWatch ? "Also up next on your watch" : "")
+            .accessibilityHint("Opens the editor")
+
+            Button(action: start) {
+                Label(WorkoutsContent.startTitle, systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+            }
+            .prominentCapsule()
+            .accessibilityLabel("Start \(content.name)")
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tileBackground()
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(title). \(content.spokenSummary)")
     }
 
     /// Capped, so the largest text sizes grow the words rather than a ring that would push
@@ -60,11 +81,11 @@ struct UpNextCard: View {
 
     private var words: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Group {
+            HStack(spacing: 6) {
+                Text(title)
                 if showsWatch {
-                    Label(title, systemImage: "applewatch")
-                } else {
-                    Text(title)
+                    Image(systemName: "applewatch")
+                        .accessibilityHidden(true)
                 }
             }
             .font(.phaseLabel)
@@ -102,7 +123,7 @@ struct RhythmLine: View {
 }
 
 #Preview {
-    UpNextCard(content: PresetCardContent(workout: WorkoutStore.starterWorkouts[0], isPro: false), title: "Up next on your watch")
+    UpNextCard(content: PresetCardContent(workout: WorkoutStore.starterWorkouts[0], isPro: false), title: "Up next")
         .padding()
         .background(.black)
 }

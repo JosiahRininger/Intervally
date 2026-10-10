@@ -40,10 +40,15 @@ targets:
       # WatchConnectivity sync; the watch app gets it through Sources.
       - path: Sources/Sync
       - path: Sources/Views/ProgressRing.swift
+      # The run's Live Activity: started and updated here, drawn by IntervallyPhoneWidget.
+      - path: LiveActivity
     dependencies:
       # "Embed Watch Content" into $(CONTENTS_FOLDER_PATH)/Watch. embed defaults to true for an
       # app dependency; spelled out so nobody turns it off.
       - target: Intervally
+        embed: true
+      # The Live Activity's views, in PlugIns.
+      - target: IntervallyPhoneWidget
         embed: true
     info:
       path: Supporting/IntervallyPhone-Info.plist
@@ -62,20 +67,26 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSHealthShareUsageDescription: >-
-          Intervally shows the interval workouts your Apple Watch saved to Health: each
-          interval, your heart rate, and the active energy you burned.
-        # The iPhone never writes to Health (HealthHistory.shareTypes is empty), but it links
-        # the authorization call that can, and App Store Connect's purpose-string check reads
-        # the binary, not the call's arguments (ITMS-90683). True of the app as Health lists
-        # it: the watch app, under the same name, saves the workouts.
+          Intervally shows your interval workouts from Health: each interval, your heart
+          rate, and the active energy you burned.
         NSHealthUpdateUsageDescription: >-
-          Your Apple Watch saves your interval sessions to Health as workouts. Intervally on
-          iPhone only reads them.
+          Intervally saves your interval sessions to Health as workouts, so they count
+          toward your activity rings.
+        # The run's countdown on the Lock Screen and in the Dynamic Island.
+        NSSupportsLiveActivities: true
+        # Each interval change is a tone or the voice coach, played while the phone is locked
+        # during the run's HKWorkoutSession (iOS 26 runs one on iPhone). The cues are the
+        # audio: the app never plays silence to stay awake.
+        UIBackgroundModes:
+          - audio
     entitlements:
       path: Supporting/IntervallyPhone.entitlements
       properties:
-        # Read-only History. No App Group: a group container never crosses devices.
+        # Workouts run here are saved to Health; History reads them back. No App Group: a
+        # group container never crosses devices, and the Live Activity needs none.
         com.apple.developer.healthkit: true
+        # The notification backstop, when a run has no workout session (Health declined).
+        com.apple.developer.usernotifications.time-sensitive: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID)
@@ -92,6 +103,30 @@ targets:
         # only: watchOS has no alternate icons, and the watch keeps the dumbbell.
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: AppIcon-Pastel
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+
+  # The iPhone run's Live Activity: Lock Screen, Dynamic Island, a paired watch's Smart Stack.
+  IntervallyPhoneWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PhoneWidget
+      - path: LiveActivity
+      - path: Core
+      # The iPhone app's own manifest: the extension reads only its own defaults too.
+      - path: Phone/Resources/PrivacyInfo.xcprivacy
+    info:
+      path: Supporting/IntervallyPhoneWidget-Info.plist
+      properties:
+        CFBundleDisplayName: Intervally
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widget
+        TARGETED_DEVICE_FAMILY: "1"
+        SKIP_INSTALL: YES
 
   # The watch app. Installs and runs with or without the iPhone app.
   Intervally:

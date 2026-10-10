@@ -10,6 +10,7 @@ struct PhoneRootView: View {
     @Environment(ThemeStore.self) private var theme
     @Environment(ProStore.self) private var pro
     @Environment(AppIconFollower.self) private var icon
+    @Environment(PhoneRun.self) private var run
     @AppStorage(Welcome.seenKey, store: SharedDefaults.suite) private var welcomeSeen = false
     /// `-qaWelcome`: shown this launch whatever was seen before. Debug builds only.
     @State private var forceWelcome: Bool
@@ -23,11 +24,16 @@ struct PhoneRootView: View {
         // The Home Screen icon follows the theme that is really chosen and paid for: a
         // `-qaTheme` pin saves nothing, so it changes no icon either.
         let iconTheme = AppTheme.effective(stored: theme.stored, isPro: pro.isPro)
+        @Bindable var run = run
 
         Group {
             if welcomeSeen && !forceWelcome {
                 PhoneTabs()
                     .transition(.opacity)
+                    // Over everything, tabs and sheets alike, until the run is ended or done.
+                    .fullScreenCover(isPresented: $run.isPresented) {
+                        PhoneRunView()
+                    }
             } else {
                 WelcomeView {
                     withAnimation(.easeInOut(duration: 0.3)) {
@@ -53,8 +59,8 @@ enum PhoneTab: Hashable {
     case workouts, history
 }
 
-/// The app's two tabs: the workouts planned here, and the sessions the watch ran. Each has its
-/// own stack and its own gear for Settings.
+/// The app's two tabs: the workouts, and the sessions they came to. Each has its own stack
+/// and its own gear for Settings.
 struct PhoneTabs: View {
     @State private var tab = PhoneTab.workouts
 
