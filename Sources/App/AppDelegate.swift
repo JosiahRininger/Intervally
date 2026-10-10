@@ -3,6 +3,7 @@
 //  Intervally
 //
 
+import HealthKit
 import WatchKit
 import WidgetKit
 import os
@@ -68,6 +69,8 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
             log.info("complication reloaded: the iPhone changed the selected preset")
         }
         sync.onStateChange = { [weak self] in self?.connectivityWakes.reevaluate() }
+        // Start on Watch: the same door as Siri and Control Center.
+        sync.onStartRequest = { id in PendingStart.request(workoutID: id) }
         // The complication wears the theme. A choice made here reloads it from RootView; one
         // from the iPhone can land while no view exists, in a background wake.
         theme.onRemoteChange = { [log] in
@@ -170,6 +173,22 @@ final class AppDelegate: NSObject, WKApplicationDelegate {
         }
     }
     #endif
+
+    /// Start on Watch launched the app (`HKHealthStore.startWatchApp`). Which preset to run
+    /// comes with the presets, over sync (`WatchSync.onStartRequest`), usually before this.
+    /// If it hasn't in a moment, the preset up next starts, which the iPhone made the one
+    /// it asked for: a launch that started nothing would leave the user tapping Start.
+    func handle(_ workoutConfiguration: HKWorkoutConfiguration) {
+        log.info("the iPhone launched the app to start a workout")
+        phoneStartFallback?.cancel()
+        phoneStartFallback = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(2.5))
+            guard let self, !Task.isCancelled, !self.coordinator.engine.isActive else { return }
+            PendingStart.request(workoutID: nil)
+        }
+    }
+
+    private var phoneStartFallback: Task<Void, Never>?
 
     /// The system kept a workout session alive across the app's termination and is offering
     /// it back. Claim it: resume the run if it can be resumed, or save and end it if not.

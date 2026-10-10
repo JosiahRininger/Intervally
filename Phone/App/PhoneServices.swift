@@ -58,6 +58,8 @@ final class PhoneServices {
         self.history = history ?? HistoryModel(source: HealthHistory())
         self.reviews = reviews
         self.run = run ?? PhoneRun(store: store, pro: pro, theme: theme)
+        let sync = self.sync
+        self.run.requestWatchStart = { sync.requestStart(of: $0) }
     }
 
     /// The app's own services, started. The only place the app creates them.
@@ -99,6 +101,9 @@ final class PhoneServices {
     func start(isUnitTestHost: Bool = UnitTestHost.isActive) {
         guard !isUnitTestHost else { return }
         icon.isEnabled = true
+        // First of all: HealthKit may have launched the app in the background to hand over
+        // a watch run, and gives it seconds to take it.
+        run.mirror.start()
         pro.start()
         sync.activate()
         reviews.recordOpen()

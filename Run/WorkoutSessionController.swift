@@ -118,6 +118,8 @@ final class WorkoutSessionController: NSObject {
         }
         isRunning = (recovered.state == .running)
         log.info("adopted a recovered workout session")
+        // A relaunch lost the mirror with the old process; the iPhone picks the run up again.
+        startMirroring()
         return true
     }
 
@@ -328,6 +330,7 @@ final class WorkoutSessionController: NSObject {
 
             isRunning = true
             log.info("workout session started")
+            startMirroring()
             return true
         } catch {
             log.error("could not start workout session: \(error.localizedDescription, privacy: .public)")
@@ -399,6 +402,48 @@ final class WorkoutSessionController: NSObject {
         ]
         if !phase.kind.isBookend { metadata[roundMetadataKey] = phase.round }
         return metadata
+    }
+
+    // MARK: - Mirroring to the iPhone
+
+    /// Commands the iPhone's buttons sent for this run (`RunMirrorCommand`).
+    var onRemoteCommand: ((RunMirrorCommand) -> Void)?
+    /// Sent again once mirroring starts.
+    private var lastMirrored: RunMirrorState?
+
+    /// Hands the session to the iPhone app, which shows the run live and can pause, skip and
+    /// end it. Best effort: with no iPhone app, or the iPhone out of reach, the run carries on
+    /// exactly as before. Only the watch can mirror (watchOS 10).
+    private func startMirroring() {
+        #if os(watchOS)
+        guard let session else { return }
+        Task { @MainActor in
+            do {
+                try await session.startMirroringToCompanionDevice()
+                self.log.info("mirroring the workout to the iPhone")
+                // The run's first state went before the iPhone was there to take it.
+                if let lastMirrored = self.lastMirrored { self.mirror(lastMirrored) }
+            } catch {
+                self.log.notice("not mirrored to the iPhone: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        #endif
+    }
+
+    /// Sends the run as it now stands to the iPhone's mirror. Nothing without a session, and
+    /// nothing on iPhone, whose own sessions have no mirror.
+    func mirror(_ state: RunMirrorState) {
+        #if os(watchOS)
+        lastMirrored = state
+        guard let session, let data = RunMirrorMessage.state(state).encoded() else { return }
+        Task { @MainActor in
+            do {
+                try await session.sendToRemoteWorkoutSession(data: data)
+            } catch {
+                self.log.debug("mirror state not sent: \(error.localizedDescription, privacy: .public)")
+            }
+        }
+        #endif
     }
 
     func pause() {
@@ -496,6 +541,28 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
                 self.teardown()
                 self.onUnexpectedEnd?()
             }
+        }
+    }
+
+    nonisolated func workoutSession(
+        _ workoutSession: HKWorkoutSession, didReceiveDataFromRemoteWorkoutSession data: [Data]
+    ) {
+        let commands = data.compactMap(RunMirrorMessage.decoded).compactMap { message -> RunMirrorCommand? in
+            if case .command(let command) = message { return command }
+            return nil
+        }
+        guard !commands.isEmpty else { return }
+        Task { @MainActor in
+            for command in commands {
+                self.log.info("command from the iPhone: \(command.rawValue, privacy: .public)")
+                self.onRemoteCommand?(command)
+            }
+        }
+    }
+
+    nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didDisconnectFromRemoteDeviceWithError error: (any Error)?) {
+        Task { @MainActor in
+            self.log.notice("the iPhone's mirror disconnected: \(error?.localizedDescription ?? "no error", privacy: .public)")
         }
     }
 

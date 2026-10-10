@@ -16,6 +16,8 @@ enum WorkoutsContent {
     static let watchHint = "Open Intervally on your watch to bring your presets over."
     /// Makes a preset the one the watch starts next, from the library's menu and the editor.
     static let putOnWatchTitle = "Put on Watch"
+    /// Wakes the watch and runs the workout there, shown live on this iPhone.
+    static let startOnWatchTitle = "Start on Watch"
     /// Runs a workout on this iPhone.
     static let startTitle = "Start"
 
@@ -149,7 +151,8 @@ struct WorkoutsView: View {
             title: WorkoutsContent.upNextTitle(peer: sync.peer),
             showsWatch: sync.peer.hasWatch,
             open: { path.append(.editor(selected.id, isNew: false)) },
-            start: { run.start(selected) }
+            start: { run.start(selected) },
+            startOnWatch: sync.peer == .ready ? { run.startOnWatch(selected) } : nil
         )
     }
 
@@ -199,6 +202,13 @@ struct WorkoutsView: View {
                 run.start(workout)
             } label: {
                 Label(WorkoutsContent.startTitle, systemImage: "play.fill")
+            }
+            if sync.peer == .ready {
+                Button {
+                    run.startOnWatch(workout)
+                } label: {
+                    Label(WorkoutsContent.startOnWatchTitle, systemImage: "applewatch")
+                }
             }
             if sync.peer.hasWatch, !actions.isUpNext(workout) {
                 Button {

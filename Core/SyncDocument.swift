@@ -374,10 +374,31 @@ enum SyncWire {
     /// only `doc`, so it never sees the theme, never re-encodes it away, and its document
     /// still compares equal to this version's.
     static let themeKey = "theme"
+    /// A run the iPhone asked the watch to start (`StartRequest`), sent once, beside the
+    /// document. A version that predates it ignores the key.
+    static let startKey = "start"
+
+    /// Start on Watch: which preset, asked for when. The ID tells one request from the next,
+    /// so a context delivered twice starts nothing twice.
+    struct StartRequest: Codable, Equatable, Sendable {
+        let id: UUID
+        let presetID: UUID
+        let requestedAt: Date
+
+        /// A request this old was never picked up: the watch was off the wrist, or out of
+        /// reach. It must not start a workout the next time Intervally opens.
+        static let lifetime: TimeInterval = 60
+
+        func isFresh(at now: Date) -> Bool {
+            let age = now.timeIntervalSince(requestedAt)
+            return age < Self.lifetime && age > -30
+        }
+    }
 
     /// - Parameter theme: nil sends presets only, as a version that predates themes did.
     static func context(
-        for document: SyncDocument, theme: Register<String>? = nil, sentAt: Date = Date()
+        for document: SyncDocument, theme: Register<String>? = nil, sentAt: Date = Date(),
+        start: StartRequest? = nil
     ) throws -> [String: Any] {
         let encoder = JSONEncoder()
         encoder.outputFormatting = .sortedKeys
@@ -387,7 +408,16 @@ enum SyncWire {
         if let theme {
             context[themeKey] = try encoder.encode(theme)
         }
+        if let start {
+            context[startKey] = try encoder.encode(start)
+        }
         return context
+    }
+
+    /// The start request in `context`, or nil. Like `document(from:)`, for the delegate queue.
+    static func startRequest(from context: [String: Any]) -> StartRequest? {
+        guard let data = context[startKey] as? Data else { return nil }
+        return try? JSONDecoder().decode(StartRequest.self, from: data)
     }
 
     /// The theme in `context`, or nil where there is none: from a version that predates

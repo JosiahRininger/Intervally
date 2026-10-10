@@ -51,21 +51,23 @@ struct PhoneRunView: View {
     /// The first run on this iPhone says how to set the beeps' volume, once.
     @AppStorage(RunScreenLayout.soundTipSeenKey, store: SharedDefaults.suite) private var soundTipSeen = false
 
-    private var coordinator: RunCoordinator { run.coordinator }
-    private var engine: TimerEngine { coordinator.engine }
+    /// This iPhone's run, or the watch's when the screen mirrors one.
+    private var engine: TimerEngine { run.engine }
 
     var body: some View {
         GeometryReader { proxy in
             TimelineView(.animation(minimumInterval: 0.1, paused: engine.status != .running)) { _ in
-                if engine.status == .finished, let summary = coordinator.summary {
-                    RunSummaryView(summary: summary, workoutName: engine.plan.workout.name) {
+                if engine.status == .finished, let summary = run.summary {
+                    RunSummaryView(
+                        summary: summary, workoutName: engine.plan.workout.name, onWatch: run.isMirroring
+                    ) {
                         done()
                     } repeatRun: {
                         // A tap landing while Done closes the screen must not start a run
                         // with nothing showing it.
-                        guard run.isPresented, engine.status == .finished else { return }
+                        guard run.isPresented, engine.status == .finished, !run.isMirroring else { return }
                         countedFinish = false
-                        coordinator.restart()
+                        run.coordinator.restart()
                     }
                 } else {
                     running(engine.position, size: proxy.size)
@@ -81,12 +83,13 @@ struct PhoneRunView: View {
         }
         .preferredColorScheme(palette.colorScheme)
         .confirmationDialog("End workout?", isPresented: $confirmingEnd, titleVisibility: .visible) {
-            Button("End Workout", role: .destructive) { run.close() }
+            Button("End Workout", role: .destructive) { run.end() }
             Button("Keep Going", role: .cancel) {}
         } message: {
-            Text("This workout won't be saved.")
+            Text(run.isMirroring ? "It ends on your Apple Watch too, and won't be saved." : "This workout won't be saved.")
         }
-        .onAppear { coordinator.begin() }
+        // A watch run is already going: only this iPhone's own run starts here.
+        .onAppear { if !run.isMirroring { run.coordinator.begin() } }
         .onChange(of: run.keepsScreenAwake, initial: true) { _, awake in
             UIApplication.shared.isIdleTimerDisabled = awake
         }
@@ -147,7 +150,7 @@ struct PhoneRunView: View {
                 hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
                     .padding(.bottom, 16)
                     .transition(.opacity)
-            } else if !soundTipSeen, position.phase?.kind == .prepare {
+            } else if !soundTipSeen, !run.isMirroring, position.phase?.kind == .prepare {
                 // While getting ready, before the first change: the moment to set the volume.
                 hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
                     .padding(.bottom, 16)
@@ -187,6 +190,12 @@ struct PhoneRunView: View {
             Text(engine.plan.workout.name)
                 .font(.headline)
                 .lineLimit(1)
+            if run.isMirroring {
+                // The watch runs it and taps the wrist; this screen follows it live.
+                Label("On your Apple Watch", systemImage: "applewatch")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(palette.workInk)
+            }
             Text("\(DurationFormat.timer(Int(engine.position.remainingTotal.rounded(.up)))) left")
                 .font(.subheadline.weight(.medium))
                 .monospacedDigit()
@@ -245,7 +254,7 @@ struct PhoneRunView: View {
             Spacer()
 
             Button {
-                coordinator.togglePause()
+                run.togglePause()
             } label: {
                 Image(systemName: paused ? "play.fill" : "pause.fill")
                     .font(.system(size: 34, weight: .bold))
@@ -262,7 +271,7 @@ struct PhoneRunView: View {
             Spacer()
 
             Button {
-                coordinator.skip()
+                run.skip()
             } label: {
                 Image(systemName: "forward.end.fill")
                     .font(.system(size: 22, weight: .semibold))
@@ -292,7 +301,7 @@ struct PhoneRunView: View {
     /// few: the system decides whether to show anything.
     private func done() {
         guard run.isPresented, engine.status == .finished else { return }
-        run.close()
+        run.done()
         reviews.ask(.finishedWorkout(count: run.finishedRuns), using: requestReview)
     }
 }
@@ -301,6 +310,8 @@ struct PhoneRunView: View {
 struct RunSummaryView: View {
     let summary: RunCoordinator.Summary
     let workoutName: String
+    /// A run the watch ran: it repeats from the watch, not from here.
+    var onWatch = false
     let done: () -> Void
     let repeatRun: () -> Void
 
@@ -345,14 +356,16 @@ struct RunSummaryView: View {
                         .frame(maxWidth: .infinity, minHeight: 52)
                 }
                 .prominentCapsule()
-                Button(action: repeatRun) {
-                    Label("Repeat", systemImage: "arrow.counterclockwise")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: 48)
+                if !onWatch {
+                    Button(action: repeatRun) {
+                        Label("Repeat", systemImage: "arrow.counterclockwise")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.capsule)
+                    .neutralGlass()
                 }
-                .buttonStyle(.glass)
-                .buttonBorderShape(.capsule)
-                .neutralGlass()
             }
             .frame(maxWidth: 420)
             .padding(.horizontal, 24)
@@ -369,7 +382,7 @@ struct RunSummaryView: View {
         case .notRecorded:
             EmptyView()
         case .saving:
-            Label("Saving to Health", systemImage: "heart")
+            Label(onWatch ? "Your watch is saving it to Health" : "Saving to Health", systemImage: "heart")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         case .saved:

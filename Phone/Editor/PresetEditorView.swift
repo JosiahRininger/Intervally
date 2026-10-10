@@ -297,7 +297,8 @@ struct PresetEditorView: View {
 
     // MARK: - Start and Put on Watch
 
-    /// Start, the screen's one tinted control, and beside it, with a watch, Put on Watch.
+    /// Start, the screen's one tinted control, and beside it, with a watch, Start on Watch;
+    /// Put on Watch where the watch app can't be woken yet, and in the menu otherwise.
     private func actions(_ workout: IntervalWorkout, stacked: Bool) -> some View {
         let layout = stacked ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
         return layout {
@@ -312,7 +313,22 @@ struct PresetEditorView: View {
             }
             .prominentCapsule()
             .accessibilityLabel("Start \(workout.name)")
-            if sync.peer.hasWatch {
+            if sync.peer == .ready {
+                Button {
+                    commitName()
+                    run.startOnWatch(workout)
+                } label: {
+                    Label(WorkoutsContent.startOnWatchTitle, systemImage: "applewatch")
+                        .font(.headline)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .neutralGlass()
+                .accessibilityLabel("Start \(workout.name) on Apple Watch")
+            } else if sync.peer.hasWatch {
                 putOnWatch(workout)
             }
         }
@@ -355,6 +371,14 @@ struct PresetEditorView: View {
     private func menu(_ workout: IntervalWorkout) -> some ToolbarContent {
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
+                if sync.peer == .ready, !actions.isUpNext(workout) {
+                    Button {
+                        actions.putOnWatch(workout)
+                        reviews.ask(.sentToWatch, using: requestReview)
+                    } label: {
+                        Label(WorkoutsContent.putOnWatchTitle, systemImage: "applewatch")
+                    }
+                }
                 Button {
                     duplicate()
                 } label: {

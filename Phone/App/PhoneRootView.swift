@@ -44,6 +44,22 @@ struct PhoneRootView: View {
                 .transition(.opacity)
             }
         }
+        .overlay(alignment: .top) {
+            if run.watchStart == .starting {
+                WatchStartingBanner()
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(duration: 0.35), value: run.watchStart)
+        .alert(
+            "Couldn't Reach Your Watch",
+            isPresented: Binding { run.watchStart == .failed } set: { if !$0 { run.dismissWatchStartFailure() } }
+        ) {
+            Button("Start on iPhone") { run.startHereInstead() }
+            Button("OK", role: .cancel) { run.dismissWatchStartFailure() }
+        } message: {
+            Text("Make sure your Apple Watch is on your wrist, unlocked and nearby, then try again.")
+        }
         .background(palette.canvas)
         // Read by every screen, sheets and pushed screens included, so a new theme, from
         // Settings, the watch or Pro lapsing, redraws them all in place.
@@ -76,5 +92,21 @@ struct PhoneTabs: View {
         #if DEBUG
         .modifier(TabsQAOpen(tab: $tab))
         #endif
+    }
+}
+
+/// While Start on Watch wakes the watch: gone once the watch's run shows here.
+private struct WatchStartingBanner: View {
+    var body: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text("Starting on your Apple Watch…")
+                .font(.subheadline.weight(.semibold))
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 12)
+        .glassEffect(.regular, in: .capsule)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
     }
 }

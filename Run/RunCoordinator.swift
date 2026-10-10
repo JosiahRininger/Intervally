@@ -9,6 +9,17 @@ import SwiftUI
 import WidgetKit
 import os
 
+extension RunMirrorState.Health {
+    init(_ health: RunCoordinator.HealthSave) {
+        self = switch health {
+        case .notRecorded: .notRecorded
+        case .saving: .saving
+        case .saved: .saved
+        case .failed: .failed
+        }
+    }
+}
+
 /// Owns a workout run and everything that has to happen around it.
 ///
 /// The layering is deliberate, because no single watchOS mechanism covers every case:
@@ -79,6 +90,10 @@ final class RunCoordinator {
     }
 
     private(set) var summary: Summary?
+
+    /// Counts runs the iPhone ended, so the watch's screen can close itself. A run ended here
+    /// closes its own screen; one ended from the iPhone's mirror has nobody on the watch to.
+    private(set) var endedRemotely = 0
 
     @ObservationIgnored private var hasRequestedPermissions = false
 
@@ -154,6 +169,7 @@ final class RunCoordinator {
         self.reloadWidgets = reloadWidgets
         self.presenter = presenter
         self.engine = TimerEngine(workout: store.selected.effective(isPro: pro.isPro))
+        self.workout.onRemoteCommand = { [weak self] command in self?.handleRemote(command) }
     }
 
     // MARK: - Test seams
@@ -465,6 +481,28 @@ final class RunCoordinator {
         presenter.present(RunPresentation(engine: engine))
     }
 
+    /// Sends the run to the iPhone that mirrors its workout session, at every change of
+    /// shape. Phase changes need no message: the iPhone counts from the same anchor.
+    private func mirror() {
+        workout.mirror(RunMirrorState(engine: engine, health: summary.map { RunMirrorState.Health($0.health) }))
+    }
+
+    /// What the iPhone's mirror asked for.
+    private func handleRemote(_ command: RunMirrorCommand) {
+        switch command {
+        case .togglePause:
+            togglePause()
+        case .skip:
+            guard engine.status == .running || engine.status == .paused else { return }
+            skip()
+        case .end:
+            guard engine.isActive else { return }
+            stopAndExit()
+            endedRemotely += 1
+        case .refresh:
+            mirror()
+        }
+    }
 
     func togglePause() {
         switch engine.status {
@@ -644,5 +682,6 @@ final class RunCoordinator {
         // its own, so there is nothing to reload every second.
         reloadWidgets()
         present()
+        mirror()
     }
 }

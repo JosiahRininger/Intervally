@@ -35,6 +35,10 @@ protocol WorkoutSessioning: AnyObject {
     func start(at date: Date, for workout: IntervalWorkout) async -> Bool
     /// Segments the session so each interval becomes its own activity in Health.
     func beginActivity(for phase: IntervalPhase, at date: Date)
+    /// Sends the run, as it now stands, to the iPhone that mirrors this session.
+    func mirror(_ state: RunMirrorState)
+    /// Commands from the iPhone mirroring this session.
+    var onRemoteCommand: ((RunMirrorCommand) -> Void)? { get set }
     func pause()
     func resume()
     @discardableResult func end(at date: Date) async -> Bool
@@ -42,6 +46,13 @@ protocol WorkoutSessioning: AnyObject {
 }
 
 extension WorkoutSessioning {
+    /// Sends the run to the iPhone's mirror (`RunMirrorState`). A stand-in sends nothing.
+    func mirror(_ state: RunMirrorState) {}
+    /// What the iPhone's buttons ask of the run. A stand-in never hears from one.
+    var onRemoteCommand: ((RunMirrorCommand) -> Void)? {
+        get { nil }
+        set {}
+    }
     func adoptRecoveredSession(for workout: IntervalWorkout) async -> Bool { await adoptRecoveredSession() }
     func beginActivity(for phase: IntervalPhase) { beginActivity(for: phase, at: Date()) }
     func start() async -> Bool { await start(at: Date()) }

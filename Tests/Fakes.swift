@@ -51,6 +51,12 @@ final class FakeWorkoutSession: WorkoutSessioning {
     /// permission sheet is still on screen.
     var authorizationGate: Gate?
 
+    /// Set by the coordinator: the iPhone's buttons, as the mirrored session delivers them.
+    var onRemoteCommand: ((RunMirrorCommand) -> Void)?
+    /// Every state sent to the iPhone's mirror, in order.
+    private(set) var mirrored: [RunMirrorState] = []
+    func mirror(_ state: RunMirrorState) { mirrored.append(state) }
+
     private(set) var startCount = 0
     private(set) var recoveryAttempts = 0
     private(set) var pauseCount = 0

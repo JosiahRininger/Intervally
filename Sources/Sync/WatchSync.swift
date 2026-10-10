@@ -48,6 +48,9 @@ final class WatchSync: NSObject {
     @ObservationIgnored var onRemoteApplied: ((WorkoutStore.MergeResult) -> Void)?
     /// Something a background wake waits on may have changed (`activity`).
     @ObservationIgnored var onStateChange: (() -> Void)?
+    /// The watch: the iPhone asked to start this preset (Start on Watch). Called once per
+    /// request, and only while it is fresh, after the presets that came with it are merged.
+    @ObservationIgnored var onStartRequest: ((UUID) -> Void)?
 
     /// Whether `activate()` started the session.
     @ObservationIgnored private(set) var isActive = false
@@ -59,6 +62,8 @@ final class WatchSync: NSObject {
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
+    /// Where the last start request acted on is remembered.
+    @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var pendingPush: Task<Void, Never>?
 
     /// Written on the delegate queue, read on the main actor.
@@ -75,9 +80,11 @@ final class WatchSync: NSObject {
         transport: any SyncTransport = WCSessionTransport(),
         debounce: Duration = .milliseconds(800),
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        defaults: UserDefaults = SharedDefaults.suite
     ) {
         self.store = store
+        self.defaults = defaults
         self.theme = theme
         self.transport = transport
         self.debounce = debounce
@@ -173,6 +180,43 @@ final class WatchSync: NSObject {
             || SyncWire.theme(from: transport.receivedApplicationContext) == theme
     }
 
+    // MARK: - Start on Watch
+
+    /// The iPhone: asks the watch to start `presetID`, beside the presets it is in, so the
+    /// watch has the preset before it starts it. False when the watch can't be reached.
+    @discardableResult
+    func requestStart(of presetID: UUID) -> Bool {
+        pendingPush?.cancel()
+        pendingPush = nil
+        guard PeerState(transport.snapshot) == .ready, !store.isSyncSuspended else { return false }
+        let request = SyncWire.StartRequest(id: UUID(), presetID: presetID, requestedAt: now())
+        do {
+            let sentAt = now()
+            try transport.updateApplicationContext(
+                SyncWire.context(for: store.document, theme: theme?.register, sentAt: sentAt, start: request)
+            )
+            lastSentAt = sentAt
+            log.info("asked the watch to start a preset")
+            return true
+        } catch {
+            log.error("start request not sent: \(error.localizedDescription, privacy: .public)")
+            return false
+        }
+    }
+
+    /// Where the last request the watch acted on is remembered, so a context delivered again,
+    /// or read again at the next launch, starts nothing.
+    nonisolated static let handledStartKey = "sync.handledStartRequest.v1"
+
+    /// The watch: a start request arrived. The presets that came with it are merged first.
+    func receiveStart(_ request: SyncWire.StartRequest?) {
+        guard let request, request.isFresh(at: now()) else { return }
+        guard defaults.string(forKey: Self.handledStartKey) != request.id.uuidString else { return }
+        defaults.set(request.id.uuidString, forKey: Self.handledStartKey)
+        log.info("the iPhone asked to start a preset")
+        onStartRequest?(request.presetID)
+    }
+
     // MARK: - Receiving
 
     /// A context the other device just delivered; nil if it held no readable document. It is
@@ -234,6 +278,8 @@ final class WatchSync: NSObject {
         // so whether to answer is left to push(), which skips what the other device holds.
         if let pending = SyncWire.document(from: received) { merge(pending) }
         if let pendingTheme = SyncWire.theme(from: received) { _ = mergeTheme(pendingTheme) }
+        // Start on Watch launches the app; the request it came with may be waiting here.
+        receiveStart(SyncWire.startRequest(from: received))
         push()
     }
 
@@ -280,7 +326,11 @@ extension WatchSync: WCSessionDelegate {
         // Decoded here: the dictionary isn't Sendable, the document and the theme are.
         let remote = SyncWire.document(from: applicationContext)
         let theme = SyncWire.theme(from: applicationContext)
-        deliver { $0.receive(remote, theme: theme) }
+        let start = SyncWire.startRequest(from: applicationContext)
+        deliver { sync in
+            sync.receive(remote, theme: theme)
+            sync.receiveStart(start)
+        }
     }
 
     #if os(iOS)

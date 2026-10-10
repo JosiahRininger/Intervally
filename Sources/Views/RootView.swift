@@ -118,6 +118,10 @@ struct RootView: View {
         .onChange(of: store.selectedID) {
             navigation.selectedPresetChanged()
         }
+        // The iPhone's mirror ended the run: nobody here tapped End to close its screen.
+        .onChange(of: coordinator.endedRemotely) {
+            navigation.setRunning(false)
+        }
         .onChange(of: navigation.isRunning) { _, running in
             guard running else { return }
             // The run's anchor rather than the clock: a run restored after a relaunch
