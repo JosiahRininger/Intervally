@@ -128,11 +128,15 @@ final class PhoneRun {
         isMirroring ? mirror.send(.skip) : coordinator.skip()
     }
 
-    /// End, confirmed. A watch run ends on the watch, and its screen here closes when the
-    /// watch says so.
+    /// End, confirmed. A watch run is ended on the watch, and its screen here closes at once,
+    /// as for a run here: a watch out of reach must not leave it stuck open. If the watch
+    /// carries on, its next change brings it back.
     func end() {
         if isMirroring {
             mirror.send(.end)
+            mirror.close()
+            presenter.present(nil)
+            isPresented = false
         } else {
             close()
         }

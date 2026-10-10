@@ -106,7 +106,8 @@ private struct WatchStartingBanner: View {
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .glassEffect(.regular, in: .capsule)
-        .padding(.top, 4)
+        // Under the toolbar's buttons, over the large title: gone in seconds.
+        .padding(.top, 56)
         .accessibilityElement(children: .combine)
     }
 }

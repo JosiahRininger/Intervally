@@ -79,7 +79,7 @@ final class PhoneServices {
         services.applyQAEdits()
         if let isPro = qa.pro { services.pro.overrideForQA(isPro) }
         if let pinned = qa.theme { services.theme.pinForQA(pinned) }
-        if let elapsed = qa.runElapsed {
+        if let elapsed = qa.runElapsed, qa.watchRun == nil {
             // Restored by `start()`, exactly as a run interrupted by a termination would be.
             let workout = store.selected.effective(isPro: services.pro.isPro)
             store.saveActiveRun(RunSnapshot(workout: workout, anchor: Date().addingTimeInterval(-elapsed), pausedElapsed: nil))
@@ -89,6 +89,19 @@ final class PhoneServices {
         #endif
         live = services
         services.start()
+        #if DEBUG
+        if let status = qa.watchRun {
+            // What the watch would send: the iPhone's mirror can't be fed by a simulator.
+            let elapsed = qa.runElapsed ?? 40
+            let workout = store.selected.effective(isPro: services.pro.isPro)
+            services.run.mirror.apply(RunMirrorState(
+                workout: workout, status: status,
+                anchor: status == .running ? Date().addingTimeInterval(-elapsed) : nil,
+                pausedElapsed: status == .paused ? elapsed : nil,
+                health: status == .finished ? .saved : nil
+            ))
+        }
+        #endif
         return services
     }
 

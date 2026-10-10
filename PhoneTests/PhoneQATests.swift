@@ -26,6 +26,9 @@ struct PhoneQATests {
         #expect(PhoneQAOptions.parse(["-qaRunElapsed", "95"]).runElapsed == 95)
         #expect(PhoneQAOptions.parse(["-qaRunElapsed", "-5"]).runElapsed == nil, "Reads as a flag")
         #expect(PhoneQAOptions.parse(["-qaRunElapsed", "soon"]).runElapsed == nil)
+        #expect(PhoneQAOptions.parse(["-qaWatchRun", "paused"]).watchRun == .paused)
+        #expect(PhoneQAOptions.parse(["-qaWatchRun", "stopped"]).watchRun == nil, "Nothing to show")
+        #expect(PhoneQAOptions.parse(["-qaWatchRun", "paused"]).isActive)
     }
 
     @Test("No flags, no overrides")

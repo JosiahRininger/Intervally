@@ -21,6 +21,7 @@ struct UpNextCard: View {
     var startOnWatch: (() -> Void)?
 
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.palette) private var palette
     @ScaledMetric(relativeTo: .title) private var ringSide: CGFloat = 104
 
     var body: some View {
@@ -60,63 +61,32 @@ struct UpNextCard: View {
         .contentShape(.contextMenuPreview, RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    /// Start, and Start on Watch beside it: in words where they fit side by side, the watch's
-    /// glyph alone where they don't, one above the other at the accessibility sizes.
-    @ViewBuilder
+    /// Start, and under it, where there is a watch to wake, Start on Apple Watch: quieter,
+    /// as Start is the one most taps want.
     private var buttons: some View {
-        if let startOnWatch {
-            if typeSize.isAccessibilitySize {
-                VStack(spacing: 12) {
-                    startButton
-                    watchButton(startOnWatch, titled: true)
-                }
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        startButton
-                        watchButton(startOnWatch, titled: true)
-                            .fixedSize()
-                    }
-                    HStack(spacing: 12) {
-                        startButton
-                        watchButton(startOnWatch, titled: false)
-                    }
-                }
+        VStack(spacing: 6) {
+            Button(action: start) {
+                Label(WorkoutsContent.startTitle, systemImage: "play.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 52)
             }
-        } else {
-            startButton
-        }
-    }
+            .prominentCapsule()
+            .accessibilityLabel("Start \(content.name)")
 
-    private var startButton: some View {
-        Button(action: start) {
-            Label(WorkoutsContent.startTitle, systemImage: "play.fill")
-                .font(.headline)
-                .frame(maxWidth: .infinity, minHeight: 52)
-        }
-        .prominentCapsule()
-        .accessibilityLabel("Start \(content.name)")
-    }
-
-    private func watchButton(_ action: @escaping () -> Void, titled: Bool) -> some View {
-        Button(action: action) {
-            Group {
-                if titled {
-                    Label(WorkoutsContent.startOnWatchTitle, systemImage: "applewatch")
-                        .padding(.horizontal, 8)
-                } else {
-                    Image(systemName: "applewatch")
-                        .frame(width: 52)
+            if let startOnWatch {
+                Button(action: startOnWatch) {
+                    Label("Start on Apple Watch", systemImage: "applewatch")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(palette.workInk)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Start \(content.name) on Apple Watch")
             }
-            .font(.headline)
-            .lineLimit(1)
-            .frame(maxWidth: typeSize.isAccessibilitySize ? .infinity : nil, minHeight: 52)
         }
-        .buttonStyle(.glass)
-        .buttonBorderShape(.capsule)
-        .neutralGlass()
-        .accessibilityLabel("Start \(content.name) on Apple Watch")
+        // The text button's own height stands in for the card's bottom padding.
+        .padding(.bottom, startOnWatch == nil ? 0 : -8)
     }
 
     /// Capped, so the largest text sizes grow the words rather than a ring that would push

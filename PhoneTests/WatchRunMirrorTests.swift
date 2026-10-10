@@ -90,6 +90,20 @@ struct WatchRunMirrorTests {
         #expect(run.mirror.engine == nil)
     }
 
+    @Test("End closes a watch run's screen and Lock Screen at once, reachable watch or not")
+    func endHere() {
+        let (run, _) = makeRun()
+        run.mirror.apply(state(.running, anchor: Date()))
+        run.end()
+        #expect(run.isPresented == false)
+        #expect(run.mirror.engine == nil)
+        #expect(presenter.shown.last == .some(nil))
+
+        // The watch carried on: its next change shows it again.
+        run.mirror.apply(state(.paused, pausedElapsed: 12))
+        #expect(run.isPresented)
+    }
+
     @Test("The session ending just short of the end is the finish, not a stop")
     func endedAtTheFinish() {
         let (run, _) = makeRun()
