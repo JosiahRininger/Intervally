@@ -78,6 +78,7 @@ struct SoundsSettingsView: View {
                 Text("While a workout is on screen, so the countdown stays in view.")
             }
         }
+        .readableList()
         .appCanvas()
         .navigationTitle(SoundsRow.title)
         .navigationBarTitleDisplayMode(.inline)

@@ -312,12 +312,27 @@ struct RunPresentationTests {
 
 @Suite("Run screen")
 struct RunScreenLayoutTests {
+    @Test("Only a short landscape screen puts the ring beside the controls")
+    func sideBySide() {
+        // iPhone Duo's inner screen, opened.
+        #expect(RunScreenLayout.isSideBySide(width: 951, height: 640))
+        #expect(RunScreenLayout.sideRingSide(width: 951, height: 640) == 436)
+        // Every iPhone, iPad either way up, and the Duo closed stack them.
+        #expect(!RunScreenLayout.isSideBySide(width: 402, height: 780))
+        #expect(!RunScreenLayout.isSideBySide(width: 1376, height: 980))
+        #expect(!RunScreenLayout.isSideBySide(width: 1032, height: 1300))
+        #expect(!RunScreenLayout.isSideBySide(width: 381, height: 640))
+    }
+
     @Test("The ring fills the width with a margin, and leaves the controls room on an SE")
     func ringSide() {
         #expect(RunScreenLayout.ringSide(width: 402, height: 780) == 346)
         #expect(RunScreenLayout.ringSide(width: 440, height: 860) == 380)
         #expect(RunScreenLayout.ringSide(width: 375, height: 560) == 280)
         #expect(RunScreenLayout.ringSide(width: 320, height: 300) == 220, "Never below 220")
+        // iPad: room for more than any iPhone's 380.
+        #expect(RunScreenLayout.ringSide(width: 1032, height: 1300) == 520)
+        #expect(RunScreenLayout.ringSide(width: 1376, height: 980) == 490)
     }
 
     @Test("Round 3 of 8 only in the work and rest of a run with rounds")

@@ -68,7 +68,7 @@ struct WatchStatusView: View {
             .padding(.bottom, 24)
             // Short states would otherwise leave the scroll view as narrow as their words,
             // with the sheet's grey either side.
-            .frame(maxWidth: .infinity)
+            .readableColumn()
         }
         .appCanvas()
         .navigationTitle("Apple Watch")

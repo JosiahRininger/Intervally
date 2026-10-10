@@ -153,6 +153,7 @@ struct PhoneSettingsView: View {
                     Text("Intervally \(Self.version)")
                 }
             }
+            .readableList()
             .appCanvas()
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)

@@ -4,6 +4,7 @@
 //
 
 import Charts
+import StoreKit
 import SwiftUI
 
 /// One session: the phases that ran as a ring, its totals, calories and heart rate per
@@ -41,6 +42,7 @@ struct SessionDetailView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+            .readableColumn()
         }
         .appCanvas()
         .navigationTitle(session.title)

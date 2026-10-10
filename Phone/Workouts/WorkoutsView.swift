@@ -3,6 +3,7 @@
 //  IntervallyPhone
 //
 
+import StoreKit
 import SwiftUI
 
 /// A screen pushed on the Workouts stack.
@@ -93,6 +94,7 @@ struct WorkoutsView: View {
                 .onMove { actions.move(fromOffsets: $0, toOffset: $1) }
             }
             .listStyle(.plain)
+            .readableList()
             .environment(\.editMode, $editMode)
             .appCanvas()
             .navigationTitle("Workouts")
@@ -157,20 +159,21 @@ struct WorkoutsView: View {
     }
 
     private func libraryCard(_ workout: IntervalWorkout) -> some View {
-        Button {
-            path.append(.editor(workout.id, isNew: false))
-        } label: {
-            PresetCard(
-                content: PresetCardContent(workout: workout, isPro: pro.isPro),
-                isUpNext: sync.peer.hasWatch && actions.isUpNext(workout),
-                reservesStart: !editMode.isEditing
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityHint("Opens the editor")
-        // Over the card, not inside its button: a button in another button's label takes
-        // neither tap reliably in a list row.
-        .overlay(alignment: .trailing) {
+        // Side by side in one row, never one over the other: a list sends a tap anywhere in a
+        // row to the row's button, and a play button laid over the card opened the editor.
+        ZStack(alignment: .trailing) {
+            Button {
+                path.append(.editor(workout.id, isNew: false))
+            } label: {
+                PresetCard(
+                    content: PresetCardContent(workout: workout, isPro: pro.isPro),
+                    isUpNext: sync.peer.hasWatch && actions.isUpNext(workout),
+                    reservesStart: !editMode.isEditing
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint("Opens the editor")
+
             if !editMode.isEditing {
                 Button {
                     run.start(workout)
@@ -183,7 +186,7 @@ struct WorkoutsView: View {
                         .frame(width: PresetCard.startSide, height: PresetCard.startSide)
                         .glassEffect(.regular.tint(palette.brand).interactive(), in: .circle)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .padding(.trailing, PresetCard.startMargin)
                 .accessibilityLabel("Start \(workout.name)")
             }

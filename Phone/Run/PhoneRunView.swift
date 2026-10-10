@@ -3,6 +3,7 @@
 //  IntervallyPhone
 //
 
+import StoreKit
 import SwiftUI
 
 /// How big the run screen's ring is: as wide as the screen allows with a margin, but never so
@@ -14,7 +15,25 @@ enum RunScreenLayout {
     static func ringSide(width: CGFloat, height: CGFloat) -> CGFloat {
         let byWidth = width - 56
         let byHeight = height * 0.5
-        return max(220, min(380, byWidth, byHeight)).rounded()
+        return max(220, min(largest(width: width, height: height), byWidth, byHeight)).rounded()
+    }
+
+    /// The ring beside everything else rather than above it: a landscape screen too short to
+    /// stack them, as iPhone Duo's inner screen is, opened. iPad's is tall enough to stack.
+    static func isSideBySide(width: CGFloat, height: CGFloat) -> Bool {
+        width > height * 1.2 && height < 760
+    }
+
+    /// Beside the controls: as tall as the screen allows, and no wider than half of it.
+    static func sideRingSide(width: CGFloat, height: CGFloat) -> CGFloat {
+        let byWidth = width * 0.5 - 40
+        let byHeight = height - 48
+        return max(200, min(largest(width: width, height: height), byWidth, byHeight)).rounded()
+    }
+
+    /// 380 on every iPhone; an iPad-sized screen has room for more.
+    private static func largest(width: CGFloat, height: CGFloat) -> CGFloat {
+        min(width, height) >= 600 ? 520 : 380
     }
 
     /// The next phase, as the line under the ring says it: "Next: Rest 0:15", or the end.
@@ -111,53 +130,38 @@ struct PhoneRunView: View {
             engine.plan.phases.indices.contains(index + 1) ? engine.plan.phases[index + 1] : nil
         }
 
-        return VStack(spacing: 0) {
-            header
-            Spacer(minLength: 12)
-            ZStack {
-                // A soft glow of the phase's colour behind the ring.
-                Circle()
-                    .fill(palette.fill(for: kind).opacity(palette.colorScheme == .dark ? 0.16 : 0.22))
-                    .blur(radius: side * 0.18)
-                    .frame(width: side * 0.9, height: side * 0.9)
-                    .accessibilityHidden(true)
-                ProgressRing(
-                    fraction: 1 - position.phaseProgress,
-                    color: palette.fill(for: kind),
-                    track: palette.track(for: kind),
-                    strokeRatio: 0.075,
-                    animated: !reduceMotion
-                )
-                .frame(width: side, height: side)
-                interior(position, kind: kind, paused: paused, side: side)
-                    .frame(width: side * 0.72)
+        return Group {
+            if RunScreenLayout.isSideBySide(width: size.width, height: size.height) {
+                HStack(spacing: 32) {
+                    ring(position, kind: kind, paused: paused, side: RunScreenLayout.sideRingSide(width: size.width, height: size.height))
+                    VStack(spacing: 0) {
+                        header
+                        Spacer(minLength: 12)
+                        nextLine(position, next: next)
+                        Spacer(minLength: 12)
+                        hints(position)
+                        controls(kind: kind, paused: paused)
+                            .padding(.bottom, 12)
+                    }
+                    .frame(maxWidth: 420, maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                VStack(spacing: 0) {
+                    header
+                    Spacer(minLength: 12)
+                    ring(position, kind: kind, paused: paused, side: side)
+                    nextLine(position, next: next)
+                        .padding(.top, 24)
+                    Spacer(minLength: 12)
+                    hints(position)
+                    controls(kind: kind, paused: paused)
+                        .padding(.bottom, 12)
+                }
+                // Centred: on iPad the ring stops well short of the screen's width, and the
+                // geometry reader would otherwise pin it to the leading edge.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(spokenStatus(position, kind: kind, paused: paused))
-            .accessibilityAddTraits(.updatesFrequently)
-
-            Text(RunScreenLayout.nextLine(after: position.phase, next: next))
-                .font(.headline)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-                .multilineTextAlignment(.center)
-                // Grows with the text size, but not so far that it crowds the controls.
-                .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-                .padding(.top, 24)
-                .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
-            Spacer(minLength: 12)
-            if run.isVolumeLow {
-                hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
-            } else if !soundTipSeen, !run.isMirroring, position.phase?.kind == .prepare {
-                // While getting ready, before the first change: the moment to set the volume.
-                hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
-                    .padding(.bottom, 16)
-                    .transition(.opacity)
-            }
-            controls(kind: kind, paused: paused)
-                .padding(.bottom, 12)
         }
         .padding(.horizontal, 24)
         .onChange(of: position.phase?.id) { _, _ in
@@ -170,6 +174,56 @@ struct PhoneRunView: View {
                 try? await Task.sleep(for: .milliseconds(16))
                 withAnimation(.easeOut(duration: 0.6)) { flash = 0 }
             }
+        }
+    }
+
+    /// One depleting ring in the phase's colour, with the countdown inside.
+    private func ring(_ position: IntervalPlan.Position, kind: IntervalPhase.Kind, paused: Bool, side: CGFloat) -> some View {
+        ZStack {
+            // A soft glow of the phase's colour behind the ring.
+            Circle()
+                .fill(palette.fill(for: kind).opacity(palette.colorScheme == .dark ? 0.16 : 0.22))
+                .blur(radius: side * 0.18)
+                .frame(width: side * 0.9, height: side * 0.9)
+                .accessibilityHidden(true)
+            ProgressRing(
+                fraction: 1 - position.phaseProgress,
+                color: palette.fill(for: kind),
+                track: palette.track(for: kind),
+                strokeRatio: 0.075,
+                animated: !reduceMotion
+            )
+            .frame(width: side, height: side)
+            interior(position, kind: kind, paused: paused, side: side)
+                .frame(width: side * 0.72)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(spokenStatus(position, kind: kind, paused: paused))
+        .accessibilityAddTraits(.updatesFrequently)
+    }
+
+    private func nextLine(_ position: IntervalPlan.Position, next: IntervalPhase?) -> some View {
+        Text(RunScreenLayout.nextLine(after: position.phase, next: next))
+            .font(.headline)
+            .foregroundStyle(.secondary)
+            .monospacedDigit()
+            .multilineTextAlignment(.center)
+            // Grows with the text size, but not so far that it crowds the controls.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility2)
+            .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
+    }
+
+    @ViewBuilder
+    private func hints(_ position: IntervalPlan.Position) -> some View {
+        if run.isVolumeLow {
+            hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
+                .padding(.bottom, 16)
+                .transition(.opacity)
+        } else if !soundTipSeen, !run.isMirroring, position.phase?.kind == .prepare {
+            // While getting ready, before the first change: the moment to set the volume.
+            hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
+                .padding(.bottom, 16)
+                .transition(.opacity)
         }
     }
 

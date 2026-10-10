@@ -64,8 +64,15 @@ targets:
         UIUserInterfaceStyle: Dark
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
+        # iPhone: portrait. iPhone Duo's inner screen ignores it and runs the app in either
+        # orientation, as iPad does, so every screen lays out for landscape too.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSHealthShareUsageDescription: >-
           Intervally shows your interval workouts from Health: each interval, your heart
           rate, and the active energy you burned.
@@ -95,9 +102,9 @@ targets:
         # development"), for SKTestSession and the Run action's StoreKit configuration alike.
         # Device and archive builds keep the file above (SimulatorEntitlementsTests).
         "CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]": Supporting/IntervallyPhone-Simulator.entitlements
-        # iPhone only (no iPad screenshot set). iPad still runs it in compatibility mode,
-        # which the app handles (WCSession.isSupported() == false).
-        TARGETED_DEVICE_FAMILY: "1"
+        # iPhone and iPad. iPad has no Apple Watch (WCSession.isSupported() == false): it runs
+        # workouts on its own, as an iPhone without a watch does.
+        TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Pastel's Home Screen icon, set while the theme is Pastel (AppIconFollower). iPhone
         # only: watchOS has no alternate icons, and the watch keeps the dumbbell.
@@ -125,7 +132,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).widget
-        TARGETED_DEVICE_FAMILY: "1"
+        # As the app: the Live Activity shows on iPad's Lock Screen too.
+        TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
 
   # The watch app. Installs and runs with or without the iPhone app.

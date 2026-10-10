@@ -3,13 +3,16 @@
 //  IntervallyPhone
 //
 
+import StoreKit
 import SwiftUI
 
 /// The editor's ring: as large as lets the whole editor fit on screen, from 160 to 220 points.
 /// At a fixed 220, a 6.3-inch iPhone had to scroll to reach Warmup and Cooldown, which sat
 /// under the pinned buttons.
 enum EditorLayout {
-    static let ringSides: ClosedRange<CGFloat> = 160...220
+    /// Down to 120, as the welcome's: with the tab bar under the pinned Start, a 6.3-inch
+    /// iPhone needs about that much to show every tile.
+    static let ringSides: ClosedRange<CGFloat> = 120...220
     /// The first-run line under the name, and where its dismissal is kept (per iPhone).
     static let tip = "Tap the name or any tile to change it."
     static let tipSeenKey = "phone.editorTipSeen.v1"
@@ -149,10 +152,15 @@ struct PresetEditorView: View {
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
+            .readableColumn()
         }
-        // Inside the pinned bar: the scroll view's frame stops at it and at the navigation bar.
-        // (Its proxy still reports both as insets; subtracting them counted them twice.)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { visibleHeight = $0 }
+        // What shows between the navigation bar and the pinned bar, the tab bar under it too:
+        // the scroll view's own height less its insets, however the bars come by them.
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            geometry.containerSize.height - geometry.contentInsets.top - geometry.contentInsets.bottom
+        } action: { _, height in
+            visibleHeight = height
+        }
         .appCanvas()
         .scrollDismissesKeyboard(.interactively)
         .scrollEdgeEffectStyle(.hard, for: .bottom)
@@ -164,6 +172,7 @@ struct PresetEditorView: View {
                 actions(workout, stacked: false)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 8)
+                    .readableColumn()
             }
         }
         // Kept for the back button and VoiceOver; the name field right under the ring is the
@@ -172,9 +181,9 @@ struct PresetEditorView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(removing: .title)
         .toolbar { menu(workout) }
-        // A focused task with its own action at the bottom: the tabs come back with Back. With
-        // them, a 6.3-inch iPhone had no room for the ring at full size.
-        .toolbarVisibility(.hidden, for: .tabBar)
+        // The tabs stay, as in Apple's own apps: hidden here, they only came back once Back's
+        // animation had finished, a beat after the workouts were already showing. The ring
+        // gives up the room they take (EditorLayout.ringSide).
         .confirmationDialog("Delete “\(workout.name)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
             Button("Delete Workout", role: .destructive) {
                 if actions.delete(workout) { dismiss() }
@@ -260,6 +269,8 @@ struct PresetEditorView: View {
             return
         }
         name = trimmed
+        // A rename is the tip followed as much as a tile is: it has done its job.
+        if trimmed != workout.name { tipSeen = true }
         workout.name = trimmed
         store.update(workout)
     }

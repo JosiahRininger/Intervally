@@ -144,6 +144,7 @@ struct HistoryView: View {
             }
         }
         .listStyle(.plain)
+        .readableList()
         .refreshable { await history.refresh() }
     }
 

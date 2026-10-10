@@ -166,18 +166,22 @@ final class PhoneRun {
         watchStartWorkout = workout
         _ = requestWatchStart(workout.id)
         watchStart = .starting
-        Task {
+        let wake = wakeWatch
+        Task { [weak self] in
             do {
-                try await wakeWatch()
+                try await wake()
             } catch {
-                watchStartTimeout?.cancel()
-                watchStart = .failed
+                // Unless the watch's run already showed up regardless.
+                guard let self, self.watchStart == .starting else { return }
+                self.watchStartTimeout?.cancel()
+                self.watchStart = .failed
                 return
             }
+            guard let self else { return }
             // The run normally shows here within a few seconds. If the mirror never comes (an
             // older watch, or the iPhone out of the watch's reach), stop saying "starting".
-            watchStartTimeout?.cancel()
-            watchStartTimeout = Task { [weak self] in
+            self.watchStartTimeout?.cancel()
+            self.watchStartTimeout = Task { [weak self] in
                 try? await Task.sleep(for: .seconds(12))
                 guard let self, !Task.isCancelled, self.watchStart == .starting else { return }
                 self.watchStart = .idle

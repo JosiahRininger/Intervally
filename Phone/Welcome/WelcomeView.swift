@@ -96,6 +96,8 @@ struct WelcomeView: View {
             .prominentCapsule()
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
+            // As wide as the column above it, on iPad and iPhone Duo's inner screen too.
+            .readableColumn(maxWidth: 560)
         }
         .onAppear {
             guard drawn == 0 else { return }

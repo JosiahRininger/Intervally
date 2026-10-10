@@ -50,9 +50,17 @@ struct SmallScreenLayoutTests {
         #expect(side + 418 + EditorLayout.chrome <= 664)
     }
 
-    @Test("The editor's ring never shrinks below 160 points; past that the editor scrolls")
+    @Test("The editor's ring never shrinks below 120 points; past that the editor scrolls")
     func editorRingSmallest() {
-        #expect(EditorLayout.ringSide(visibleHeight: 500, belowRing: 560) == 160)
+        #expect(EditorLayout.ringSide(visibleHeight: 500, belowRing: 560) == 120)
+    }
+
+    /// The same iPhone with the tab bar kept under the pinned bar: about 70 points fewer.
+    @Test("With the tab bar showing, the ring gives up the room and every tile still shows")
+    func editorRingWithTabBar() {
+        let side = EditorLayout.ringSide(visibleHeight: 596, belowRing: 418)
+        #expect(side == 122)
+        #expect(side + 418 + EditorLayout.chrome <= 596)
     }
 
     /// At the accessibility sizes each wheel value overlapped the next on an iPhone SE.

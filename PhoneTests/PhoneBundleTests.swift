@@ -32,6 +32,23 @@ struct PhoneBundleTests {
         #expect(!write.contains("only reads"))
     }
 
+    /// iPad runs the app natively, in any orientation; iPhone stays portrait. iPhone Duo's
+    /// inner screen ignores that and turns it anyway (RunScreenLayout.isSideBySide).
+    @Test("Native on iPad in every orientation, portrait on iPhone")
+    func devicesAndOrientations() throws {
+        let families = try #require(info["UIDeviceFamily"] as? [Int])
+        #expect(Set(families) == [1, 2])
+        #expect(info["UISupportedInterfaceOrientations"] as? [String] == ["UIInterfaceOrientationPortrait"])
+        // Read from the file: on an iPhone, Bundle folds the ~ipad keys away.
+        let url = try #require(Bundle.main.url(forResource: "Info", withExtension: "plist"))
+        let raw = try #require(
+            try PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: Any]
+        )
+        let iPad = try #require(raw["UISupportedInterfaceOrientations~ipad"] as? [String])
+        #expect(iPad.count == 4)
+        #expect(info["UIRequiresFullScreen"] as? Bool != true, "Split View and Slide Over stay open to it")
+    }
+
     @Test("Runs keep going locked: the audio mode for cues, and Live Activities on")
     func runCapabilities() throws {
         let modes = try #require(info["UIBackgroundModes"] as? [String])

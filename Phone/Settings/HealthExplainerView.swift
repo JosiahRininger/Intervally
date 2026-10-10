@@ -95,6 +95,7 @@ struct HealthExplainerView: View {
                 }
             }
             .padding(20)
+            .readableColumn()
         }
         .appCanvas()
         .navigationTitle("Apple Health")

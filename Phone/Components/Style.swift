@@ -10,7 +10,24 @@ import SwiftUI
 // Pastel draws it light (`Palette.pastelPhone`). Every surface reads the palette, so a new
 // theme redraws every screen in place.
 
+/// How wide a screen's cards and rows may grow. On iPad and iPhone Duo's inner screen a card
+/// drawn for a phone would otherwise stretch across the whole page.
+enum ReadableWidth {
+    static let column: CGFloat = 640
+}
+
 extension View {
+    /// A list's rows in a centred column no wider than `maxWidth`, while the list keeps the
+    /// whole width for scrolling. On every iPhone the margin is nothing at all.
+    func readableList(maxWidth: CGFloat = ReadableWidth.column) -> some View {
+        modifier(ReadableList(maxWidth: maxWidth))
+    }
+
+    /// A scroll view's content in a centred column no wider than `maxWidth`.
+    func readableColumn(maxWidth: CGFloat = ReadableWidth.column) -> some View {
+        frame(maxWidth: maxWidth).frame(maxWidth: .infinity)
+    }
+
     /// A tile or card: Classic's white at 10% on black, Pastel's pale pink, 16-point
     /// continuous corners, as on the watch.
     func tileBackground() -> some View {
@@ -97,5 +114,20 @@ struct ProBadge: View {
             .lineLimit(1)
             .fixedSize()
             .accessibilityHidden(true)
+    }
+}
+
+private struct ReadableList: ViewModifier {
+    let maxWidth: CGFloat
+    @State private var width: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .contentMargins(.horizontal, ReadableList.margin(width: width, maxWidth: maxWidth), for: .scrollContent)
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
+    }
+
+    static func margin(width: CGFloat, maxWidth: CGFloat) -> CGFloat {
+        max(0, ((width - maxWidth) / 2).rounded(.down))
     }
 }
