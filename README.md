@@ -198,7 +198,10 @@ engine, the Health workout session and the notification backstop. Only the edges
   (`PhoneAppDelegate`), and a run interrupted by a termination is restored from its snapshot.
 - **Cues** (`PhoneCuePlayer`, `CuePlan`, `CueAudio`). Synthesized tones, higher for work and
   lower for rest, a 3-2-1 tick, a finish chime, and with Pro the voice coach ("Work", "Rest",
-  "Last round"). The audio session ducks other audio only while a cue sounds. The `audio`
+  "Last round"). The audio session is held, mixed, for the whole run, so the volume buttons
+  set the cues' volume and music plays on underneath; a hint asks for more volume when it
+  is too low to hear. (Held only per cue, the buttons set the ringer between cues, and on a
+  real iPhone the cues were near-silent.) The `audio`
   background mode is for those cues: the app never plays silence to stay running. A change
   announced late, after the app was away, plays nothing.
 - **Live Activity** (`IntervallyPhoneWidget`, `LiveActivityPresenter`). The phase, its

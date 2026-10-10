@@ -19,14 +19,22 @@ protocol CueOutput: AnyObject {
     func tap(_ tap: CueTap)
     /// Stops whatever is still sounding.
     func silence()
+    /// The run is over: the audio is handed back, and the volume buttons go back to the
+    /// ringer.
+    func handBackAudio()
+    /// The media volume the cues play at, 0 to 1, whenever it changes while a run holds the
+    /// audio.
+    var onVolumeChange: ((Float) -> Void)? { get set }
 }
 
 /// The real output: synthesized tones, the system voice and the Taptic Engine.
 ///
-/// Music keeps playing through a workout. The audio session ducks it only while a cue
-/// sounds and hands the volume back as soon as the cue is over, so a run never leaves
-/// someone's music quietened. Cues play with the Ring/Silent switch on silent too, as a
-/// workout timer has to: the Sounds settings turn them off instead.
+/// The audio session is held for the whole run, mixed with whatever else is playing, so
+/// music and podcasts carry on underneath. Held, it makes the volume buttons set the volume
+/// the cues play at. Switched on only for each cue, as it first was, the buttons set the
+/// ringer between cues instead, and on an iPhone whose media volume was low the cues were
+/// all but silent however far the volume was turned up. Cues play with the Ring/Silent
+/// switch on silent too, as a workout timer has to: the Sounds settings turn them off.
 @MainActor
 final class CueAudio: NSObject, CueOutput {
     private let session = AVAudioSession.sharedInstance()
@@ -34,29 +42,29 @@ final class CueAudio: NSObject, CueOutput {
     private let speaker = AVSpeechSynthesizer()
     private let voice = AVSpeechSynthesisVoice(language: "en-US")
     private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "cues")
-
-    /// Cues still sounding. The session is released once none are.
-    private var holds = 0
-    private var releaseTask: Task<Void, Never>?
     private var isActive = false
+    private var volumeObservation: NSKeyValueObservation?
+
+    var onVolumeChange: ((Float) -> Void)?
 
     override init() {
         super.init()
-        speaker.delegate = self
+        do {
+            // Mixed, never ducking: held for a whole run, a duck would quieten someone's
+            // music for all of it, and a podcast would stop for the whole workout.
+            try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])
+        } catch {
+            log.error("audio session category refused: \(error.localizedDescription, privacy: .public)")
+        }
         for tone in CueTone.allCases {
             if let player = try? AVAudioPlayer(data: ToneSynth.wav(for: tone)) {
                 player.prepareToPlay()
                 players[tone] = player
             }
         }
-        do {
-            // Spoken audio (a podcast) pauses for a cue; music ducks under it.
-            try session.setCategory(
-                .playback, mode: .voicePrompt,
-                options: [.duckOthers, .interruptSpokenAudioAndMixWithOthers]
-            )
-        } catch {
-            log.error("audio session category refused: \(error.localizedDescription, privacy: .public)")
+        volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] session, _ in
+            let volume = session.outputVolume
+            Task { @MainActor in self?.onVolumeChange?(volume) }
         }
     }
 
@@ -66,12 +74,7 @@ final class CueAudio: NSObject, CueOutput {
         hold()
         player.currentTime = 0
         player.play()
-        let duration = player.duration
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(duration))
-            self?.release()
-        }
-        return duration
+        return player.duration
     }
 
     func say(_ phrase: String, after delay: TimeInterval) {
@@ -96,55 +99,34 @@ final class CueAudio: NSObject, CueOutput {
     func silence() {
         players.values.forEach { $0.stop() }
         speaker.stopSpeaking(at: .immediate)
-        holds = 0
-        scheduleRelease()
+    }
+
+    func handBackAudio() {
+        silence()
+        guard isActive else { return }
+        do {
+            try session.setActive(false, options: .notifyOthersOnDeactivation)
+        } catch {
+            log.notice("audio session not released: \(error.localizedDescription, privacy: .public)")
+        }
+        isActive = false
     }
 
     // MARK: - Session
 
+    /// Takes the audio for the run, once: from then on the volume buttons set the cues'
+    /// volume, and the current volume is reported so the run screen can say when it is low.
     private func hold() {
-        releaseTask?.cancel()
-        releaseTask = nil
-        holds += 1
         guard !isActive else { return }
         do {
             try session.setActive(true)
             isActive = true
+            onVolumeChange?(session.outputVolume)
         } catch {
             // A phone call, or another app holding audio that can't be mixed: the cue is lost,
-            // the tap and the screen still mark the change.
+            // the tap and the screen still mark the change. The next cue tries again.
             log.notice("audio session not activated: \(error.localizedDescription, privacy: .public)")
         }
-    }
-
-    fileprivate func release() {
-        holds = max(0, holds - 1)
-        if holds == 0 { scheduleRelease() }
-    }
-
-    /// A moment after the last cue, so back-to-back ticks don't bounce the music's volume.
-    private func scheduleRelease() {
-        releaseTask?.cancel()
-        releaseTask = Task { [weak self] in
-            try? await Task.sleep(for: .milliseconds(350))
-            guard let self, !Task.isCancelled, self.holds == 0, self.isActive else { return }
-            do {
-                try self.session.setActive(false, options: .notifyOthersOnDeactivation)
-            } catch {
-                self.log.notice("audio session not released: \(error.localizedDescription, privacy: .public)")
-            }
-            self.isActive = false
-        }
-    }
-}
-
-extension CueAudio: AVSpeechSynthesizerDelegate {
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.release() }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in self.release() }
     }
 }
 
@@ -169,7 +151,7 @@ enum ToneSynth {
     }
 
     /// 16-bit mono PCM samples.
-    static func samples(for tone: CueTone, amplitude: Double = 0.55) -> [Int16] {
+    static func samples(for tone: CueTone, amplitude: Double = 0.85) -> [Int16] {
         var samples: [Int16] = []
         for (frequency, seconds) in notes(for: tone) {
             let count = Int(seconds * Double(sampleRate))

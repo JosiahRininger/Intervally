@@ -25,6 +25,8 @@ final class PhoneRun {
 
     /// Whether the run screen is showing.
     var isPresented = false
+    /// The media volume the cues play at, as last reported while the run held the audio.
+    private(set) var mediaVolume: Float = 1
 
     enum Key {
         /// Runs finished on this iPhone, for the review prompt's "after real use".
@@ -43,7 +45,8 @@ final class PhoneRun {
     ) {
         self.store = store
         self.defaults = defaults
-        let cues = PhoneCuePlayer(output: output ?? CueAudio(), pro: pro, defaults: defaults)
+        let resolvedOutput = output ?? CueAudio()
+        let cues = PhoneCuePlayer(output: resolvedOutput, pro: pro, defaults: defaults)
         let activity = LiveActivityPresenter { theme.effective(isPro: pro.isPro) }
         self.cues = cues
         self.activity = activity
@@ -60,6 +63,27 @@ final class PhoneRun {
             presenter: self.presenter
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
+        resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
+    }
+
+    /// Settings' Play a Sample. With no run to hold the audio, it is handed back once the
+    /// sample has played, so the volume buttons go back to the ringer.
+    func playSample() {
+        cues.preview()
+        guard !coordinator.engine.isActive else { return }
+        sampleRelease?.cancel()
+        sampleRelease = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(3))
+            guard let self, !Task.isCancelled, !self.coordinator.engine.isActive else { return }
+            self.cues.release()
+        }
+    }
+
+    @ObservationIgnored private var sampleRelease: Task<Void, Never>?
+
+    /// The run screen's hint to turn the volume up: the cues are on, and too quiet to hear.
+    var isVolumeLow: Bool {
+        coordinator.engine.isActive && cues.isQuiet(atVolume: mediaVolume)
     }
 
     /// Runs finished on this iPhone.
@@ -79,6 +103,7 @@ final class PhoneRun {
     /// The run screen is closing, after a finish or an End.
     func close() {
         coordinator.stopAndExit()
+        cues.release()
         isPresented = false
     }
 

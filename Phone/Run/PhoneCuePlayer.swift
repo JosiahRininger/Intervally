@@ -35,6 +35,21 @@ final class PhoneCuePlayer: BoundaryHaptics {
         output.silence()
     }
 
+    /// The run is over: the audio goes back, and with it the volume buttons, to the ringer.
+    func release() {
+        output.handBackAudio()
+    }
+
+    /// Whether the cues would be hard to hear at `volume`: with something to hear (beeps,
+    /// which carry the countdown too, or the voice), and the media volume near the bottom.
+    func isQuiet(atVolume volume: Float) -> Bool {
+        let settings = self.settings
+        return (settings.beeps || settings.voice) && volume < Self.quietVolume
+    }
+
+    /// About two presses of the volume button from silent.
+    static let quietVolume: Float = 0.15
+
     /// A pause or a resume: felt, not heard. A sound there would be mistaken for an interval.
     func transport(_ cue: TransportCue) {
         output.tap(.light)

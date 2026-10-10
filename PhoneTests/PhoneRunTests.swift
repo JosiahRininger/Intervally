@@ -17,9 +17,14 @@ final class FakeCueOutput: CueOutput {
         case say(String, after: TimeInterval)
         case tap(CueTap)
         case silence
+        case release
     }
 
     private(set) var calls: [Call] = []
+    var onVolumeChange: ((Float) -> Void)?
+
+    /// What the media volume would report, as the audio session's KVO does.
+    func report(volume: Float) { onVolumeChange?(volume) }
 
     func play(_ tone: CueTone) -> TimeInterval {
         calls.append(.tone(tone))
@@ -29,6 +34,7 @@ final class FakeCueOutput: CueOutput {
     func say(_ phrase: String, after delay: TimeInterval) { calls.append(.say(phrase, after: delay)) }
     func tap(_ tap: CueTap) { calls.append(.tap(tap)) }
     func silence() { calls.append(.silence) }
+    func handBackAudio() { calls.append(.release) }
     func reset() { calls = [] }
 }
 
@@ -463,6 +469,37 @@ struct PhoneRunTests {
         #expect(run.keepsScreenAwake)
         defaults.set(false, forKey: CueSettings.Key.keepAwake)
         #expect(!run.keepsScreenAwake)
+        run.close()
+    }
+
+    @Test("A run holds the audio until it is over, then hands it back")
+    func audioIsHeldForTheRun() async {
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        run.coordinator.togglePause()
+        #expect(!output.calls.contains(.release), "A pause keeps it, so the volume buttons still set the cues' volume")
+        run.close()
+        #expect(output.calls.last == .release)
+    }
+
+    @Test("Too quiet to hear: the run screen asks for more volume, only during a run with cues on")
+    func lowVolumeHint() async {
+        let (run, store) = makeRun()
+        output.report(volume: 0.05)
+        #expect(!run.isVolumeLow, "No run, no hint")
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        #expect(run.isVolumeLow)
+        output.report(volume: 0.5)
+        #expect(!run.isVolumeLow)
+        output.report(volume: 0.05)
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        #expect(!run.isVolumeLow, "Nothing to hear without beeps or the voice")
+        pro.isPro = true
+        #expect(run.isVolumeLow, "The voice coach is on with Pro")
         run.close()
     }
 

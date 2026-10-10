@@ -138,6 +138,11 @@ struct PhoneRunView: View {
                 .padding(.top, 24)
                 .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
             Spacer(minLength: 12)
+            if run.isVolumeLow {
+                volumeHint
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            }
             controls(kind: kind, paused: paused)
                 .padding(.bottom, 12)
         }
@@ -151,6 +156,16 @@ struct PhoneRunView: View {
                 withAnimation(.easeOut(duration: 0.6)) { flash = 0 }
             }
         }
+    }
+
+    /// The cues play at the media volume, which the volume buttons set while a run is going.
+    private var volumeHint: some View {
+        Label("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
+            .font(.subheadline.weight(.semibold))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .glassEffect(.regular, in: .capsule)
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
     }
 
     /// The workout's name and how long is left in all, small, so the ring stays the hero.

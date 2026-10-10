@@ -59,12 +59,12 @@ struct SoundsSettingsView: View {
 
             Section {
                 Button {
-                    run.cues.preview()
+                    run.playSample()
                 } label: {
                     Label("Play a Sample", systemImage: "play.circle")
                 }
             } footer: {
-                Text("Cues play with the Ring/Silent switch on silent too. Music keeps playing and dips under each cue.")
+                Text("Cues play at your media volume, with the Ring/Silent switch on silent too. Music and podcasts keep playing underneath.")
             }
 
             Section {
