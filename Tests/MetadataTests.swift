@@ -175,8 +175,8 @@ struct MetadataTests {
     @Test("The description says where the data stays, and that workouts run on either device")
     func descriptionSaysWhereDataStays() throws {
         let description = try Self.field("## Description (4000)").text
-        #expect(description.contains("stay on your iPhone and Apple Watch and in Apple Health"))
-        #expect(description.contains("Workouts run on iPhone or Apple Watch, whichever you start them on."))
+        #expect(description.contains("stay on your iPhone, iPad and Apple Watch and in Apple Health"))
+        #expect(description.contains("Workouts run on iPhone, iPad or Apple Watch, whichever you start them on."))
     }
 
     @Test("The purchase goes in with the iOS version, and its notes start on the iPhone")

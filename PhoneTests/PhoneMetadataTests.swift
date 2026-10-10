@@ -78,7 +78,9 @@ struct PhoneMetadataTests {
 
     @Test("The description names the iPhone's control by its title")
     func descriptionNamesPutOnWatch() throws {
-        #expect(try Self.block("## Description (4000)").contains("Tap \(WorkoutsContent.putOnWatchTitle) and"))
+        let description = try Self.block("## Description (4000)")
+        #expect(description.contains("Tap \(WorkoutsContent.putOnWatchTitle) and"))
+        #expect(description.contains("tap \(WorkoutsContent.startOnWatchTitle) to run one on your wrist"))
     }
 
     // MARK: - Helpers

@@ -62,6 +62,7 @@ struct SessionSummaryTests {
         #expect(summary.roundsReached == 5)
         #expect(summary.endedEarly)
         #expect(summary.roundsReachedText == "5/8")
+        #expect(summary.roundsLineText == "5/8 rounds")
         #expect(summary.spokenRounds == "5 of 8 rounds, ended early")
         #expect(summary.completion == 5.0 / 8.0)
     }
@@ -117,6 +118,7 @@ struct SessionSummaryTests {
         #expect(summary.plannedRounds == nil)
         #expect(summary.endedEarly == false)
         #expect(summary.roundsReachedText == "5 rounds")
+        #expect(summary.roundsLineText == "5 rounds")
         #expect(summary.completion == 1)
     }
 

@@ -21,9 +21,11 @@ struct ShipAssetsTests {
     }
 
     /// Each screenshot folder and the one size App Store Connect takes for it. One iPhone
-    /// set: App Store Connect uses the medium display's shots for every iPhone size.
+    /// set: App Store Connect uses the medium display's shots for every iPhone size. One
+    /// iPad set, the 13-inch, which App Store Connect requires of an app that runs on iPad.
     static let sets: [String: Size] = [
         "iPhone-6.3": Size(width: 1206, height: 2622),
+        "iPad-13": Size(width: 2064, height: 2752),
         "Watch": Size(width: 416, height: 496),
     ]
 
@@ -61,6 +63,16 @@ struct ShipAssetsTests {
         for pro in ["7-pro-editor", "8-pastel"] {
             #expect(compose.contains("('\(pro)', 'INTERVALLY PRO'"), "\(pro) is captioned Intervally Pro (2.3.2)")
         }
+    }
+
+    @Test("The iPad set is the iPhone's, shot for shot, captioned for a device without a watch")
+    func iPadSet() throws {
+        let iPhone = try Self.pngs(in: "iPhone-6.3").map(\.lastPathComponent)
+        let iPad = try Self.pngs(in: "iPad-13").map(\.lastPathComponent)
+        #expect(iPad == iPhone)
+        let compose = try String(contentsOf: Self.screenshots.appendingPathComponent("compose.py"), encoding: .utf8)
+        #expect(compose.contains("'1-run': ('TRAIN ON IPAD'"))
+        #expect(compose.contains("'4-editor': ('EDITOR', ['Build a workout'"), "No 'Start it anywhere' on a device with no watch")
     }
 
     @Test("The In-App Purchase review screenshot is a 6.9-inch capture with no alpha")

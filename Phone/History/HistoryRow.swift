@@ -64,10 +64,20 @@ struct HistoryRow: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(session.title)
                 .font(.headline)
-            // With the time: two sessions on one day are otherwise the same row.
-            Text("\(session.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())) · \(session.roundsReachedText)")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            // With the time: two sessions on one day are otherwise the same row. On one line
+            // where it fits; where it doesn't, the rounds go under the date whole, rather than
+            // wrapping after the separator and leaving "8/8" on a line alone.
+            let date = session.start.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
+            ViewThatFits(in: .horizontal) {
+                Text("\(date) · \(session.roundsReachedText)")
+                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(date)
+                    Text(session.roundsLineText)
+                }
+            }
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
             // A line of its own: wrapped onto the date's, it began a line with its separator.
             if session.endedEarly {
                 Text("Ended early")

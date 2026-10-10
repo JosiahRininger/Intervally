@@ -57,26 +57,26 @@ through a josiahrininger.com pull request merged before submitting:
 ## Promotional text (170)
 
 ```
-Now on iPhone too: press Start and hear every interval, with the countdown on your Lock Screen. On Apple Watch, every change taps your wrist, even with the screen off.
+Now on iPhone and iPad: press Start and hear every interval, with the countdown on your Lock Screen. On Apple Watch, every change taps your wrist, screen off or not.
 ```
-(167)
+(165)
 
 ## Description (4000)
 
 ```
-Intervally is an interval timer for iPhone and Apple Watch. Set how long to work, how long to rest, and how many rounds, press Start, and train. Every interval change is marked for you, with a tone on your iPhone or a tap on your wrist, so you never have to watch the clock.
+Intervally is an interval timer for iPhone, iPad and Apple Watch. Set how long to work, how long to rest, and how many rounds, press Start, and train. Every interval change is marked for you, with a tone on your iPhone or a tap on your wrist, so you never have to watch the clock.
 
-TRAIN WITH YOUR IPHONE
+TRAIN WITH YOUR IPHONE OR IPAD
 Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it, and your music keeps playing underneath. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
 
 OR ON YOUR WRIST
-With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone. Tap Put on Watch and it's the next workout your watch starts. Changes reach your watch on their own, and each app keeps working without the other.
+With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone, then tap Start on Watch to run one on your wrist right away. Tap Put on Watch and it's the next workout your watch starts. Changes reach your watch on their own, and each app keeps working without the other.
 
 KNOW WHERE YOU ARE AT A GLANCE
 A large countdown sits inside a ring that runs down with it. Each phase has its own color — amber to get ready, blue to work, green to rest — so a quick glance tells you everything mid-burpee.
 
 SEE EVERY SESSION
-Every workout you finish is saved to Apple Health. History on iPhone shows them all: the rounds you finished and the energy you burned, and with Apple Watch your average and highest heart rate and your heart rate for every interval.
+Every workout you finish is saved to Apple Health. History on iPhone shows them all: the rounds you finished and the calories you burned in every interval, and with Apple Watch your average and highest heart rate and your heart rate for every interval.
 
 PRESETS FOR HOW YOU TRAIN
 Start with Classic, Tabata, or EMOM and adjust any interval. Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, a voice coach that calls out every interval on iPhone, stronger taps on Apple Watch, and Pastel, a theme in soft colors. Buy it once, on your iPhone or your watch, and it unlocks both.
@@ -95,9 +95,9 @@ START IT YOUR WAY ON APPLE WATCH
 • Add the complication to your watch face to see the interval you're on
 
 PRIVATE BY DESIGN
-No account, no ads, no tracking, and no servers. Your presets and workouts stay on your iPhone and Apple Watch and in Apple Health, and presets travel directly between your own devices.
+No account, no ads, no tracking, and no servers. Your presets and workouts stay on your iPhone, iPad and Apple Watch and in Apple Health, and presets travel directly between your own devices.
 
-Workouts run on iPhone or Apple Watch, whichever you start them on. Intervally is a timer, not a medical device. Check with a healthcare provider before starting a new exercise program.
+Workouts run on iPhone, iPad or Apple Watch, whichever you start them on. Made for every iPhone, iPhone Duo included, and for iPad in any orientation. Intervally is a timer, not a medical device. Check with a healthcare provider before starting a new exercise program.
 ```
 
 ## Keywords (100)
@@ -110,15 +110,16 @@ watch,circuit,boxing,training,rounds,rest,gym,countdown,amrap,cardio,sprint,yoga
 ## What's New in 1.1 (4000)
 
 ```
-Intervally now runs your workouts on iPhone too, no Apple Watch needed.
+Intervally now runs your workouts on iPhone and iPad too, no Apple Watch needed.
 
 • Press Start on any workout and hear every interval: a tone for each change, higher for work and lower for rest, with a 3-2-1 countdown before it. Your music keeps playing underneath.
 • The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
-• Every workout you finish on iPhone is saved to Apple Health and shows up in History.
+• Every workout you finish is saved to Apple Health. History now shows the calories you burned in every interval.
 • Intervally Pro adds a voice coach that calls out every interval.
-• Choose what you hear in Settings > Sounds & Voice.
+• Choose what you hear, and how loud, in Settings > Sounds & Voice.
+• Made for iPad and iPhone Duo, in any orientation.
 
-With Apple Watch, nothing changes: build on iPhone, train on your wrist.
+With Apple Watch: tap Start on Watch to run a workout on your wrist straight from your iPhone.
 ```
 
 ## App Privacy (nutrition label)
@@ -150,12 +151,12 @@ Paste this verbatim. It pre-empts the questions HealthKit, the background modes,
 Activity and the In-App Purchase attract:
 
 ```
-Intervally is an interval timer for iPhone and Apple Watch. No account or sign-in is needed. New in 1.1: workouts run on iPhone too, with no Apple Watch required. Every iPhone screen works without a paired watch, including on iPad.
+Intervally is an interval timer for iPhone and Apple Watch. No account or sign-in is needed. New in 1.1: workouts run on iPhone and iPad too, no Apple Watch required. Every screen works without a watch, and natively on iPad.
 
 ON IPHONE
 1. Workouts lists the presets. Tap Start on the workout up next, or the play button on any workout, to run it. The first run asks for notifications and Apple Health.
 2. The run counts down a 10-second lead-in, then alternates work and rest, with a tone at each change and a 3-2-1 tick before it. Lock the phone: the countdown stays on the Lock Screen (a Live Activity) and the tones continue. X (bottom left) ends the run; bottom right skips an interval. A finished run shows a summary and is saved to Health.
-3. Tap a workout to edit it: each tile (Work, Rest, Rounds, Get Ready) opens a picker, and changes save as they are made. Put on Watch makes it the workout the watch starts next. + adds a workout.
+3. Tap a workout to edit it: each tile (Work, Rest, Rounds, Get Ready) opens a picker, and changes save as they are made. With a paired watch, Start on Watch runs it on the watch, and Put on Watch makes it the workout the watch starts next. + adds a workout.
 4. History reads the interval workouts saved to Apple Health by either device. Tap Connect Apple Health. Until a workout has been saved, History explains where sessions come from.
 5. Settings (the gear at top left) has Intervally Pro, Theme, Sounds & Voice, Apple Watch, Apple Health, Restore Purchases, Redeem Code, Support and the Privacy Policy.
 6. Settings > Theme switches between Classic and Pastel. Pastel is part of Intervally Pro, and also changes the Home Screen icon.
@@ -164,7 +165,7 @@ ON IPHONE
 ON APPLE WATCH
 1. Tap Start. Allow notifications and Apple Health when asked.
 2. The timer counts down a 10-second lead-in, then alternates work and rest intervals.
-3. Lower your wrist or let the screen turn off — the watch taps at each interval change.
+3. Lower your wrist or let the screen turn off: the watch taps at each change.
 4. Tap the X (bottom left) to end, or let it finish to see the summary and the workout saved to Health. The button at top right skips to the next interval.
 Presets sync between the two apps over WatchConnectivity, directly between the user's own devices. Each app keeps its own copy and works on its own.
 
@@ -203,9 +204,9 @@ these for every iPhone size, so there is no 6.9" set. 1.1's set leads with a run
 | `1-run.png` | TRAIN ON IPHONE · Press Start. Hear every interval. | Classic running on iPhone: work, round 3 of 8, the depleting ring, End, Pause and Skip |
 | `2-lock.png` | LOCK SCREEN · Your countdown, phone locked | The run's Live Activity on the Lock Screen: the phase, its countdown and bar, the next interval |
 | `3-workouts.png` | WORKOUTS · Every workout, one tap from Start | The workout up next with Start, and the library with a play button on each |
-| `4-editor.png` | EDITOR · Build it here. Start it anywhere. | Tabata's editor: its ring, a tile per number, Start and Put on Watch; Warmup and Cooldown marked PRO |
+| `4-editor.png` | EDITOR · Build it here. Start it anywhere. | Tabata's editor: its ring, a tile per number, Start and Start on Watch; Warmup and Cooldown marked PRO |
 | `5-history.png` | HISTORY · Every session, interval by interval | History grouped by week, an early end included |
-| `6-session.png` | SESSION · Your heart rate, every interval | A session's ring, totals and heart rate per interval |
+| `6-session.png` | SESSION · Your calories, every interval | A session's ring, totals and the calories burned in each interval |
 | `7-pro-editor.png` | INTERVALLY PRO · Add a warmup and a cooldown | EMOM with a 5-minute warmup and a 3-minute cooldown. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
 | `8-pastel.png` | INTERVALLY PRO · Make it yours with Pastel | A run in the Pastel theme. A Pro feature, so the caption names Intervally Pro (Guideline 2.3.2) |
 
@@ -216,14 +217,34 @@ into these files at the same size. To retake them, in a Debug build:
   --batteryState discharging --batteryLevel 100 --wifiBars 3 --cellularMode active
   --cellularBars 4`. Launch with `-phone.welcomeSeen.v1 YES -phone.editorTipSeen.v1 YES
   -qaWatch installed` and `-qaPro free`, or `-qaPro pro` for shots 7 and 8.
-- Shots 1, 2 and 8: `-qaRunElapsed 103` restores Classic three rounds in (8 adds
+- Shots 1, 2 and 8: `-qaRunElapsed 100` restores Classic three rounds in (8 adds
   `-qaTheme pastel`). Allow notifications, Health and Live Activities once. For shot 2,
   lock the simulator. End each run with End, never by quitting the app: a simulator
   whose app was killed mid-workout keeps a stuck workout session until it is rebooted.
-- Shots 4 and 7: open Tabata and EMOM from the library. Shot 7 sets EMOM's bookends with
-  `-qaEdit "warmup 2 300; cooldown 2 180"`.
+- Shots 4 and 7: `-qaOpen editor` with `-qaEdit "select 1"` (Tabata), and for 7
+  `-qaEdit "select 2; warmup 2 300; cooldown 2 180"` (EMOM with bookends). Every other
+  shot resets them with `-qaEdit "select 0; warmup 2 0; cooldown 2 0"`.
 - Shots 5 and 6 use `-qaHistory sample -qaOpen history` and `-qaOpen session`. The sample
   sessions are a fixture: nothing is read from or written to Health (Guideline 5.1.3(ii)).
+
+### iPad — 2064 × 2752, `AppStore/Screenshots/iPad-13/`
+
+Captured on a 13-inch iPad Pro simulator (iPadOS 26.3) in portrait, the same eight states
+the same way, without `-qaWatch` (iPad has no Apple Watch), on the "iPad 13-inch Display"
+tab. Required now that the app runs on iPad. compose.py gives a 3:4 capture the iPad's
+proportions and its own captions for the two shots that would otherwise speak of iPhone
+or the watch.
+
+| File | Caption | Shows |
+|---|---|---|
+| `iPad-13/1-run.png` | TRAIN ON IPAD · Press Start. Hear every interval. | Classic running on iPad |
+| `iPad-13/2-lock.png` | LOCK SCREEN · Your countdown, phone locked | The run's Live Activity on the iPad Lock Screen |
+| `iPad-13/3-workouts.png` | WORKOUTS · Every workout, one tap from Start | Workouts in a centred column, the tabs at the top |
+| `iPad-13/4-editor.png` | EDITOR · Build a workout in seconds | Tabata's editor; Warmup and Cooldown marked PRO |
+| `iPad-13/5-history.png` | HISTORY · Every session, interval by interval | History grouped by week |
+| `iPad-13/6-session.png` | SESSION · Your calories, every interval | A session's totals and calories per interval, with its interval list |
+| `iPad-13/7-pro-editor.png` | INTERVALLY PRO · Add a warmup and a cooldown | EMOM with bookends (Guideline 2.3.2) |
+| `iPad-13/8-pastel.png` | INTERVALLY PRO · Make it yours with Pastel | A run in Pastel (Guideline 2.3.2) |
 
 ### Apple Watch — 416 × 496, `AppStore/Screenshots/Watch/`
 

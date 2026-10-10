@@ -122,6 +122,11 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
         plannedRounds.map { "\(roundsReached)/\($0)" } ?? DurationFormat.rounds(roundsReached)
     }
 
+    /// "5/8 rounds", on a line of its own, where a bare "5/8" would be a fraction.
+    var roundsLineText: String {
+        plannedRounds.map { "\(roundsReached)/\($0) rounds" } ?? DurationFormat.rounds(roundsReached)
+    }
+
     /// What VoiceOver says for the rounds, an early end included.
     var spokenRounds: String {
         guard let plannedRounds else { return DurationFormat.rounds(roundsReached) }

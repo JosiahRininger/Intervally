@@ -1,9 +1,10 @@
-"""Composes the iPhone App Store screenshots from raw simulator captures.
+"""Composes the iPhone and iPad App Store screenshots from raw simulator captures.
 
     python3 compose.py <captures folder> <output folder>
 
 The captures are full-screen PNGs named as in SHOTS, taken at the size App Store Connect
-wants for one display (1320x2868 on an iPhone 17 Pro Max, 1206x2622 on an iPhone 17 Pro).
+wants for one display (1206x2622 on an iPhone 17 Pro, 2064x2752 on a 13-inch iPad Pro).
+A capture as wide as an iPad's gets the iPad's proportions and captions.
 Each comes out at that same size: a caption on the app icon's navy, over the capture with
 its screen corners, flattened to RGB because App Store Connect rejects an alpha channel.
 
@@ -27,20 +28,40 @@ SHOTS = [
     ('3-workouts', 'WORKOUTS', ['Every workout,', 'one tap from Start'], False),
     ('4-editor', 'EDITOR', ['Build it here.', 'Start it anywhere.'], False),
     ('5-history', 'HISTORY', ['Every session,', 'interval by interval'], False),
-    ('6-session', 'SESSION', ['Your heart rate,', 'every interval'], False),
+    ('6-session', 'SESSION', ['Your calories,', 'every interval'], False),
     ('7-pro-editor', 'INTERVALLY PRO', ['Add a warmup', 'and a cooldown'], True),
     ('8-pastel', 'INTERVALLY PRO', ['Make it yours', 'with Pastel'], True),
 ]
 
-# Fractions of the canvas width, so both display sizes share one layout.
-TOP = 0.095            # the eyebrow's cap height starts here
-EYEBROW_SIZE = 0.034
-HEADLINE_SIZE = 0.080
-LINE_GAP = 0.012
-HEADLINE_GAP = 0.045    # from the eyebrow's baseline to the headline's top
-SCREEN_TOP = 0.395     # below the caption
-BOTTOM = 0.066         # margin under the screen
-CORNER = 0.105         # the display's corner radius, as a fraction of its width
+# On iPad, where a run has no watch to start it on: the same shots, worded for it.
+IPAD_CAPTIONS = {
+    '1-run': ('TRAIN ON IPAD', ['Press Start.', 'Hear every interval.']),
+    '4-editor': ('EDITOR', ['Build a workout', 'in seconds']),
+}
+
+
+class Layout:
+    """Fractions of the canvas width, so every display of one kind shares one layout."""
+
+    def __init__(self, top, eyebrow, headline, line_gap, headline_gap, screen_top, bottom, corner):
+        self.top = top                  # the eyebrow's cap height starts here
+        self.eyebrow = eyebrow
+        self.headline = headline
+        self.line_gap = line_gap
+        self.headline_gap = headline_gap  # from the eyebrow's baseline to the headline's top
+        self.screen_top = screen_top    # below the caption
+        self.bottom = bottom            # margin under the screen
+        self.corner = corner            # the display's corner radius, as a fraction of its width
+
+
+IPHONE = Layout(0.095, 0.034, 0.080, 0.012, 0.045, 0.395, 0.066, 0.105)
+# A 3:4 canvas: the screen takes more of it, and the words less of its width.
+IPAD = Layout(0.062, 0.022, 0.052, 0.008, 0.028, 0.262, 0.05, 0.035)
+
+
+def layout_for(size):
+    width, height = size
+    return IPAD if width / height > 0.6 else IPHONE
 
 
 def font(size, weight):
@@ -79,18 +100,19 @@ def draw_tracked(draw, baseline, text, face, fill, width, tracking):
 
 def compose(capture, eyebrow, lines, capsule):
     width, height = capture.size
+    lay = layout_for(capture.size)
     canvas = gradient(width, height)
     draw = ImageDraw.Draw(canvas)
 
-    eyebrow_face = font(round(width * EYEBROW_SIZE), 'Bold')
-    tracking = round(width * EYEBROW_SIZE * 0.12)
+    eyebrow_face = font(round(width * lay.eyebrow), 'Bold')
+    tracking = round(width * lay.eyebrow * 0.12)
     cap_height = eyebrow_face.getbbox('H', anchor='ls')
     cap_height = cap_height[3] - cap_height[1]
-    baseline = round(width * TOP) + cap_height
+    baseline = round(width * lay.top) + cap_height
     if capsule:
         # The Pro shot's marker: the brand blue capsule with dark text, drawn as the app
         # draws its one tinted control.
-        pad_x, pad_y = width * 0.035, width * 0.022
+        pad_x, pad_y = width * lay.eyebrow * 1.03, width * lay.eyebrow * 0.65
         half = tracked_width(draw, eyebrow, eyebrow_face, tracking) / 2 + pad_x
         top, bottom = baseline - cap_height - pad_y, baseline + pad_y
         draw.rounded_rectangle((width / 2 - half, top, width / 2 + half, bottom), (bottom - top) / 2, fill=BLUE)
@@ -98,18 +120,18 @@ def compose(capture, eyebrow, lines, capsule):
     else:
         draw_tracked(draw, baseline, eyebrow, eyebrow_face, BLUE, width, tracking)
 
-    headline_face = font(round(width * HEADLINE_SIZE), 'Bold')
-    line_height = headline_face.size + round(width * LINE_GAP)
-    baseline += round(width * HEADLINE_GAP) + headline_face.size
+    headline_face = font(round(width * lay.headline), 'Bold')
+    line_height = headline_face.size + round(width * lay.line_gap)
+    baseline += round(width * lay.headline_gap) + headline_face.size
     for line in lines:
         draw.text((width / 2, baseline), line, font=headline_face, fill=WHITE, anchor='ms')
         baseline += line_height
 
-    top = round(width * SCREEN_TOP)
-    screen_h = height - top - round(width * BOTTOM)
+    top = round(width * lay.screen_top)
+    screen_h = height - top - round(width * lay.bottom)
     screen_w = round(screen_h * width / height)
     screen = capture.convert('RGB').resize((screen_w, screen_h), Image.LANCZOS)
-    radius = round(screen_w * CORNER)
+    radius = round(screen_w * lay.corner)
     x = (width - screen_w) // 2
 
     # A hairline keyline, so the black screen's edge holds against the navy.
@@ -124,6 +146,8 @@ def main(source, destination):
     os.makedirs(destination, exist_ok=True)
     for name, eyebrow, lines, capsule in SHOTS:
         capture = Image.open(os.path.join(source, f'{name}.png'))
+        if layout_for(capture.size) is IPAD and name in IPAD_CAPTIONS:
+            eyebrow, lines = IPAD_CAPTIONS[name]
         out = compose(capture, eyebrow, lines, capsule)
         assert out.size == capture.size and out.mode == 'RGB'
         out.save(os.path.join(destination, f'{name}.png'), optimize=True)
