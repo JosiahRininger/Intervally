@@ -6,8 +6,8 @@
 import Charts
 import SwiftUI
 
-/// One session: the phases that ran as a ring, its totals, heart rate per interval, and every
-/// interval in order.
+/// One session: the phases that ran as a ring, its totals, calories and heart rate per
+/// interval, and every interval in order.
 struct SessionDetailView: View {
     let session: SessionSummary
 
@@ -16,6 +16,12 @@ struct SessionDetailView: View {
     @Environment(ReviewLedger.self) private var reviews
     @Environment(\.requestReview) private var requestReview
     @Environment(\.palette) private var palette
+    /// Which per-interval chart shows, when the session has both. Calories first.
+    @State private var metric: IntervalMetric?
+
+    private var shownMetric: IntervalMetric? {
+        metric.flatMap { session.charts.contains($0) ? $0 : nil } ?? session.charts.first
+    }
 
     var body: some View {
         ScrollView {
@@ -23,8 +29,8 @@ struct SessionDetailView: View {
                 hero
                 heading
                 tiles
-                if session.showsChart {
-                    section("Heart Rate by Interval") { chart }
+                if let shownMetric {
+                    section("By Interval") { chart(shownMetric) }
                 }
                 if !session.intervals.isEmpty {
                     section("Intervals") { intervals }
@@ -114,7 +120,8 @@ struct SessionDetailView: View {
             if let energy = session.activeEnergy {
                 let text = Measurement(value: energy, unit: UnitEnergy.kilocalories)
                     .formatted(.measurement(width: .abbreviated, usage: .workout, numberFormatStyle: .number.precision(.fractionLength(0))))
-                tile("Active Energy", value: text, spoken: text)
+                // The Fitness app's name for it.
+                tile("Active Calories", value: text, spoken: text)
             }
         }
     }
@@ -146,26 +153,35 @@ struct SessionDetailView: View {
 
     // MARK: - Chart
 
-    /// A bar per interval, as tall as its average heart rate and in its phase's colour, so
-    /// the work bars rise above the rest between them.
-    private var chart: some View {
-        Chart(session.intervals.filter { $0.averageHeartRate != nil }) { interval in
-            BarMark(
-                x: .value("Interval", "\(interval.id)"),
-                y: .value("Heart Rate", interval.averageHeartRate ?? 0)
-            )
-            .foregroundStyle(palette.fill(for: interval.kind))
-            .accessibilityLabel(interval.title)
-            .accessibilityValue("\(interval.averageHeartRate ?? 0) beats per minute")
-        }
-        .chartXAxis(.hidden)
-        .chartYAxis {
-            AxisMarks(position: .leading) { _ in
-                AxisGridLine().foregroundStyle(palette.neutral.opacity(0.15))
-                AxisValueLabel()
+    /// A bar per interval, as tall as its calories or its average heart rate and in its
+    /// phase's colour, so the work bars rise above the rest between them. With both recorded,
+    /// a switch above it picks which.
+    private func chart(_ shown: IntervalMetric) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if session.charts.count > 1 {
+                Picker("Chart", selection: Binding { shown } set: { metric = $0 }) {
+                    ForEach(session.charts) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
             }
+            Chart(session.intervals.filter { shown.value(of: $0) != nil }) { interval in
+                BarMark(
+                    x: .value("Interval", "\(interval.id)"),
+                    y: .value(shown.title, shown.value(of: interval) ?? 0)
+                )
+                .foregroundStyle(palette.fill(for: interval.kind))
+                .accessibilityLabel(interval.title)
+                .accessibilityValue(shown.spoken(shown.value(of: interval) ?? 0))
+            }
+            .chartXAxis(.hidden)
+            .chartYAxis {
+                AxisMarks(position: .leading) { _ in
+                    AxisGridLine().foregroundStyle(palette.neutral.opacity(0.15))
+                    AxisValueLabel()
+                }
+            }
+            .frame(height: 180)
         }
-        .frame(height: 180)
         .padding(16)
         .tileBackground()
     }
@@ -223,23 +239,31 @@ private struct IntervalRow: View {
         .accessibilityLabel(spoken)
     }
 
+    /// The phase and its round, with how long it ran under it: beside three figures the
+    /// title wrapped onto a second line.
     private var title: some View {
         HStack(spacing: 12) {
             Image(systemName: interval.kind.symbolName)
                 .foregroundStyle(palette.ink(for: interval.kind))
                 .frame(width: 24)
                 .accessibilityHidden(true)
-            Text(interval.title)
-                .font(.body)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(interval.title)
+                    .font(.body)
+                Text(DurationFormat.clock(Int(interval.duration.rounded())))
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
     @ViewBuilder
     private var figures: some View {
-        Text(DurationFormat.clock(Int(interval.duration.rounded())))
-            .font(.body.monospacedDigit())
-            .foregroundStyle(.secondary)
-            .fixedSize()
+        if let calories = interval.calories {
+            CaloriesLabel(calories: calories)
+                .font(.body)
+                .frame(minWidth: 52, alignment: typeSize.isAccessibilitySize ? .leading : .trailing)
+        }
         if let heartRate = interval.averageHeartRate {
             HeartRateLabel(beats: heartRate)
                 .font(.body)
@@ -249,6 +273,9 @@ private struct IntervalRow: View {
 
     private var spoken: String {
         var parts = [interval.title, DurationFormat.spoken(Int(interval.duration.rounded()))]
+        if let calories = interval.calories {
+            parts.append("\(calories) calories")
+        }
         if let heartRate = interval.averageHeartRate {
             parts.append("\(heartRate) beats per minute")
         }

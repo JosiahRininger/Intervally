@@ -14,7 +14,8 @@ protocol CueOutput: AnyObject {
     /// Plays `tone` now and returns how long it lasts.
     @discardableResult func play(_ tone: CueTone) -> TimeInterval
     /// Speaks `phrase` once `delay` has passed, so it follows the tone instead of talking
-    /// over it.
+    /// over it. The newest phrase wins: anything still waiting, or being spoken, is dropped,
+    /// so eight quick Skips say only where they landed, not "Work, Rest" eight times over.
     func say(_ phrase: String, after delay: TimeInterval)
     func tap(_ tap: CueTap)
     /// Stops whatever is still sounding.
@@ -44,6 +45,8 @@ final class CueAudio: NSObject, CueOutput {
     private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "cues")
     private var isActive = false
     private var volumeObservation: NSKeyValueObservation?
+    /// The phrase waiting for its tone to finish, if any.
+    private var pendingPhrase: Task<Void, Never>?
 
     var onVolumeChange: ((Float) -> Void)?
 
@@ -78,12 +81,20 @@ final class CueAudio: NSObject, CueOutput {
     }
 
     func say(_ phrase: String, after delay: TimeInterval) {
-        let utterance = AVSpeechUtterance(string: phrase)
-        utterance.voice = voice
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
-        utterance.preUtteranceDelay = delay
+        // Our own delay, not the utterance's: an utterance's pre-delay sits in the
+        // synthesizer's queue, where a burst of Skips stacked up and was then read out in full.
+        pendingPhrase?.cancel()
+        speaker.stopSpeaking(at: .immediate)
         hold()
-        speaker.speak(utterance)
+        pendingPhrase = Task { [weak self] in
+            if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+            guard let self, !Task.isCancelled else { return }
+            let utterance = AVSpeechUtterance(string: phrase)
+            utterance.voice = self.voice
+            utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
+            self.speaker.stopSpeaking(at: .immediate)
+            self.speaker.speak(utterance)
+        }
     }
 
     func tap(_ tap: CueTap) {
@@ -97,6 +108,8 @@ final class CueAudio: NSObject, CueOutput {
     }
 
     func silence() {
+        pendingPhrase?.cancel()
+        pendingPhrase = nil
         players.values.forEach { $0.stop() }
         speaker.stopSpeaking(at: .immediate)
     }

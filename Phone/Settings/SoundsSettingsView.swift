@@ -3,6 +3,7 @@
 //  IntervallyPhone
 //
 
+import MediaPlayer
 import SwiftUI
 
 /// What Settings' Sounds row says under its title.
@@ -58,13 +59,17 @@ struct SoundsSettingsView: View {
             }
 
             Section {
+                SystemVolumeSlider()
+                    .frame(height: 34)
                 Button {
                     run.playSample()
                 } label: {
                     Label("Play a Sample", systemImage: "play.circle")
                 }
+            } header: {
+                Text("Volume")
             } footer: {
-                Text("Cues play at your media volume, with the Ring/Silent switch on silent too. Music and podcasts keep playing underneath.")
+                Text("Cues play at your media volume, the one your music uses, even with the Ring/Silent switch on silent. During a workout the volume buttons set it too. Music and podcasts keep playing underneath.")
             }
 
             Section {
@@ -91,4 +96,15 @@ struct SoundsSettingsView: View {
             }
         }
     }
+}
+
+/// The system's own volume slider: the media volume the cues play at, with the output
+/// picker for headphones and speakers beside it.
+private struct SystemVolumeSlider: UIViewRepresentable {
+    func makeUIView(context: Context) -> MPVolumeView {
+        let view = MPVolumeView(frame: .zero)
+        return view
+    }
+
+    func updateUIView(_ view: MPVolumeView, context: Context) {}
 }

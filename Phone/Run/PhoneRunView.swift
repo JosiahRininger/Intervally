@@ -8,6 +8,9 @@ import SwiftUI
 /// How big the run screen's ring is: as wide as the screen allows with a margin, but never so
 /// tall that the controls drop off an iPhone SE.
 enum RunScreenLayout {
+    /// Where the first run's volume tip is remembered as seen, per iPhone.
+    static let soundTipSeenKey = "phone.run.soundTipSeen.v1"
+
     static func ringSide(width: CGFloat, height: CGFloat) -> CGFloat {
         let byWidth = width - 56
         let byHeight = height * 0.5
@@ -45,6 +48,8 @@ struct PhoneRunView: View {
     @State private var flash: Double = 0
     @State private var flashKind: IntervalPhase.Kind = .work
     @State private var countedFinish = false
+    /// The first run on this iPhone says how to set the beeps' volume, once.
+    @AppStorage(RunScreenLayout.soundTipSeenKey, store: SharedDefaults.suite) private var soundTipSeen = false
 
     private var coordinator: RunCoordinator { run.coordinator }
     private var engine: TimerEngine { coordinator.engine }
@@ -139,7 +144,12 @@ struct PhoneRunView: View {
                 .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
             Spacer(minLength: 12)
             if run.isVolumeLow {
-                volumeHint
+                hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            } else if !soundTipSeen, position.phase?.kind == .prepare {
+                // While getting ready, before the first change: the moment to set the volume.
+                hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
                     .padding(.bottom, 16)
                     .transition(.opacity)
             }
@@ -148,6 +158,8 @@ struct PhoneRunView: View {
         }
         .padding(.horizontal, 24)
         .onChange(of: position.phase?.id) { _, _ in
+            // The tip has had its moment once the run is past getting ready.
+            if position.phase?.kind != .prepare, engine.status == .running { soundTipSeen = true }
             guard !reduceMotion, engine.status == .running else { return }
             flashKind = kind
             flash = palette.colorScheme == .dark ? 0.3 : 0.45
@@ -158,9 +170,10 @@ struct PhoneRunView: View {
         }
     }
 
-    /// The cues play at the media volume, which the volume buttons set while a run is going.
-    private var volumeHint: some View {
-        Label("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
+    /// A line about the sound. The cues play at the media volume, which the volume buttons set
+    /// while a run is going.
+    private func hint(_ text: String, systemImage: String) -> some View {
+        Label(text, systemImage: systemImage)
             .font(.subheadline.weight(.semibold))
             .padding(.horizontal, 14)
             .padding(.vertical, 8)

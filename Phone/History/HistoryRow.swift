@@ -6,7 +6,7 @@
 import SwiftUI
 
 /// One session in History: how much of it ran as a white ring, then its name, when it
-/// started, its rounds, its length and its average heart rate.
+/// started, its rounds, its length, its calories and its average heart rate.
 struct HistoryRow: View {
     let session: SessionSummary
 
@@ -46,6 +46,9 @@ struct HistoryRow: View {
             session.spokenRounds,
             DurationFormat.spoken(Int(session.duration.rounded())),
         ]
+        if let calories = session.calories {
+            parts.append("\(calories) calories")
+        }
         if let heartRate = session.averageHeartRate {
             parts.append("average heart rate \(heartRate) beats per minute")
         }
@@ -81,11 +84,36 @@ struct HistoryRow: View {
                 .font(.system(.title3, design: .rounded).weight(.bold).monospacedDigit())
                 .lineLimit(1)
                 .fixedSize()
-            if let heartRate = session.averageHeartRate {
-                HeartRateLabel(beats: heartRate)
-                    .font(.subheadline)
+            // One line: calories for every kind of workout, the heart only where measured.
+            HStack(spacing: 10) {
+                if let calories = session.calories {
+                    CaloriesLabel(calories: calories)
+                }
+                if let heartRate = session.averageHeartRate {
+                    HeartRateLabel(beats: heartRate)
+                }
             }
+            .font(.subheadline)
         }
+    }
+}
+
+/// "🔥 62": calories burned, the flame kept close to its number. Never wraps.
+struct CaloriesLabel: View {
+    let calories: Int
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "flame.fill")
+                .imageScale(.small)
+            Text("\(calories)")
+                .monospacedDigit()
+        }
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .fixedSize()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(calories) calories")
     }
 }
 

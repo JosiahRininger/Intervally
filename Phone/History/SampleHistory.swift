@@ -97,7 +97,8 @@ actor SampleHistory: HistorySource {
                 round: phase.kind.isBookend ? nil : phase.round,
                 start: start.addingTimeInterval(phase.start),
                 duration: phase.duration,
-                averageHeartRate: spec.heartRate ? heartRate(for: phase, session: index) : nil
+                averageHeartRate: spec.heartRate ? heartRate(for: phase, session: index) : nil,
+                activeEnergy: calories(for: phase)
             )
         }
         let duration = phases.reduce(0) { $0 + $1.duration }
@@ -111,9 +112,21 @@ actor SampleHistory: HistorySource {
             plannedRounds: spec.workout.rounds,
             averageHeartRate: rates.isEmpty ? nil : weighted,
             maximumHeartRate: rates.map(\.0).max().map { $0 + 6 },
-            activeEnergy: duration / 60 * 10.5,
+            activeEnergy: activities.compactMap(\.activeEnergy).reduce(0, +),
             activities: activities
         )
+    }
+
+    /// Kilocalories an interval burns: about 14 a minute working, 6 resting, as a HIIT session
+    /// on a watch records.
+    private static func calories(for phase: IntervalPhase) -> Double {
+        let perMinute: Double = switch phase.kind {
+        case .work: 14
+        case .warmup: 9
+        case .rest, .cooldown: 6
+        case .prepare: 3
+        }
+        return phase.duration / 60 * perMinute
     }
 
     /// Rises through the rounds and drops in each rest, as a real session does.

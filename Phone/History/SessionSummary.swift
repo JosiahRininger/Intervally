@@ -18,6 +18,8 @@ struct RawWorkout: Equatable, Sendable {
         var duration: TimeInterval
         /// Beats per minute.
         var averageHeartRate: Double?
+        /// Kilocalories burned in this interval alone.
+        var activeEnergy: Double? = nil
     }
 
     var id: UUID
@@ -45,6 +47,8 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
         let round: Int?
         let duration: TimeInterval
         let averageHeartRate: Int?
+        /// Whole kilocalories, rounded; nil when Health recorded none for it.
+        var calories: Int? = nil
 
         /// "Work · Round 3", "Get Ready". Only work and rest name their round: the lead-in
         /// is tagged round 1, which nobody would call it.
@@ -95,7 +99,8 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
                 kind: kind,
                 round: kind.isBookend ? nil : activity.round,
                 duration: activity.duration,
-                averageHeartRate: activity.averageHeartRate.map { Int($0.rounded()) }
+                averageHeartRate: activity.averageHeartRate.map { Int($0.rounded()) },
+                calories: activity.activeEnergy.map { Int($0.rounded()) }
             )
         }
         let work = intervals.filter { $0.kind == .work }
@@ -135,6 +140,22 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
         intervals.contains { $0.averageHeartRate != nil }
     }
 
+    /// The per-interval calories chart, likewise, needs calories recorded per interval.
+    var showsCaloriesChart: Bool {
+        intervals.contains { $0.calories != nil }
+    }
+
+    /// Whole kilocalories for the session, rounded, for the row and the totals.
+    var calories: Int? {
+        activeEnergy.map { Int($0.rounded()) }
+    }
+
+    /// The charts this session can draw, calories first: they mean something in every kind
+    /// of workout, heart rate only where something measured it.
+    var charts: [IntervalMetric] {
+        (showsCaloriesChart ? [IntervalMetric.calories] : []) + (showsChart ? [.heartRate] : [])
+    }
+
     /// The intervals as phases laid end to end, for a ring of what actually ran.
     var phases: [IntervalPhase] {
         var cursor: TimeInterval = 0
@@ -144,6 +165,35 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
                 id: interval.id, kind: interval.kind, duration: interval.duration,
                 round: interval.round ?? 1, start: cursor
             )
+        }
+    }
+}
+
+/// What a session's per-interval chart can show.
+enum IntervalMetric: String, CaseIterable, Identifiable, Hashable, Sendable {
+    case calories, heartRate
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .calories: "Calories"
+        case .heartRate: "Heart Rate"
+        }
+    }
+
+    /// The interval's value, or nil when Health recorded none.
+    func value(of interval: SessionSummary.Interval) -> Int? {
+        switch self {
+        case .calories: interval.calories
+        case .heartRate: interval.averageHeartRate
+        }
+    }
+
+    func spoken(_ value: Int) -> String {
+        switch self {
+        case .calories: "\(value) calories"
+        case .heartRate: "\(value) beats per minute"
         }
     }
 }

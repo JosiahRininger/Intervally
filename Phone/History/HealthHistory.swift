@@ -102,7 +102,10 @@ extension RawWorkout.Activity {
             start: activity.startDate,
             duration: activity.duration,
             averageHeartRate: activity.statistics(for: HKQuantityType(.heartRate))?
-                .averageQuantity()?.doubleValue(for: .beatsPerMinute)
+                .averageQuantity()?.doubleValue(for: .beatsPerMinute),
+            // Each interval is its own workout activity, so Health sums its energy on its own.
+            activeEnergy: activity.statistics(for: HKQuantityType(.activeEnergyBurned))?
+                .sumQuantity()?.doubleValue(for: .kilocalorie())
         )
     }
 }
