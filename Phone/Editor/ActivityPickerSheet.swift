@@ -43,7 +43,9 @@ struct ActivityPickerSheet: View {
             .safeAreaInset(edge: .bottom) {
                 Text("Apple Health and Fitness file the workout under it. On Apple Watch it also sets how calories are estimated.")
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    // .primary: on the bar's material, with rows passing under it, .secondary
+                    // fell short of 4.5:1 (accessibility audit).
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 24)
                     .padding(.vertical, 10)

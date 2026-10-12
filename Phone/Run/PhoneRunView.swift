@@ -283,7 +283,9 @@ struct PhoneRunView: View {
             if let line = RunScreenLayout.roundLine(for: position.phase, totalRounds: engine.plan.totalRounds) {
                 Text(line)
                     .font(.system(size: side * 0.055, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.secondary)
+                    // Brighter than .secondary, which fell short of 4.5:1 against the phase's
+                    // glow in the ring (accessibility audit).
+                    .foregroundStyle(.primary.opacity(0.72))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)

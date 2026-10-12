@@ -135,7 +135,8 @@ struct RhythmLine: View {
     @Environment(\.palette) private var palette
 
     var body: some View {
-        let separator = Text(" · ").foregroundStyle(palette.neutral.opacity(0.4))
+        // 0.6, not 0.4: at 0.4 the dots came to about 3.7:1 on the card (accessibility audit).
+        let separator = Text(" · ").foregroundStyle(palette.neutral.opacity(0.6))
         var line = Text(DurationFormat.clock(workout.workSeconds)).foregroundStyle(palette.workInk)
         if workout.restSeconds > 0 {
             line = Text("\(line)\(separator)\(Text(DurationFormat.clock(workout.restSeconds)).foregroundStyle(palette.restInk))")

@@ -276,6 +276,22 @@ targets:
         # Same StoreKitTest header warning as the watch tests.
         OTHER_SWIFT_FLAGS: $(inherited) -Xcc -Wno-deprecated-declarations
 
+  # Apple's accessibility audit on every main iPhone screen, and the layout checks that need
+  # a real screen. Its own scheme, so the unit tests stay quick: launching the app for each
+  # screen takes minutes, not seconds.
+  IntervallyPhoneUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: PhoneUITests
+    dependencies:
+      - target: IntervallyPhone
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(APP_BUNDLE_ID).uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: IntervallyPhone
+
 schemes:
   # Ship scheme: Product > Archive here, and only here.
   IntervallyPhone:
@@ -295,6 +311,17 @@ schemes:
       storeKitConfiguration: StoreKit/Intervally.storekit
     archive:
       config: Release
+  # The UI tests: `xcodebuild test -scheme IntervallyPhoneUITests -destination ...`. Debug
+  # only, as they open screens with the QA launch flags.
+  IntervallyPhoneUITests:
+    build:
+      targets:
+        IntervallyPhone: [running, testing]
+        IntervallyPhoneUITests: [testing]
+    test:
+      config: Debug
+      targets:
+        - IntervallyPhoneUITests
   # Watch development and the watch unit tests (README command unchanged). Never archived on
   # its own: a watch-only archive can't carry the purchase.
   Intervally:

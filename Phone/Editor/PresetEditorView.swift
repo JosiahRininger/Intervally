@@ -146,7 +146,6 @@ struct PresetEditorView: View {
                 VStack(spacing: 24) {
                     VStack(spacing: 10) {
                         nameField(workout)
-                        activityButton(workout)
                         if !tipSeen {
                             Text(EditorLayout.tip)
                                 .font(.footnote)
@@ -191,10 +190,9 @@ struct PresetEditorView: View {
             }
         }
         // Kept for the back button and VoiceOver; the name field right under the ring is the
-        // visible title.
+        // visible title, and the activity takes the title's place in the bar (`menu`).
         .navigationTitle(workout.name)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(removing: .title)
         .toolbar { menu(workout) }
         // The tabs stay, as in Apple's own apps: hidden here, they only came back once Back's
         // animation had finished, a beat after the workouts were already showing. The ring
@@ -238,7 +236,9 @@ struct PresetEditorView: View {
                 RhythmLine(workout: runs)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.6)
+                    // As far as the total above it: at 0.6 it truncated at the largest text
+                    // sizes, where the ring is smallest.
+                    .minimumScaleFactor(0.45)
             }
             // Narrow enough for the ring's chord at the rhythm line's height at 160 points,
             // where 0.15 let the line touch the ring at the largest text size.
@@ -276,7 +276,8 @@ struct PresetEditorView: View {
 
     // MARK: - Activity
 
-    /// What Health records it as, under the name: small, as most presets keep HIIT.
+    /// What Health records it as, in the middle of the navigation bar: small, as most presets
+    /// keep HIIT.
     private func activityButton(_ workout: IntervalWorkout) -> some View {
         let activity = workout.activityKind
         return Button {
@@ -290,16 +291,14 @@ struct PresetEditorView: View {
                     .foregroundStyle(.primary)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
             .font(.subheadline.weight(.semibold))
             .lineLimit(1)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 9)
-            .background(palette.card, in: Capsule())
-            .contentShape(Capsule())
+            .minimumScaleFactor(0.8)
+            .padding(.horizontal, 6)
         }
-        .buttonStyle(.plain)
+        .neutralGlass()
         .accessibilityLabel("Activity, \(activity.title)")
         .accessibilityHint("Changes what Apple Health records this workout as")
     }
@@ -425,6 +424,12 @@ struct PresetEditorView: View {
 
     @ToolbarContentBuilder
     private func menu(_ workout: IntervalWorkout) -> some ToolbarContent {
+        // In the bar's middle, empty since the name field took the title's place: under the
+        // name it cost the tiles the room to fit a 6.3-inch iPhone, and up here it stays in
+        // reach however far the tiles are scrolled.
+        ToolbarItem(placement: .principal) {
+            activityButton(workout)
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Menu {
                 if sync.peer == .ready, !actions.isUpNext(workout) {

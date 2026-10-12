@@ -63,9 +63,11 @@ struct EditorTile: View {
                     Spacer(minLength: 0)
 
                     if content.showsPickerHint {
+                        // .secondary, not .tertiary: the only sign the tile opens a picker, and
+                        // .tertiary fell short of 3:1 on the tile (accessibility audit).
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                             .accessibilityHidden(true)
                     }
                 }

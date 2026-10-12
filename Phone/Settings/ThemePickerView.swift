@@ -124,7 +124,7 @@ private struct ThemeOptionCard: View {
         } else {
             Image(systemName: "circle")
                 .font(.title2)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
         }
     }
 }

@@ -25,11 +25,15 @@ xcodegen generate
 xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'platform=watchOS Simulator,name=Apple Watch Series 11 (46mm),OS=26.2'
 # The iPhone app (also builds the embedded watch app): PhoneTests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+# The iPhone UI tests (PhoneUITests/), a few minutes: Apple's accessibility audit on every
+# main screen, and the editor fitting a 6.1- and 6.3-inch iPhone without scrolling
+xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhoneUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
-The watch suite runs 564 tests (24 skipped: the StoreKit suite that can't run in a
-companion watch app, and the opt-in manual QA) and the iPhone suite 297 (2 skipped: the one
-purchase Xcode's test server cancels, and its manual QA), all Swift Testing, on Xcode 26.2.
+The watch suite runs 603 tests and the iPhone suite 377, all Swift Testing, on Xcode 26.2.
+The UI tests are XCTest (the audit is XCTest's), and each opens its screen straight from
+launch with the debug build's QA flags. `PhoneUITests/AuditExceptions.swift` lists what the
+audit reports by design, each with its reason; anything else it finds fails.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
 bundle ID `com.josiahrininger.intervally` and the App Store record; the watch app is
