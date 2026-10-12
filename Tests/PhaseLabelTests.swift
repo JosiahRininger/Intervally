@@ -24,7 +24,8 @@ struct PhaseLabelTests {
     @Test("Names are trimmed and cut to fit; an empty one keeps the phase's own")
     func cleaning() {
         #expect(PhaseLabel.cleaned("  Run  ") == "Run")
-        #expect(PhaseLabel.cleaned("Sprint as hard as you can") == "Sprint as ha")
+        #expect(PhaseLabel.cleaned("Sprint as hard as you can") == "Sprint as", "Cut, then trimmed again")
+        #expect(PhaseLabel.cleaned("Recovery Jog") == "Recovery J", "Ten letters: the top of a 40mm ring")
         #expect(PhaseLabel.cleaned("   ") == nil)
     }
 
@@ -96,6 +97,27 @@ struct PhaseLabelTests {
         reset.setLabel(nil, for: .work)
         let cleared = record(mine, 100).merged(with: record(reset, 200))
         #expect(!cleared.workout.hasCustomLabel(for: .work), "An emptied set is a reset, not a version without labels")
+    }
+
+    /// The iPhone named a phase at 5 while the watch, out of range, changed rounds at 6. The
+    /// iPhone's merge keeps its name on the watch's write at 6; the watch, holding that write
+    /// without it, gets it back at the same stamp. Both must settle on the same record, or
+    /// each keeps its own on the tie and they push it back and forth for good.
+    @Test("At the same stamp, a copy without the activity or names takes them from one with")
+    func tieConverges() {
+        let id = UUID()
+        var named = IntervalWorkout(id: id, name: "Hills", rounds: 10)
+        named.setLabel(PhaseLabel(name: "Climb", symbol: .run), for: .work)
+        named.activity = .outdoorRun
+        var bare = named
+        bare.phaseLabels = nil
+        bare.activity = nil
+        let stamp = SyncStamp(millis: 6, device: "watch")
+        let phone = PresetRecord(id: id, workout: named, deleted: false, order: 0, stamp: stamp)
+        let watch = PresetRecord(id: id, workout: bare, deleted: false, order: 0, stamp: stamp)
+        #expect(phone.merged(with: watch) == watch.merged(with: phone))
+        #expect(watch.merged(with: phone).workout == named)
+        #expect(watch.merged(with: watch) == watch, "A tie with itself changes nothing")
     }
 
     @Test("Each interval saved to Health keeps its name and figure, and the workout says outdoors outright")

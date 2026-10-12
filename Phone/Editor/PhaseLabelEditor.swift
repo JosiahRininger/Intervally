@@ -6,14 +6,17 @@
 import SwiftUI
 
 /// Renames one phase of a preset and gives it a figure: "Run" with a runner for Work. Pushed
-/// inside the phase's picker sheet. Every change is saved as it is made; the phase's own name
-/// and figure put it back.
+/// inside the phase's picker sheet. A figure is saved when it is tapped; the name when it is
+/// done (Done, leaving the field, or leaving the screen), so a rename is one edit to sync, as
+/// the preset's own name is. The phase's own name and figure put it back.
 struct PhaseLabelEditor: View {
     let kind: IntervalPhase.Kind
     let onChange: (PhaseLabel?) -> Void
 
     @State private var name: String
     @State private var symbol: PhaseSymbol
+    /// What was last saved, so leaving the field or the screen without a change saves nothing.
+    @State private var saved: PhaseLabel
     @FocusState private var nameFocused: Bool
     @Environment(\.palette) private var palette
 
@@ -23,6 +26,7 @@ struct PhaseLabelEditor: View {
         // An empty field shows the phase's own name as its placeholder.
         _name = State(initialValue: label.name == kind.title ? "" : label.name)
         _symbol = State(initialValue: label.symbol)
+        _saved = State(initialValue: label)
     }
 
     private var isCustom: Bool {
@@ -46,7 +50,10 @@ struct PhaseLabelEditor: View {
                             if new.count > PhaseLabel.maxNameLength {
                                 name = String(new.prefix(PhaseLabel.maxNameLength))
                             }
-                            save()
+                        }
+                        .onSubmit(save)
+                        .onChange(of: nameFocused) { _, focused in
+                            if !focused { save() }
                         }
                     Text("What the run screen, the Lock Screen and the voice coach call it.")
                         .font(.footnote)
@@ -80,6 +87,7 @@ struct PhaseLabelEditor: View {
             .padding(20)
         }
         .scrollDismissesKeyboard(.interactively)
+        .onDisappear(perform: save)
         .navigationTitle("Name & Icon")
         .navigationBarTitleDisplayMode(.inline)
     }
@@ -106,7 +114,10 @@ struct PhaseLabelEditor: View {
     }
 
     private func save() {
-        onChange(PhaseLabel(name: PhaseLabel.cleaned(name) ?? kind.title, symbol: symbol))
+        let label = PhaseLabel(name: PhaseLabel.cleaned(name) ?? kind.title, symbol: symbol)
+        guard label != saved else { return }
+        saved = label
+        onChange(label)
     }
 }
 

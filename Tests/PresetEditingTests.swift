@@ -30,6 +30,18 @@ struct CrownValueTableTests {
         #expect(ValueEditorView.values(in: IntervalWorkout.prepareRange, step: 5).first == 0)
     }
 
+    @Test("A stored value off the table becomes a detent of its own, so opening the editor keeps it")
+    func offTableValueKept() {
+        let table = ValueEditorView.values(in: IntervalWorkout.workRange, step: 5)
+        #expect(!table.contains(125), "2:05, set on the iPhone's wheels, is between the crown's 2:00 and 2:15")
+        let kept = ValueEditorView.table(table, keeping: 125)
+        #expect(kept.count == table.count + 1)
+        #expect(kept == kept.sorted())
+        #expect(kept[kept.firstIndex(of: 125)! - 1] == 120 && kept[kept.firstIndex(of: 125)! + 1] == 135)
+        #expect(ValueEditorView.table(table, keeping: 120) == table, "A value on the table adds nothing")
+        #expect(ValueEditorView.table(table, keeping: nil) == table)
+    }
+
     @Test("Rounds are one per detent")
     func rounds() {
         #expect(ValueEditorView.values(in: IntervalWorkout.roundsRange, step: 1) == Array(1...99))

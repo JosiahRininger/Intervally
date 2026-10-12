@@ -71,9 +71,14 @@ final class CueAudio: NSObject, CueOutput {
     private var isDucking = false
     private var duckUntil = Date.distantPast
     private var restoreTask: Task<Void, Never>?
-    /// How long the music stays down after a cue ends: enough to carry the 3-2-1 into the
-    /// change and the word after it as one dip.
-    static let duckTail: TimeInterval = 0.8
+    /// Keeps the app running while the music is down, so it always comes back up: with the
+    /// phone locked and no workout session (Health declined, or a run that just finished),
+    /// iOS would otherwise suspend the app once the cue stops, music still lowered.
+    private var duckBackgroundTask = UIBackgroundTaskIdentifier.invalid
+    /// How long the music stays down after a cue ends: longer than the widest gap between
+    /// the 3-2-1 ticks (a second apart, up to 1.5 s as the run's half-second ticker finds
+    /// them), so the countdown, the change and the word after it are one dip, not four.
+    static let duckTail: TimeInterval = 1.6
 
     override init() {
         super.init()
@@ -141,6 +146,7 @@ final class CueAudio: NSObject, CueOutput {
         restoreTask?.cancel()
         restoreTask = nil
         isDucking = false
+        endDuckBackgroundTask()
         phrases.removeAll()
         guard isActive else { return }
         do {
@@ -214,6 +220,14 @@ final class CueAudio: NSObject, CueOutput {
             try session.setActive(true)
             isActive = true
             isDucking = true
+            if duckBackgroundTask == .invalid {
+                duckBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Restore other audio") { [weak self] in
+                    MainActor.assumeIsolated {
+                        self?.stopDucking()
+                        self?.endDuckBackgroundTask()
+                    }
+                }
+            }
         } catch {
             log.notice("could not lower other audio: \(error.localizedDescription, privacy: .public)")
             setCategory(ducking: false)
@@ -249,6 +263,13 @@ final class CueAudio: NSObject, CueOutput {
         isActive = false
         setCategory(ducking: false)
         hold()
+        endDuckBackgroundTask()
+    }
+
+    private func endDuckBackgroundTask() {
+        guard duckBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(duckBackgroundTask)
+        duckBackgroundTask = .invalid
     }
 
     /// Takes the audio for the run, once: from then on the volume buttons set the cues'

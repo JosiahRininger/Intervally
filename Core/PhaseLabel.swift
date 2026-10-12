@@ -12,15 +12,16 @@ struct PhaseLabel: Codable, Equatable, Hashable, Sendable {
     var name: String
     var symbol: PhaseSymbol
 
-    /// Long enough for "Recovery" or "Sprint Hard", short enough for the watch's ring.
-    static let maxNameLength = 12
+    /// Long enough for "Recovery" or "Jump Rope", short enough for the top of the watch's
+    /// ring on a 40mm watch, where the word may shrink to `PhaseWord.smallestScale`.
+    static let maxNameLength = 10
 
     /// The name as it will be shown: trimmed, cut to `maxNameLength`, nil when nothing is
     /// left, which keeps the phase's own name.
     static func cleaned(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(maxNameLength))
+        return String(trimmed.prefix(maxNameLength)).trimmingCharacters(in: .whitespaces)
     }
 }
 

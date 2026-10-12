@@ -56,7 +56,7 @@ struct MetadataTests {
         "## Promotional text (170)",
         "## Description (4000)",
         "## Keywords (100)",
-        "## What's New in 1.1 (4000)",
+        "## What's New in 1.2 (4000)",
         "### Notes for the reviewer (4000)",
         "Display Name (30)",
         "Description (45)",
@@ -181,7 +181,8 @@ struct MetadataTests {
 
     @Test("The purchase goes in with the iOS version, and its notes start on the iPhone")
     func purchaseRidesWithTheIOSVersion() throws {
-        #expect(try Self.listing().contains("Intervally Pro was reviewed with version 1.0; nothing to add for 1.1."))
+        #expect(try Self.listing().contains("**In-App Purchases:** add Intervally Pro to the submission."))
+        #expect(try Self.field("### Notes for the reviewer (4000)").text.contains("is submitted with this version"))
         let purchase = try Self.field("### Review notes (4000)").text
         let iPhone = try #require(purchase.range(of: "ON IPHONE (the main way to buy; no Apple Watch needed)"))
         let watch = try #require(purchase.range(of: "ON APPLE WATCH"))

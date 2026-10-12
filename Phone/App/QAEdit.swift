@@ -22,6 +22,12 @@ enum QAEdit: Equatable {
     /// SwiftUI's `onMove` offsets: the preset at `from` goes before the one now at `to`.
     case move(from: Int, to: Int)
     case add(String)
+    /// `label 0 work run Run`: the phase's name and figure, as Name & Icon sets them.
+    case label(Int, IntervalPhase.Kind, PhaseSymbol, String)
+    /// `unlabel 0`: every phase back to its own name and figure.
+    case unlabel(Int)
+    /// `activity 0 outdoorRun`: what Health records the preset as.
+    case activity(Int, WorkoutActivity)
 
     /// The edits in `spec`, separated by semicolons, e.g. `rename 0 Sprint; work 0 45`. Nil
     /// if any one is unreadable: a typo must not leave half the edits made.
@@ -45,6 +51,13 @@ enum QAEdit: Equatable {
         case ("delete", let index?) where words.count == 2: return .delete(index)
         case ("rename", let index?) where !rest.isEmpty: return .rename(index, rest)
         case ("add", _) where words.count > 1: return .add(words.dropFirst().joined(separator: " "))
+        case ("unlabel", let index?) where words.count == 2: return .unlabel(index)
+        case ("activity", let index?) where words.count == 3:
+            return WorkoutActivity(rawValue: words[2]).map { .activity(index, $0) }
+        case ("label", let index?) where words.count >= 5:
+            guard let kind = IntervalPhase.Kind(rawValue: words[2]),
+                  let symbol = PhaseSymbol(rawValue: words[3]) else { return nil }
+            return .label(index, kind, symbol, words.dropFirst(4).joined(separator: " "))
         default: break
         }
         guard words.count == 3, let first = numbers[0], let second = numbers[1] else { return nil }
@@ -88,6 +101,12 @@ enum QAEdit: Equatable {
             store.move(fromOffsets: [from], toOffset: to)
         case .add(let name):
             store.add(IntervalWorkout(name: name))
+        case .label(let index, let kind, let symbol, let name):
+            if let workout = preset(index) { store.setLabel(workout.id, kind: kind, to: PhaseLabel(name: name, symbol: symbol)) }
+        case .unlabel(let index):
+            edit(index) { $0.phaseLabels = [:] }
+        case .activity(let index, let activity):
+            if let workout = preset(index) { store.setActivity(workout.id, to: activity) }
         }
     }
 }

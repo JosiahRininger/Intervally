@@ -303,6 +303,8 @@ struct IntervallyWidgetView: View {
             VStack(alignment: .leading, spacing: 2) {
                 phaseLine(for: run)
                     .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
                     .widgetAccentable()
                 countdown(for: run)
                     .font(.title3.weight(.semibold))

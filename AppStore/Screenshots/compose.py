@@ -26,7 +26,7 @@ SHOTS = [
     ('1-run', 'TRAIN ON IPHONE', ['Press Start.', 'Hear every interval.'], False),
     ('2-lock', 'LOCK SCREEN', ['Your countdown,', 'phone locked'], False),
     ('3-workouts', 'WORKOUTS', ['Every workout,', 'one tap from Start'], False),
-    ('4-editor', 'EDITOR', ['Build it here.', 'Start it anywhere.'], False),
+    ('4-editor', 'EDITOR', ['Name every interval', 'and give it an icon'], False),
     ('5-history', 'HISTORY', ['Every session,', 'interval by interval'], False),
     ('6-session', 'SESSION', ['Your calories,', 'every interval'], False),
     ('7-pro-editor', 'INTERVALLY PRO', ['Add a warmup', 'and a cooldown'], True),
@@ -36,7 +36,6 @@ SHOTS = [
 # On iPad, where a run has no watch to start it on: the same shots, worded for it.
 IPAD_CAPTIONS = {
     '1-run': ('TRAIN ON IPAD', ['Press Start.', 'Hear every interval.']),
-    '4-editor': ('EDITOR', ['Build a workout', 'in seconds']),
 }
 
 

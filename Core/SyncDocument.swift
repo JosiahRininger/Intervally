@@ -85,6 +85,13 @@ struct PresetRecord: Codable, Equatable, Sendable {
             if out.workout.phaseLabels == nil { out.workout.phaseLabels = workout.phaseLabels }
             out.deleted = other.deleted
             out.stamp = other.stamp
+        } else if other.stamp == stamp {
+            // The same write, one copy filled in by the merge above and one not: the device
+            // that kept the activity or labels sends that write back at the same stamp.
+            // Without filling the gap here each side would keep its own copy on the tie,
+            // never agree, and push the preset back and forth for good.
+            if out.workout.activity == nil { out.workout.activity = other.workout.activity }
+            if out.workout.phaseLabels == nil { out.workout.phaseLabels = other.workout.phaseLabels }
         }
         if other.orderStamp > orderStamp {
             out.order = other.order

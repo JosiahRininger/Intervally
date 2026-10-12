@@ -48,6 +48,17 @@ struct PhaseWordTests {
         }
     }
 
+    /// A preset's own names, at the longest a name can be (`PhaseLabel.maxNameLength`).
+    @Test("On a 40mm, a ten-letter name of the preset's own fits whole within the shrink floor")
+    func longestNamesFitOn40mm() throws {
+        let line = line(on: Self.screen40)
+        for word in ["Kettlebell", "Wall Balls", "Recovery J", "Burpee Box"] {
+            #expect(word.count <= PhaseLabel.maxNameLength)
+            let untracked = try width(word, PhaseWord.untracked, textSize: .large)
+            #expect(untracked * PhaseWord.smallestScale <= line, "\(word): \(untracked) × \(PhaseWord.smallestScale) vs \(line)")
+        }
+    }
+
     @Test("Short words keep the tracked style and full size on every watch")
     func shortWordsKeepTheirStyle() throws {
         for screen in [Self.screen40, CGSize(width: 208, height: 248)] {

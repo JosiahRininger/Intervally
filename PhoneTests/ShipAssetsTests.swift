@@ -72,7 +72,7 @@ struct ShipAssetsTests {
         #expect(iPad == iPhone)
         let compose = try String(contentsOf: Self.screenshots.appendingPathComponent("compose.py"), encoding: .utf8)
         #expect(compose.contains("'1-run': ('TRAIN ON IPAD'"))
-        #expect(compose.contains("'4-editor': ('EDITOR', ['Build a workout'"), "No 'Start it anywhere' on a device with no watch")
+        #expect(!compose.contains("anywhere"), "No 'Start it anywhere' on a device with no watch")
     }
 
     @Test("The In-App Purchase review screenshot is a 6.9-inch capture with no alpha")

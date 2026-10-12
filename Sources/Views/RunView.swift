@@ -488,7 +488,8 @@ struct PhaseWord: View {
 
     static let tracked = Style(font: .phaseLabel, kerning: 0.6)
     static let untracked = Style(font: .phaseLabel, kerning: 0)
-    static let smallestScale: CGFloat = 0.55
+    /// Low enough for a 10-letter name (`PhaseLabel.maxNameLength`) on a 40mm ring.
+    static let smallestScale: CGFloat = 0.5
 
     var body: some View {
         ViewThatFits(in: .horizontal) {

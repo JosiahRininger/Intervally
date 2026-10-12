@@ -154,6 +154,9 @@ private struct PhaseTitle: View {
             .kerning(0.8)
             .foregroundStyle(state.phase.map { style.ink($0) } ?? style.primary)
             .lineLimit(1)
+            // A preset's own name can be longer than "Cooldown"; the watch's Smart Stack
+            // has the least room for it.
+            .minimumScaleFactor(0.7)
     }
 }
 

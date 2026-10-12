@@ -37,8 +37,11 @@ struct ValueEditorView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Index into `values`, not the value itself: that is what makes the steps non-linear.
     @State private var crown: Double = 0
+    /// A stored value the table doesn't hold, such as 2:05 set on the iPhone's wheels, kept as
+    /// a detent of its own while the editor is open: opening it must not change the preset.
+    @State private var kept: Int?
 
-    var values: [Int] { valueTable ?? Self.values(in: range, step: step) }
+    var values: [Int] { Self.table(valueTable ?? Self.values(in: range, step: step), keeping: kept) }
 
     var body: some View {
         GeometryReader { proxy in
@@ -76,11 +79,13 @@ struct ValueEditorView: View {
             value = next
         }
         .onChange(of: value) { _, new in
+            keep(new)
             if let position = crownPosition(after: new, from: crown) { crown = position }
         }
         .onAppear {
-            // A stored value that is not on the table (say 7s from an older build) would
-            // otherwise jump to a neighbour on the first click of the crown.
+            // A stored value off the table (2:05 from the iPhone, 7s from an older build)
+            // becomes a detent, so the first click of the crown moves to its neighbour.
+            keep(value)
             let index = nearestIndex(to: value)
             crown = Double(index)
             if values[index] != value { value = values[index] }
@@ -150,6 +155,19 @@ struct ValueEditorView: View {
     private func nearestIndex(to target: Int) -> Int {
         let table = values
         return table.indices.min { abs(table[$0] - target) < abs(table[$1] - target) } ?? 0
+    }
+
+    /// Keeps an in-range value the table lacks; an out-of-range one is still snapped onto it.
+    private func keep(_ value: Int) {
+        let table = values
+        guard value != kept, !table.contains(value), (table.first ?? value)...(table.last ?? value) ~= value else { return }
+        kept = value
+    }
+
+    /// `table` with `kept` in its place among the detents.
+    nonisolated static func table(_ table: [Int], keeping kept: Int?) -> [Int] {
+        guard let kept, !table.contains(kept) else { return table }
+        return (table + [kept]).sorted()
     }
 
     /// Every value the crown can land on. The table lives in `ValueSteps`, shared with the
