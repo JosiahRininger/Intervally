@@ -109,7 +109,9 @@ extension RawWorkout.Activity {
                 .averageQuantity()?.doubleValue(for: .beatsPerMinute),
             // Each interval is its own workout activity, so Health sums its energy on its own.
             activeEnergy: activity.statistics(for: HKQuantityType(.activeEnergyBurned))?
-                .sumQuantity()?.doubleValue(for: .kilocalorie())
+                .sumQuantity()?.doubleValue(for: .kilocalorie()),
+            phaseName: activity.metadata?[HealthMetadata.phaseName] as? String,
+            phaseSymbol: activity.metadata?[HealthMetadata.phaseSymbol] as? String
         )
     }
 }

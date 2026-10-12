@@ -4,22 +4,25 @@
 //
 
 import Foundation
+import HealthKit
 import Testing
 @testable import Intervally
 
 /// What the saved Health workout is tagged with, which is all the iPhone's History has to go
-/// on: the preset that ran, its name then, and the rounds it was planned for.
+/// on: the preset that ran, its name then, the rounds it was planned for, and whether it ran
+/// indoors.
 @Suite("Health workout metadata")
 struct WorkoutMetadataTests {
 
-    @Test("A workout is tagged with its preset's ID, name and planned rounds")
+    @Test("A workout is tagged with its preset's ID, name, planned rounds and indoors")
     func tags() {
         let workout = IntervalWorkout(name: "Hill Repeats", workSeconds: 60, restSeconds: 90, rounds: 6)
         let metadata = WorkoutSessionController.workoutMetadata(for: workout)
         #expect(metadata[HealthMetadata.presetID] as? String == workout.id.uuidString)
         #expect(metadata[HealthMetadata.presetName] as? String == "Hill Repeats")
         #expect(metadata[HealthMetadata.plannedRounds] as? Int == 6)
-        #expect(metadata.count == 3)
+        #expect(metadata[HKMetadataKeyIndoorWorkout] as? Bool == true)
+        #expect(metadata.count == 4)
     }
 
     @Test("Planned rounds are the rounds that run, clamped as the plan clamps them")

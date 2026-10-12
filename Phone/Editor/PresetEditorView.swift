@@ -104,7 +104,13 @@ struct PresetEditorView: View {
             switch sheet {
             case .picker(let field):
                 if let workout {
-                    ValuePickerSheet(field: field, value: workout[keyPath: field.keyPath]) { value in
+                    ValuePickerSheet(
+                        field: field, value: workout[keyPath: field.keyPath],
+                        label: field.kind.map(workout.label(for:)),
+                        onLabel: { label in
+                            if let kind = field.kind { store.setLabel(workout.id, kind: kind, to: label) }
+                        }
+                    ) { value in
                         set(field, to: value)
                     }
                     .paletteSheet()

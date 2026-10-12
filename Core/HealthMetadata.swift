@@ -22,4 +22,8 @@ enum HealthMetadata {
     static let phase = "IntervallyPhase"
     /// On each interval's activity: its 1-based round. The warmup and cooldown carry none.
     static let round = "IntervallyRound"
+    /// On each interval's activity: the name the preset gave the phase, when it gave one.
+    static let phaseName = "IntervallyPhaseName"
+    /// On each interval's activity: the figure the preset gave the phase (`PhaseSymbol`).
+    static let phaseSymbol = "IntervallyPhaseSymbol"
 }

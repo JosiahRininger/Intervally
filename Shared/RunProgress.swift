@@ -12,6 +12,8 @@ import Foundation
 /// the snapshot means.
 struct RunProgress: Equatable, Sendable {
     let phaseKind: IntervalPhase.Kind
+    /// The preset's name and figure for the phase; nil for the phase's own.
+    var label: PhaseLabel? = nil
     /// Absolute instant the current phase ends, for `Text(timerInterval:)`.
     let phaseEnd: Date
     let round: Int
@@ -20,16 +22,19 @@ struct RunProgress: Equatable, Sendable {
 }
 
 extension RunProgress {
+    var phaseName: String { label?.name ?? phaseKind.title }
+    var symbolName: String { label?.symbol.systemName ?? phaseKind.symbolName }
+
     /// "WORK · 3 of 8", "GET READY · 1 of 8". A bookend belongs to no round, so it shows its
     /// name alone: "WARMUP", never "WARMUP · 1 of 8".
     var phaseLine: String {
-        let name = phaseKind.title.uppercased()
+        let name = phaseName.uppercased()
         return phaseKind.isBookend ? name : "\(name) · \(round) of \(totalRounds)"
     }
 
     /// "Work 3/8" for the inline complication; a bookend is just "Warmup".
     var compactLine: String {
-        phaseKind.isBookend ? phaseKind.title : "\(phaseKind.title) \(round)/\(totalRounds)"
+        phaseKind.isBookend ? phaseName : "\(phaseName) \(round)/\(totalRounds)"
     }
 }
 
@@ -48,6 +53,7 @@ extension RunSnapshot {
         guard let phase = position.phase else { return nil }
         return RunProgress(
             phaseKind: phase.kind,
+            label: phase.label,
             // Derived from the anchor, so it stays an absolute instant the system can count
             // down to without the widget being woken.
             phaseEnd: anchor.addingTimeInterval(phase.end),

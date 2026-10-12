@@ -31,6 +31,8 @@ extension RunActivityAttributes.ContentState {
             round: run.phase?.round ?? run.totalRounds,
             next: run.next?.kind,
             nextDuration: run.next?.duration,
+            phaseName: run.phase?.label?.name,
+            nextName: run.next?.label?.name,
             clock: clock,
             theme: theme
         )

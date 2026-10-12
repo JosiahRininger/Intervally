@@ -29,6 +29,11 @@ struct IntervalPhase: Equatable, Sendable, Identifiable {
 
     let id: Int
     let kind: Kind
+    /// What the preset calls it, and its figure: the phase's own unless renamed.
+    var title: String { label?.name ?? kind.title }
+    var symbol: PhaseSymbol { label?.symbol ?? kind.defaultSymbol }
+    /// The preset's label for the phase; nil for the phase's own name and figure.
+    var label: PhaseLabel? = nil
     let duration: TimeInterval
     /// 1-based round this phase belongs to. The prepare and warmup phases report round 1;
     /// the cooldown reports the final round.
@@ -61,7 +66,8 @@ struct IntervalPlan: Equatable, Sendable {
             guard seconds > 0 else { return }
             phases.append(
                 IntervalPhase(
-                    id: id, kind: kind, duration: TimeInterval(seconds), round: round, start: cursor
+                    id: id, kind: kind, label: config.phaseLabels?[kind.rawValue],
+                    duration: TimeInterval(seconds), round: round, start: cursor
                 )
             )
             id += 1

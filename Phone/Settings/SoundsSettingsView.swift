@@ -34,6 +34,7 @@ struct SoundsSettingsView: View {
     @AppStorage(CueSettings.Key.countdown, store: SharedDefaults.suite) private var countdown = true
     @AppStorage(CueSettings.Key.voice, store: SharedDefaults.suite) private var voice = true
     @AppStorage(CueSettings.Key.keepAwake, store: SharedDefaults.suite) private var keepAwake = true
+    @AppStorage(CueSettings.Key.lowerMusic, store: SharedDefaults.suite) private var lowerMusic = true
 
     var body: some View {
         List {
@@ -55,7 +56,7 @@ struct SoundsSettingsView: View {
                 }
                 .accessibilityHint(pro.isPro ? "" : "Opens Intervally Pro")
             } footer: {
-                Text("Calls out each interval as it starts: Work, Rest, Last round.")
+                Text("Calls out each interval as it starts, by the name you gave it: Work, Rest, Last round.")
             }
 
             Section {
@@ -69,7 +70,15 @@ struct SoundsSettingsView: View {
             } header: {
                 Text("Volume")
             } footer: {
-                Text("Cues play at your media volume, the one your music uses, even with the Ring/Silent switch on silent. During a workout the volume buttons set it too. Music and podcasts keep playing underneath.")
+                Text("Cues play at your media volume, the one your music uses, even with the Ring/Silent switch on silent. During a workout the volume buttons set it too.")
+            }
+
+            Section {
+                Toggle("Lower Music for Cues", isOn: $lowerMusic)
+            } footer: {
+                Text(lowerMusic
+                     ? "Music dips for each cue and comes straight back up, so you hear every change over a loud song. A podcast pauses for the cue."
+                     : "Music and podcasts keep playing at full volume under the cues.")
             }
 
             Section {

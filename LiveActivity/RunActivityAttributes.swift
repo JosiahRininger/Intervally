@@ -26,6 +26,9 @@ struct RunActivityAttributes: ActivityAttributes {
         var round: Int
         var next: IntervalPhase.Kind?
         var nextDuration: TimeInterval?
+        /// What the preset calls the phase and the next; nil for their own names.
+        var phaseName: String? = nil
+        var nextName: String? = nil
         var clock: Clock
         /// The theme the app shows, so the activity matches it.
         var theme: AppTheme

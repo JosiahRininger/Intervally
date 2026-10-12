@@ -22,6 +22,7 @@ final class FakeCueOutput: CueOutput {
 
     private(set) var calls: [Call] = []
     var onVolumeChange: ((Float) -> Void)?
+    var lowersOtherAudio = true
 
     /// What the media volume would report, as the audio session's KVO does.
     func report(volume: Float) { onVolumeChange?(volume) }

@@ -36,7 +36,7 @@ struct EditorTileTests {
         #expect(PresetField.work.values.count == 156)
         #expect(PresetField.warmup.values.first == 0)
         #expect(PresetField.warmup.values.contains(30) && PresetField.warmup.values.contains(1800))
-        #expect(PresetField.prepare.values == [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60])
+        #expect(PresetField.prepare.values == Array(stride(from: 0, through: 120, by: 5)) + Array(stride(from: 135, through: 300, by: 15)))
     }
 
     @Test("Bookends are locked without Pro, the stored value kept out of sight")

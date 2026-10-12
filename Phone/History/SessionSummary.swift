@@ -20,6 +20,9 @@ struct RawWorkout: Equatable, Sendable {
         var averageHeartRate: Double?
         /// Kilocalories burned in this interval alone.
         var activeEnergy: Double? = nil
+        /// The name and figure the preset gave the phase, when it gave them.
+        var phaseName: String? = nil
+        var phaseSymbol: String? = nil
     }
 
     var id: UUID
@@ -51,12 +54,18 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
         let averageHeartRate: Int?
         /// Whole kilocalories, rounded; nil when Health recorded none for it.
         var calories: Int? = nil
+        /// What the preset called the phase and its figure, when it renamed it.
+        var customName: String? = nil
+        var customSymbol: PhaseSymbol? = nil
+
+        var name: String { customName ?? kind.title }
+        var symbolName: String { customSymbol?.systemName ?? kind.symbolName }
 
         /// "Work · Round 3", "Get Ready". Only work and rest name their round: the lead-in
         /// is tagged round 1, which nobody would call it.
         var title: String {
-            guard kind == .work || kind == .rest, let round else { return kind.title }
-            return "\(kind.title) · Round \(round)"
+            guard kind == .work || kind == .rest, let round else { return name }
+            return "\(name) · Round \(round)"
         }
     }
 
@@ -105,7 +114,9 @@ struct SessionSummary: Identifiable, Hashable, Sendable {
                 round: kind.isBookend ? nil : activity.round,
                 duration: activity.duration,
                 averageHeartRate: activity.averageHeartRate.map { Int($0.rounded()) },
-                calories: activity.activeEnergy.map { Int($0.rounded()) }
+                calories: activity.activeEnergy.map { Int($0.rounded()) },
+                customName: activity.phaseName,
+                customSymbol: activity.phaseSymbol.flatMap(PhaseSymbol.init(rawValue:))
             )
         }
         let work = intervals.filter { $0.kind == .work }

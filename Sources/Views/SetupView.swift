@@ -352,7 +352,8 @@ private struct PhaseTile: View {
 
     var body: some View {
         let value = store.selected[keyPath: field.keyPath]
-        let title = field.title
+        // The preset's own name for the phase, set on the iPhone: "Run" rather than "Work".
+        let title = field.kind.map { store.selected.label(for: $0).name } ?? field.title
 
         NavigationLink(value: RootRoute.field(field)) {
             VStack(alignment: .leading, spacing: 0) {
@@ -469,8 +470,10 @@ extension SetupField {
     /// bookends turn over their own table in 30-second steps and say "Off" at zero;
     /// everything else keeps the editor's own schedule.
     @MainActor
-    func editor(value: Binding<Int>, palette: Palette = .classic) -> ValueEditorView {
+    func editor(value: Binding<Int>, palette: Palette = .classic, label: PhaseLabel? = nil) -> ValueEditorView {
         let tint = tint(in: palette)
+        let title = label?.name ?? self.title
+        let symbolName = label?.symbol.systemName ?? self.symbolName
         return switch self {
         case .rounds:
             ValueEditorView(
@@ -510,7 +513,10 @@ struct SetupFieldEditor: View {
     }
 
     private var editor: ValueEditorView {
-        field.editor(value: store.selectedBinding(field.keyPath), palette: palette)
+        field.editor(
+            value: store.selectedBinding(field.keyPath), palette: palette,
+            label: field.kind.map { store.selected.label(for: $0) }
+        )
     }
 }
 

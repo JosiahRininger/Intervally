@@ -71,7 +71,7 @@ actor NotificationScheduler {
                 BoundaryRequest(
                     identifier: "\(prefix)\(index)",
                     delay: delay,
-                    title: phase.kind.title,
+                    title: phase.title,
                     body: body(for: phase, totalRounds: plan.totalRounds)
                 )
             )

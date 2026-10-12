@@ -407,18 +407,10 @@ private struct PaletteRoot: ViewModifier {
 }
 
 extension IntervalPhase.Kind {
-    var symbolName: String {
-        switch self {
-        case .prepare: "hourglass"
-        // The sun coming up and going down: the two ends of the session, as a pair.
-        case .warmup: "sunrise.fill"
-        case .work: "bolt.fill"
-        // Not pause.circle.fill: that sat directly above the Pause control and read as a
-        // second pause button.
-        case .rest: "wind"
-        case .cooldown: "sunset.fill"
-        }
-    }
+    /// The phase's own figure (`defaultSymbol`): the sun coming up and going down for the
+    /// two ends of the session, and wind, not pause.circle.fill, for Rest: that sat directly
+    /// above the Pause control and read as a second pause button.
+    var symbolName: String { defaultSymbol.systemName }
 
     /// The word shown inside the ring. Short enough for the top chord of a 40mm ring;
     /// "COOLDOWN", the longest, relies on the run screen's label scaling to about 0.69.

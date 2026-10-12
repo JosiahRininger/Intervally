@@ -353,7 +353,7 @@ final class WorkoutSessionController: NSObject {
         session.beginNewActivity(
             configuration: configuration,
             date: date,
-            metadata: Self.activityMetadata(for: phase)
+            metadata: Self.activityMetadata(for: phase, indoor: configuration.locationType != .outdoor)
         )
     }
 
@@ -384,6 +384,8 @@ final class WorkoutSessionController: NSObject {
         ]
         let name = workout.name.trimmingCharacters(in: .whitespacesAndNewlines)
         if !name.isEmpty { metadata[HealthMetadata.presetName] = name }
+        // Said outright, so History reads an outdoor run back as one whatever HealthKit adds.
+        metadata[HKMetadataKeyIndoorWorkout] = !workout.activityKind.isOutdoor
         return metadata
     }
 
@@ -394,12 +396,17 @@ final class WorkoutSessionController: NSObject {
     /// type, warmup and cooldown included: all activities of an interval workout share the
     /// workout's type, and a different one switches the sensor algorithm mid-session. The
     /// phase rides in metadata instead. A bookend belongs to no round, so it carries none.
-    nonisolated static func activityMetadata(for phase: IntervalPhase) -> [String: Any] {
+    nonisolated static func activityMetadata(for phase: IntervalPhase, indoor: Bool = true) -> [String: Any] {
         var metadata: [String: Any] = [
-            HKMetadataKeyIndoorWorkout: true,
+            HKMetadataKeyIndoorWorkout: indoor,
             phaseMetadataKey: phase.kind.rawValue,
         ]
         if !phase.kind.isBookend { metadata[roundMetadataKey] = phase.round }
+        // As it was named when it ran, so a rename later doesn't rewrite the past.
+        if let label = phase.label {
+            metadata[HealthMetadata.phaseName] = label.name
+            metadata[HealthMetadata.phaseSymbol] = label.symbol.rawValue
+        }
         return metadata
     }
 

@@ -27,6 +27,10 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
     /// predates the choice, which is how a merge tells "never set" from a choice
     /// (`PresetRecord.merged`). Read `activityKind`.
     var activity: WorkoutActivity?
+    /// The phases the preset renamed or gave another figure, by `IntervalPhase.Kind` raw
+    /// value. Nil from a version that predates them; once touched, emptied rather than set
+    /// back to nil (`setLabel(_:for:)`). Read `label(for:)`.
+    var phaseLabels: [String: PhaseLabel]?
 
     init(
         id: UUID = UUID(),
@@ -37,7 +41,8 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         restSeconds: Int = 15,
         rounds: Int = 8,
         cooldownSeconds: Int = 0,
-        activity: WorkoutActivity? = nil
+        activity: WorkoutActivity? = nil,
+        phaseLabels: [String: PhaseLabel]? = nil
     ) {
         self.id = id
         self.name = name
@@ -48,6 +53,7 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         self.rounds = rounds
         self.cooldownSeconds = cooldownSeconds
         self.activity = activity
+        self.phaseLabels = phaseLabels
     }
 
     static let `default` = IntervalWorkout()
@@ -64,6 +70,7 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         // Optional, so encoded only once chosen: a preset never given one encodes exactly
         // as it did before there was a choice.
         case activity
+        case phaseLabels
     }
 
     /// Decodes field by field, falling back to defaults.
@@ -85,15 +92,30 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
             rounds: (try? container.decode(Int.self, forKey: .rounds)) ?? fallback.rounds,
             cooldownSeconds: (try? container.decode(Int.self, forKey: .cooldownSeconds)) ?? fallback.cooldownSeconds,
             // One a later version added reads as never chosen, rather than failing the preset.
-            activity: try? container.decodeIfPresent(WorkoutActivity.self, forKey: .activity)
+            activity: try? container.decodeIfPresent(WorkoutActivity.self, forKey: .activity),
+            phaseLabels: Self.decodeLabels(from: container)
         )
+    }
+
+    /// Each label on its own, so one a later version writes differently costs only itself.
+    private static func decodeLabels(from container: KeyedDecodingContainer<CodingKeys>) -> [String: PhaseLabel]? {
+        guard let raw = try? container.decodeIfPresent([String: LenientLabel].self, forKey: .phaseLabels) else { return nil }
+        return raw.compactMapValues(\.label)
+    }
+
+    private struct LenientLabel: Decodable {
+        let label: PhaseLabel?
+        init(from decoder: Decoder) throws {
+            label = try? PhaseLabel(from: decoder)
+        }
     }
 
     // MARK: - Limits
 
     static let workRange = 5...3600
     static let restRange = 0...3600
-    static let prepareRange = 0...60
+    /// Up to five minutes: time to walk to the track or set up the bike, not only to breathe.
+    static let prepareRange = 0...300
     static let roundsRange = 1...99
     static let warmupRange = 0...1800
     static let cooldownRange = 0...1800

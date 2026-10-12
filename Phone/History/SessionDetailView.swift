@@ -252,7 +252,7 @@ private struct IntervalRow: View {
     /// title wrapped onto a second line.
     private var title: some View {
         HStack(spacing: 12) {
-            Image(systemName: interval.kind.symbolName)
+            Image(systemName: interval.symbolName)
                 .foregroundStyle(palette.ink(for: interval.kind))
                 .frame(width: 24)
                 .accessibilityHidden(true)

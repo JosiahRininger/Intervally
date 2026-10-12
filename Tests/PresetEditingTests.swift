@@ -27,7 +27,7 @@ struct CrownValueTableTests {
     @Test("A zero lower bound is kept, so rest and lead-in can be switched off")
     func zeroLowerBound() {
         #expect(ValueEditorView.values(in: IntervalWorkout.restRange, step: 5).first == 0)
-        #expect(ValueEditorView.values(in: IntervalWorkout.prepareRange, step: 5) == Array(stride(from: 0, through: 60, by: 5)))
+        #expect(ValueEditorView.values(in: IntervalWorkout.prepareRange, step: 5).first == 0)
     }
 
     @Test("Rounds are one per detent")

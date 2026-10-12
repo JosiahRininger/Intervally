@@ -222,7 +222,7 @@ struct IntervallyWidgetView: View {
     private func gauge(for run: RunProgress) -> some View {
         if !run.isPaused, let start = entry.phaseStart, start < run.phaseEnd {
             ProgressView(timerInterval: start...run.phaseEnd, countsDown: true) {
-                Image(systemName: run.phaseKind.symbolName)
+                Image(systemName: run.symbolName)
             } currentValueLabel: {
                 countdown(for: run)
                     .font(.caption.weight(.semibold))
@@ -233,7 +233,7 @@ struct IntervallyWidgetView: View {
             .tint(tint(for: run))
         } else {
             Gauge(value: entry.remainingFraction) {
-                Image(systemName: run.phaseKind.symbolName)
+                Image(systemName: run.symbolName)
             } currentValueLabel: {
                 Image(systemName: "pause.fill")
                     .font(.caption.weight(.semibold))
@@ -255,7 +255,7 @@ struct IntervallyWidgetView: View {
 
     private var inline: some View {
         if let run = entry.run {
-            Text("\(Image(systemName: run.phaseKind.symbolName)) \(run.compactLine)")
+            Text("\(Image(systemName: run.symbolName)) \(run.compactLine)")
         } else {
             Text("\(Image(systemName: "timer")) \(idleTitle)")
         }

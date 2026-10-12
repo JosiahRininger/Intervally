@@ -244,6 +244,14 @@ final class WorkoutStore {
         update(workout)
     }
 
+    /// Renames a phase of a preset or changes its figure, on the preset as it stands now; the
+    /// phase's own name and figure, or nil, put it back.
+    func setLabel(_ id: UUID, kind: IntervalPhase.Kind, to label: PhaseLabel?) {
+        guard var workout = workouts.first(where: { $0.id == id }) else { return }
+        workout.setLabel(label, for: kind)
+        update(workout)
+    }
+
     /// Adds a preset at the end of the list. On the watch it is also selected, as the setup
     /// screen shows the selected preset; the iPhone passes `select: false`, where only Put on
     /// Watch changes what the watch starts next.

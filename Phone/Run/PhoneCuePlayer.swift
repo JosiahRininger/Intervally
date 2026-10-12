@@ -62,6 +62,7 @@ final class PhoneCuePlayer: BoundaryHaptics {
     }
 
     private func perform(_ plan: CuePlan) {
+        output.lowersOtherAudio = settings.lowerMusic
         var delay: TimeInterval = 0
         if let tone = plan.tone {
             delay = output.play(tone)

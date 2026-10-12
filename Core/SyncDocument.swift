@@ -82,6 +82,7 @@ struct PresetRecord: Codable, Equatable, Sendable {
             // A version that predates the activity choice writes every edit without one. Its
             // later edit still wins, but must not reset the activity chosen here to HIIT.
             if out.workout.activity == nil { out.workout.activity = workout.activity }
+            if out.workout.phaseLabels == nil { out.workout.phaseLabels = workout.phaseLabels }
             out.deleted = other.deleted
             out.stamp = other.stamp
         }

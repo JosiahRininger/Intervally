@@ -230,7 +230,7 @@ enum ActivityText {
         guard let phase = state.phase else { return "Complete" }
         if case .paused = state.clock { return "Paused" }
         if isStale { return "Intervally" }
-        return phase.title
+        return state.phaseName ?? phase.title
     }
 
     static func round(state: RunActivityAttributes.ContentState, totalRounds: Int) -> String? {
@@ -250,7 +250,7 @@ enum ActivityText {
     static func next(state: RunActivityAttributes.ContentState) -> String {
         if case .finished = state.clock { return "Workout complete" }
         guard let next = state.next, let duration = state.nextDuration else { return "Last interval" }
-        return "Next: \(next.title) \(clock(duration))"
+        return "Next: \(state.nextName ?? next.title) \(clock(duration))"
     }
 
     /// m:ss, as the timer text shows it.

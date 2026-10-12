@@ -117,7 +117,7 @@ struct RunView: View {
         let paused = engine.status == .paused
 
         return VStack(spacing: 0) {
-            PhaseWord(word: paused ? "Paused" : kind.shortTitle)
+            PhaseWord(word: paused ? "Paused" : position.phase?.label?.name ?? kind.shortTitle)
                 .frame(maxWidth: lineWidth)
 
             countdown(position, size: heroSize, color: paused ? .white.opacity(0.55) : palette.fill(for: kind))
@@ -406,11 +406,11 @@ struct RunView: View {
         let remaining = DurationFormat.spoken(remainingSeconds)
         let state = isPaused ? "Paused. " : ""
         return switch phase.kind {
-        case .prepare: "\(state)Get ready, \(remaining) remaining"
-        case .warmup: "\(state)Warmup, \(remaining) remaining"
-        case .cooldown: "\(state)Cooldown, intervals done, \(remaining) remaining"
+        case .prepare: "\(state)\(phase.label?.name ?? "Get ready"), \(remaining) remaining"
+        case .warmup: "\(state)\(phase.title), \(remaining) remaining"
+        case .cooldown: "\(state)\(phase.title), intervals done, \(remaining) remaining"
         case .work, .rest:
-            "\(state)\(phase.kind.title), round \(phase.round) of \(totalRounds), \(remaining) remaining"
+            "\(state)\(phase.title), round \(phase.round) of \(totalRounds), \(remaining) remaining"
         }
     }
 

@@ -33,11 +33,14 @@ struct CueSettings: Equatable, Sendable {
     var countdown = true
     /// The voice coach. Intervally Pro: `effective(isPro:)` drops it without.
     var voice = true
+    /// Music or a podcast underneath dips while a cue sounds, and comes straight back.
+    var lowerMusic = true
 
     enum Key {
         static let beeps = "phone.cues.beeps"
         static let countdown = "phone.cues.countdown"
         static let voice = "phone.cues.voice"
+        static let lowerMusic = "phone.cues.lowerMusic"
         /// Whether the screen stays on while a run is in front.
         static let keepAwake = "phone.run.keepAwake"
     }
@@ -45,7 +48,10 @@ struct CueSettings: Equatable, Sendable {
     /// The saved choices. Each is on until it is turned off.
     static func stored(in defaults: UserDefaults) -> CueSettings {
         func flag(_ key: String) -> Bool { defaults.object(forKey: key) as? Bool ?? true }
-        return CueSettings(beeps: flag(Key.beeps), countdown: flag(Key.countdown), voice: flag(Key.voice))
+        return CueSettings(
+            beeps: flag(Key.beeps), countdown: flag(Key.countdown), voice: flag(Key.voice),
+            lowerMusic: flag(Key.lowerMusic)
+        )
     }
 
     /// Without Pro the voice stays quiet, but the saved choice is kept, so a restore brings
@@ -105,7 +111,11 @@ struct CuePlan: Equatable, Sendable {
     /// Short enough to finish inside a 10-second rest, and never a number the screen
     /// already shows bigger.
     static func phrase(for phase: IntervalPhase, totalRounds: Int) -> String {
-        switch phase.kind {
+        // A name the preset gave the phase is what the coach calls it, "Last round" aside.
+        if let label = phase.label {
+            return phase.kind == .work && totalRounds > 1 && phase.round == totalRounds ? "Last round" : label.name
+        }
+        return switch phase.kind {
         case .prepare: "Get ready"
         case .warmup: "Warm up"
         case .work: totalRounds > 1 && phase.round == totalRounds ? "Last round" : "Work"

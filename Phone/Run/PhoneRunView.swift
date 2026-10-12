@@ -40,7 +40,7 @@ enum RunScreenLayout {
     static func nextLine(after phase: IntervalPhase?, next: IntervalPhase?) -> String {
         guard phase != nil else { return "" }
         guard let next else { return "Last interval" }
-        return "Next: \(next.kind.title) \(DurationFormat.timer(Int(next.duration)))"
+        return "Next: \(next.title) \(DurationFormat.timer(Int(next.duration)))"
     }
 
     /// "Round 3 of 8", where a round means something: never while getting ready, in the
@@ -213,7 +213,7 @@ struct PhoneRunView: View {
             .multilineTextAlignment(.center)
             // Grows with the text size, but not so far that it crowds the controls.
             .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-            .accessibilityLabel(next.map { "Next, \($0.kind.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
+            .accessibilityLabel(next.map { "Next, \($0.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
     }
 
     @ViewBuilder
@@ -267,7 +267,7 @@ struct PhoneRunView: View {
     private func interior(_ position: IntervalPlan.Position, kind: IntervalPhase.Kind, paused: Bool, side: CGFloat) -> some View {
         let remaining = Int(position.remainingInPhase.rounded(.up))
         return VStack(spacing: side * 0.02) {
-            Text(paused ? "Paused" : kind.title)
+            Text(paused ? "Paused" : position.phase?.title ?? kind.title)
                 .font(.system(size: side * 0.07, weight: .bold, design: .rounded))
                 .textCase(.uppercase)
                 .kerning(1.2)
@@ -344,7 +344,8 @@ struct PhoneRunView: View {
     }
 
     private func spokenStatus(_ position: IntervalPlan.Position, kind: IntervalPhase.Kind, paused: Bool) -> String {
-        var parts = [paused ? "Paused, \(kind.title)" : kind.title]
+        let title = position.phase?.title ?? kind.title
+        var parts = [paused ? "Paused, \(title)" : title]
         parts.append("\(DurationFormat.spoken(Int(position.remainingInPhase.rounded(.up)))) left")
         if let line = RunScreenLayout.roundLine(for: position.phase, totalRounds: engine.plan.totalRounds) {
             parts.append(line)
