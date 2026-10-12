@@ -34,6 +34,15 @@ struct PhaseLabelPhoneTests {
         #expect(PhaseLabelPicker.symbols(for: .rest).first == .wind)
     }
 
+    @Test("The icon grid widens its tiles at the accessibility text sizes, and caps the figures")
+    func iconGridAtLargeText() {
+        #expect(PhaseLabelPicker.columns(for: .large) == 4)
+        #expect(PhaseLabelPicker.columns(for: .xxxLarge) == 4)
+        #expect(PhaseLabelPicker.columns(for: .accessibility1) == 3)
+        #expect(PhaseLabelPicker.columns(for: .accessibility5) == 3)
+        #expect(PhaseLabelPicker.largestFigureSize.isAccessibilitySize)
+    }
+
     @Test("The editor's tiles carry the preset's names and figures")
     func tiles() {
         let work = EditorTileContent(field: .work, workout: running, isPro: true)

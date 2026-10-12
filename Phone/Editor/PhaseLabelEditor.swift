@@ -19,6 +19,7 @@ struct PhaseLabelEditor: View {
     @State private var saved: PhaseLabel
     @FocusState private var nameFocused: Bool
     @Environment(\.palette) private var palette
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     init(kind: IntervalPhase.Kind, label: PhaseLabel, onChange: @escaping (PhaseLabel?) -> Void) {
         self.kind = kind
@@ -62,7 +63,9 @@ struct PhaseLabelEditor: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     SectionLabel("Icon")
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
+                    // Three wider tiles at the accessibility sizes, so the larger figures stay
+                    // inside them: four kept the wide ones (the tortoise, the cyclist) spilling out.
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: PhaseLabelPicker.columns(for: typeSize)), spacing: 10) {
                         ForEach(PhaseLabelPicker.symbols(for: kind)) { option in
                             symbolButton(option)
                         }
@@ -100,6 +103,7 @@ struct PhaseLabelEditor: View {
         } label: {
             Image(systemName: option.systemName)
                 .font(.title2)
+                .dynamicTypeSize(...PhaseLabelPicker.largestFigureSize)
                 .foregroundStyle(selected ? palette.onTint : palette.ink(for: kind))
                 .frame(maxWidth: .infinity, minHeight: 60)
                 .background(
@@ -123,6 +127,14 @@ struct PhaseLabelEditor: View {
 
 /// The figures offered for a phase, apart from the view: its own first, then the rest.
 enum PhaseLabelPicker {
+    /// The figures grow with the text up to here; past it the tiles would have to outgrow
+    /// the screen to hold them.
+    static let largestFigureSize = DynamicTypeSize.accessibility1
+
+    static func columns(for typeSize: DynamicTypeSize) -> Int {
+        typeSize.isAccessibilitySize ? 3 : 4
+    }
+
     /// The built-in phases' figures other than this one's are left out: a sunrise on Work
     /// would only read as a warmup.
     static func symbols(for kind: IntervalPhase.Kind) -> [PhaseSymbol] {
