@@ -3,6 +3,7 @@
 //  IntervallyPhoneTests
 //
 
+import AVFoundation
 import Foundation
 import Testing
 @testable import IntervallyPhone
@@ -530,27 +531,29 @@ struct PhoneRunTests {
     }
 }
 
-@Suite("Silent outside the app")
-struct SoundsStopOutsideAppTests {
-    @Test("Warned only for this iPhone's own run, once it has settled without a workout session")
-    func rule() {
-        func warns(mirroring: Bool = false, running: Bool = true, tier: RunCoordinator.RuntimeTier = .extendedRuntime,
-                   acquiring: Bool = false, supported: Bool = true) -> Bool {
-            PhoneRun.soundsStopOutsideApp(isMirroring: mirroring, isRunning: running, tier: tier, isAcquiring: acquiring, sessionsSupported: supported)
-        }
-        #expect(warns())
-        #expect(warns(tier: .none))
-        #expect(!warns(tier: .workout), "A workout session keeps the app playing")
-        #expect(!warns(acquiring: true), "Not while the session is still being asked for")
-        #expect(!warns(mirroring: true), "The watch runs it and taps the wrist")
-        #expect(!warns(running: false), "Paused or over: nothing is playing")
-        #expect(!warns(supported: false), "No Health on this device: nothing Settings could fix")
+@Suite("Cue engine audio")
+struct CueEngineAudioTests {
+    @Test("Speech is resampled to the cues' rate, keeping its length in time")
+    func resampling() {
+        let pcm = SpokenPCM(sampleRate: 22_050, samples: (0..<2_205).map { Float($0) / 2_205 })
+        let resampled = pcm.resampled(to: 44_100)
+        #expect(resampled.count == 4_410, "A tenth of a second either way")
+        #expect(resampled.first == 0)
+        #expect(abs((resampled.last ?? 0) - 1) < 0.01, "Ends where it ended")
+        #expect(zip(resampled, resampled.dropFirst()).allSatisfy { $0 <= $1 }, "No glitches between samples")
+        #expect(pcm.resampled(to: 22_050) == pcm.samples)
+        #expect(SpokenPCM().resampled(to: 44_100).isEmpty)
     }
 
-    @Test("The warning says what happens and what fixes it")
-    func copy() {
-        #expect(RunScreenText.silentOutsideTitle == "Sounds stop if you leave Intervally")
-        #expect(RunScreenText.silentOutsideDetail.contains("Apple Health"))
-        #expect(RunScreenText.healthSteps.contains(HistoryMessage.whereToCheck), "The same way to Health that History gives")
+    @Test("Every tone becomes a playable buffer of its own length")
+    func toneBuffers() throws {
+        let format = try #require(AVAudioFormat(standardFormatWithSampleRate: Double(ToneSynth.sampleRate), channels: 1))
+        for tone in CueTone.allCases {
+            let samples = ToneSynth.samples(for: tone).map { Float($0) / Float(Int16.max) }
+            let buffer = try #require(CueAudio.buffer(samples, format: format))
+            #expect(Int(buffer.frameLength) == samples.count)
+            #expect(abs(Double(buffer.frameLength) / format.sampleRate - ToneSynth.duration(of: tone)) < 0.01)
+        }
+        #expect(CueAudio.buffer([], format: format) == nil)
     }
 }

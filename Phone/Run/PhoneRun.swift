@@ -122,27 +122,6 @@ final class PhoneRun {
         showsWatchRun && mirror.engine != nil
     }
 
-    /// This iPhone's run has no workout session, so its sounds stop the moment the user
-    /// leaves the app: iOS suspends it, and only the notification backstop marks the changes,
-    /// which the Ring/Silent switch mutes. The run screen says so, and how to fix it.
-    var soundsStopOutsideApp: Bool {
-        Self.soundsStopOutsideApp(
-            isMirroring: isMirroring,
-            isRunning: coordinator.engine.status == .running,
-            tier: coordinator.tier,
-            isAcquiring: coordinator.isAcquiringTier,
-            sessionsSupported: coordinator.workout.isSupported
-        )
-    }
-
-    /// Not while the session is still being asked for: a run that is about to get one would
-    /// flash the warning on every Start. Nor while paused, when nothing is playing: a run
-    /// restored paused takes its session only once resumed.
-    nonisolated static func soundsStopOutsideApp(
-        isMirroring: Bool, isRunning: Bool, tier: RunCoordinator.RuntimeTier, isAcquiring: Bool, sessionsSupported: Bool
-    ) -> Bool {
-        !isMirroring && isRunning && sessionsSupported && !isAcquiring && tier != .workout
-    }
 
     /// The screen is up for a run of this iPhone's: starting, running or finished.
     private var ownRunOnScreen: Bool { isPresented && !showsWatchRun }

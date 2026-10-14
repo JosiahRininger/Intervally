@@ -62,8 +62,6 @@ struct PhoneRunView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// The steps to Intervally's Health access, from the silent-outside-the-app warning.
-    @State private var showingHealthSteps = false
 
     @State private var confirmingEnd = false
     @State private var flash: Double = 0
@@ -224,52 +222,11 @@ struct PhoneRunView: View {
             hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
                 .padding(.bottom, 16)
                 .transition(.opacity)
-        } else if run.soundsStopOutsideApp {
-            backgroundWarning
-                .padding(.bottom, 16)
-                .transition(.opacity)
         } else if !soundTipSeen, !run.isMirroring, position.phase?.kind == .prepare {
             // While getting ready, before the first change: the moment to set the volume.
             hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
                 .padding(.bottom, 16)
                 .transition(.opacity)
-        }
-    }
-
-    /// The run has no workout session, so leaving the app silences it: almost always because
-    /// Apple Health isn't allowed, which once declined only the Health app can change (the
-    /// app's Settings page has no Health row). Back from Health, the run tries for a session
-    /// again (`RunCoordinator.handleForeground`) and this goes once it has one.
-    private var backgroundWarning: some View {
-        Button {
-            showingHealthSteps = true
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: "speaker.slash.fill")
-                    .font(.headline)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(RunScreenText.silentOutsideTitle)
-                        .font(.subheadline.weight(.semibold))
-                    Text(RunScreenText.silentOutsideDetail)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .multilineTextAlignment(.leading)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 18))
-        }
-        .buttonStyle(.plain)
-        .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-        .accessibilityHint("Shows how to turn on Apple Health")
-        .alert(RunScreenText.healthStepsTitle, isPresented: $showingHealthSteps) {
-            Button("Open Health") {
-                if let url = URL(string: "x-apple-health://") { UIApplication.shared.open(url) }
-            }
-            Button("Not Now", role: .cancel) {}
-        } message: {
-            Text(RunScreenText.healthSteps)
         }
     }
 
@@ -500,12 +457,3 @@ struct RunSummaryView: View {
     }
 }
 
-/// The run screen's warning when leaving the app would silence the run.
-enum RunScreenText {
-    static let silentOutsideTitle = "Sounds stop if you leave Intervally"
-    static let silentOutsideDetail = "Turn on Apple Health for Intervally to keep them playing"
-    static let healthStepsTitle = "Keep the sounds playing"
-    /// The way to Intervally's Health access, as History gives it.
-    static let healthSteps = "Apple Health lets Intervally keep running when you switch apps or lock your phone. "
-        + "\(HistoryMessage.whereToCheck) Turn on Workouts, then come back: the workout picks up its sounds."
-}
