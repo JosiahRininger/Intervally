@@ -19,6 +19,8 @@ protocol WorkoutSessioning: AnyObject {
     var isSupported: Bool { get }
     var isRunning: Bool { get }
     var heartRate: Double? { get }
+    /// Active energy burned so far this session, in kilocalories; nil until Health has any.
+    var activeEnergy: Double? { get }
     /// Invoked when the session ends for a reason the app did not ask for.
     var onUnexpectedEnd: (() -> Void)? { get set }
 
@@ -120,4 +122,9 @@ extension NotificationScheduler: BoundaryScheduling {
     func schedule(plan: IntervalPlan, anchor: Date) async {
         await schedule(plan: plan, anchor: anchor, now: Date())
     }
+}
+
+extension WorkoutSessioning {
+    /// Stand-ins that don't track energy report none.
+    var activeEnergy: Double? { nil }
 }

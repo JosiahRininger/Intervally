@@ -194,7 +194,7 @@ Health access is optional on both devices. Each device saves the workouts it run
 
 BACKGROUND MODES
 iPhone app:
-- audio: each interval change is a tone, or the voice coach's words, played while the phone is locked during the workout. The app plays audio only for those cues and never plays silence to stay running. The iOS 26 workout session (HKWorkoutSession, with Health allowed) is what keeps the run going with the phone locked.
+- audio: each interval change is a tone, or the voice coach's words, played while the phone is locked or another app is in front. iOS won't start an app's audio from the background, so a workout's audio output stays open from Start to the end. The workout session (HKWorkoutSession) saves the workout to Health.
 Apple Watch app:
 - workout-processing: taps the wrist at each change with the screen off; watchOS allows background haptics only during a workout session.
 - physical-therapy: the fallback when Health is declined, so changes are still signaled.

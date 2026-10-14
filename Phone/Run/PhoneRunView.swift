@@ -177,6 +177,19 @@ struct PhoneRunView: View {
             }
         }
         .padding(.horizontal, 24)
+        // Heart rate and calories in the top corners, beside the header, once Health has
+        // them: the run's own workout session only, never a watch run's mirror.
+        .overlay(alignment: .top) {
+            if !run.isMirroring {
+                HStack(alignment: .top) {
+                    metric(LiveMetric.heartRate(coordinatorWorkout.heartRate))
+                    Spacer(minLength: 0)
+                    metric(LiveMetric.calories(coordinatorWorkout.activeEnergy))
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 10)
+            }
+        }
         .onChange(of: position.phase?.id) { _, _ in
             // The tip has had its moment once the run is past getting ready.
             if position.phase?.kind != .prepare, engine.status == .running { soundTipSeen = true }
@@ -249,6 +262,30 @@ struct PhoneRunView: View {
             }
         }
         .animation(AppMotion.animation(.easeInOut(duration: 0.25), reduceMotion: reduceMotion), value: current)
+    }
+
+    private var coordinatorWorkout: any WorkoutSessioning { run.coordinator.workout }
+
+    /// One live figure, or nothing: an iPhone with no heart-rate source shows no heart.
+    @ViewBuilder
+    private func metric(_ metric: LiveMetric?) -> some View {
+        if let metric {
+            HStack(spacing: 4) {
+                Image(systemName: metric.symbol)
+                    .foregroundStyle(metric.tint == .heart ? Color.red : palette.workInk)
+                Text(metric.value)
+                    .monospacedDigit()
+                Text(metric.unit)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .font(.subheadline.weight(.semibold))
+            .lineLimit(1)
+            .fixedSize()
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(metric.spoken)
+        }
     }
 
     /// A line about the sound. The cues play at the media volume, which the volume buttons set
@@ -493,3 +530,26 @@ struct HealthSaveLine: Equatable {
     }
 }
 
+/// A live figure from the run's workout session, as the run screen shows it.
+struct LiveMetric: Equatable {
+    enum Tint: Equatable { case heart, energy }
+    let symbol: String
+    let value: String
+    let unit: String
+    let spoken: String
+    let tint: Tint
+
+    /// Nil until Health reports a reading.
+    static func heartRate(_ bpm: Double?) -> LiveMetric? {
+        guard let bpm, bpm > 0 else { return nil }
+        let value = Int(bpm.rounded())
+        return LiveMetric(symbol: "heart.fill", value: "\(value)", unit: "BPM", spoken: "Heart rate \(value) beats per minute", tint: .heart)
+    }
+
+    /// Nil until there is at least one whole calorie to show.
+    static func calories(_ kilocalories: Double?) -> LiveMetric? {
+        guard let kilocalories, kilocalories >= 1 else { return nil }
+        let value = Int(kilocalories.rounded(.down))
+        return LiveMetric(symbol: "flame.fill", value: "\(value)", unit: "CAL", spoken: "\(value) active calories", tint: .energy)
+    }
+}

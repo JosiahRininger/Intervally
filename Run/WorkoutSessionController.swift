@@ -24,6 +24,7 @@ final class WorkoutSessionController: NSObject {
 
     private(set) var isRunning = false
     private(set) var heartRate: Double?
+    private(set) var activeEnergy: Double?
 
     /// Called when the session ends for any reason the app did not ask for. Without this
     /// the coordinator keeps believing it is in the `.workout` tier and goes on suppressing
@@ -551,6 +552,7 @@ final class WorkoutSessionController: NSObject {
         builder = nil
         isRunning = false
         heartRate = nil
+        activeEnergy = nil
     }
 }
 
@@ -639,12 +641,15 @@ extension WorkoutSessionController: HKLiveWorkoutBuilderDelegate {
         didCollectDataOf collectedTypes: Set<HKSampleType>
     ) {
         let heartRateType = HKQuantityType(.heartRate)
-        guard collectedTypes.contains(heartRateType) else { return }
-        let statistics = workoutBuilder.statistics(for: heartRateType)
-        let unit = HKUnit.count().unitDivided(by: .minute())
-        let value = statistics?.mostRecentQuantity()?.doubleValue(for: unit)
-        Task { @MainActor in
-            self.heartRate = value
+        if collectedTypes.contains(heartRateType) {
+            let unit = HKUnit.count().unitDivided(by: .minute())
+            let value = workoutBuilder.statistics(for: heartRateType)?.mostRecentQuantity()?.doubleValue(for: unit)
+            Task { @MainActor in self.heartRate = value }
+        }
+        let energyType = HKQuantityType(.activeEnergyBurned)
+        if collectedTypes.contains(energyType) {
+            let value = workoutBuilder.statistics(for: energyType)?.sumQuantity()?.doubleValue(for: .kilocalorie())
+            Task { @MainActor in self.activeEnergy = value }
         }
     }
 }

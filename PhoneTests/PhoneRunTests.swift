@@ -602,3 +602,23 @@ struct MotionTests {
         #expect(HealthSaveLine(.failed, onWatch: false)?.symbol == "heart.slash")
     }
 }
+
+@Suite("Live metrics")
+struct LiveMetricTests {
+    @Test("Heart rate shows once Health has a reading, rounded, and says itself in words")
+    func heartRate() {
+        #expect(LiveMetric.heartRate(nil) == nil)
+        #expect(LiveMetric.heartRate(0) == nil)
+        let metric = LiveMetric.heartRate(142.6)
+        #expect(metric?.value == "143" && metric?.unit == "BPM")
+        #expect(metric?.spoken == "Heart rate 143 beats per minute")
+    }
+
+    @Test("Calories show from the first whole one, counted down, never up")
+    func calories() {
+        #expect(LiveMetric.calories(nil) == nil)
+        #expect(LiveMetric.calories(0.6) == nil)
+        #expect(LiveMetric.calories(37.9)?.value == "37")
+        #expect(LiveMetric.calories(37.9)?.spoken == "37 active calories")
+    }
+}
