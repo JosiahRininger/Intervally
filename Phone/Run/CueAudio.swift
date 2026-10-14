@@ -105,8 +105,7 @@ final class CueAudio: NSObject, CueOutput {
     func play(_ tone: CueTone) -> TimeInterval {
         guard let player = players[tone] else { return 0 }
         prepareSession(for: player.duration)
-        player.currentTime = 0
-        let played = player.play()
+        let played = start(player)
         noteIfAway("tone \(tone)", played: played)
         return player.duration
     }
@@ -124,8 +123,7 @@ final class CueAudio: NSObject, CueOutput {
             guard !Task.isCancelled else { return }
             self.speaking?.stop()
             self.prepareSession(for: player.duration)
-            player.currentTime = 0
-            let played = player.play()
+            let played = self.start(player)
             self.noteIfAway("voice \"\(phrase)\"", played: played)
             self.speaking = player
         }
@@ -213,9 +211,35 @@ final class CueAudio: NSObject, CueOutput {
         }
     }
 
+    /// Plays `player` from the top. If it won't start, the session is taken again and it
+    /// tries once more: in the background iOS quietly lets an app's audio go once it has been
+    /// silent for a while, and every cue after that failed to play until the app was back
+    /// in front (a run on a real iPhone, diagnostics 2026-10-14). The session still read
+    /// as ours, so nothing had re-taken it.
+    private func start(_ player: AVAudioPlayer) -> Bool {
+        player.currentTime = 0
+        if player.play() { return true }
+        do {
+            try session.setActive(true)
+            isActive = true
+        } catch {
+            RunDiagnostics.shared.note("Audio: re-taking the session failed: \(RunDiagnostics.describe(error))")
+            return false
+        }
+        player.prepareToPlay()
+        player.currentTime = 0
+        let played = player.play()
+        RunDiagnostics.shared.note("Audio: session re-taken for a cue; \(played ? "it played" : "still FAILED")")
+        return played
+    }
+
     /// Ready for a cue of `duration`: held as always, and with music or a podcast playing,
     /// lowering it until the cue, and any cue close behind it, is done.
     private func prepareSession(for duration: TimeInterval) {
+        // Away from the app the session is taken again before every cue rather than trusted:
+        // iOS lets it go between cues without a word (`start(_:)`), the way a navigation app
+        // takes its session for each spoken turn.
+        if UIApplication.shared.applicationState != .active, !isDucking { isActive = false }
         guard lowersOtherAudio, isDucking || session.isOtherAudioPlaying else {
             hold()
             return
