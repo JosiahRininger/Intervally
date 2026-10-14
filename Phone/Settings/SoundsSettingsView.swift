@@ -77,7 +77,7 @@ struct SoundsSettingsView: View {
                 Toggle("Lower Music for Cues", isOn: $lowerMusic)
             } footer: {
                 Text(lowerMusic
-                     ? "Music dips for each cue and comes straight back up, so you hear every change over a loud song. A podcast pauses for the cue."
+                     ? "With Intervally open, music dips for each cue and comes straight back up, and a podcast pauses for it. With your iPhone locked, the cues play over them."
                      : "Music and podcasts keep playing at full volume under the cues.")
             }
 

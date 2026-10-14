@@ -66,7 +66,7 @@ struct IntervalPlan: Equatable, Sendable {
             guard seconds > 0 else { return }
             phases.append(
                 IntervalPhase(
-                    id: id, kind: kind, label: config.phaseLabels?[kind.rawValue],
+                    id: id, kind: kind, label: config.phaseLabels?[kind.rawValue]?.shown(for: kind),
                     duration: TimeInterval(seconds), round: round, start: cursor
                 )
             )

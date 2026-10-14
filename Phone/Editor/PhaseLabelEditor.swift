@@ -35,6 +35,11 @@ struct PhaseLabelEditor: View {
         PhaseLabel.cleaned(name) != nil || symbol != kind.defaultSymbol
     }
 
+    /// A name `WordFilter` turns away: not saved, and the field says so.
+    private var isRefused: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && PhaseLabel.cleaned(name) == nil
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -57,9 +62,15 @@ struct PhaseLabelEditor: View {
                         .onChange(of: nameFocused) { _, focused in
                             if !focused { save() }
                         }
-                    Text("What the run screen, the Lock Screen and the voice coach call it.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                    if isRefused {
+                        Label("That name can’t be used, so it stays “\(kind.title)”.", systemImage: "exclamationmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("What the run screen, the Lock Screen and the voice coach call it.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 8) {

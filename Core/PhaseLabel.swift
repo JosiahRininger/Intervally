@@ -17,11 +17,18 @@ struct PhaseLabel: Codable, Equatable, Hashable, Sendable {
     static let maxNameLength = 10
 
     /// The name as it will be shown: trimmed, cut to `maxNameLength`, nil when nothing is
-    /// left, which keeps the phase's own name.
+    /// left or `WordFilter` turns it away, which keeps the phase's own name.
     static func cleaned(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
-        return String(trimmed.prefix(maxNameLength)).trimmingCharacters(in: .whitespaces)
+        let cut = String(trimmed.prefix(maxNameLength)).trimmingCharacters(in: .whitespaces)
+        return WordFilter.allows(cut) ? cut : nil
+    }
+
+    /// The label as shown and spoken: a name the filter turns away, saved by a device without
+    /// it, gives way to the phase's own; its figure stays.
+    func shown(for kind: IntervalPhase.Kind) -> PhaseLabel {
+        WordFilter.allows(name) ? self : PhaseLabel(name: kind.title, symbol: symbol)
     }
 }
 
@@ -101,7 +108,7 @@ extension IntervalPhase.Kind {
 extension IntervalWorkout {
     /// The phase's label: the preset's own, or the phase's name and figure.
     func label(for kind: IntervalPhase.Kind) -> PhaseLabel {
-        phaseLabels?[kind.rawValue] ?? PhaseLabel(name: kind.title, symbol: kind.defaultSymbol)
+        phaseLabels?[kind.rawValue]?.shown(for: kind) ?? PhaseLabel(name: kind.title, symbol: kind.defaultSymbol)
     }
 
     /// Whether the preset renamed the phase or changed its figure.

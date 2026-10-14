@@ -20,6 +20,9 @@ enum AuditExceptions {
         /// The system's wheel picker, which draws the rows around the chosen one as text that
         /// VoiceOver never reads: it reads the chosen value and adjusts it, by Apple's design.
         static let wheels = Allowances(rawValue: 1 << 1)
+        /// The run screen's "5:15 left" (see `isKnown`), which the audit sometimes reports
+        /// with no element to name it by: there, read with the header it belongs to.
+        static let timeLeft = Allowances(rawValue: 1 << 2)
     }
 
     @MainActor
@@ -29,7 +32,7 @@ enum AuditExceptions {
         let label = issue.element?.label ?? ""
         if issue.element == nil {
             switch issue.auditType {
-            case .contrast: return allowances.contains(.contentUnderBars)
+            case .contrast: return allowances.contains(.contentUnderBars) || allowances.contains(.timeLeft)
             case .elementDetection: return allowances.contains(.wheels)
             // Text inside a tile or a row, which VoiceOver reads as one element, that shrinks
             // to fit its line: the phase names and the settings' subtitles.
@@ -57,7 +60,8 @@ enum AuditExceptions {
         case .contrast:
             // The run screen's "5:15 left", .secondary on black: 6.4:1 measured from a
             // screenshot (141,141,147 on 0,0,0), well over 4.5:1, yet the audit fails it on
-            // the 6.3-inch iPhone and passes it on the SE.
+            // one iPhone or another, whatever its colour: at 72% white, 10.6:1, it failed just
+            // the same (2026-10-14).
             if label.wholeMatch(of: /\d+:\d{2} left/) != nil { return true }
             // Under a bar or a sheet: content scrolled beneath the tab bar, a pinned bar or a
             // sheet's bottom edge is faded by the system on purpose, and the screen behind a

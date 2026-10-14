@@ -310,6 +310,9 @@ struct PhoneRunView: View {
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(metric.spoken)
+            // Read, not tapped: without the trait the audit took it for a control too small
+            // to hit.
+            .accessibilityAddTraits(.isStaticText)
         } else {
             // Nothing, but still a view, so `FlankedLayout` always has its three.
             Color.clear.frame(width: 0, height: 0)

@@ -97,7 +97,7 @@ final class AccessibilityAuditTests: XCTestCase {
         let app = PhoneApp.launch(["-qaWatchRun", "paused", "-qaRunElapsed", "40"], pro: true)
         let end = app.buttons["End Workout"]
         XCTAssertTrue(end.waitForExistence(timeout: 15))
-        try audit(app)
+        try audit(app, allowing: .timeLeft)
         PhoneApp.endRun(app)
     }
 
@@ -111,7 +111,7 @@ final class AccessibilityAuditTests: XCTestCase {
         XCTAssertTrue(app.descendants(matching: .any)["Heart rate 152 beats per minute"].firstMatch.waitForExistence(timeout: 5))
         pause.tap()
         XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 5))
-        try audit(app)
+        try audit(app, allowing: .timeLeft)
         PhoneApp.endRun(app)
     }
 
@@ -208,10 +208,14 @@ enum PhoneApp {
     /// never repeated in `flags`.
     static func launch(_ flags: [String] = [], pro: Bool = false) -> XCUIApplication {
         let app = XCUIApplication()
+        // A launch that doesn't ask for a run starts with none: a run an earlier test left
+        // going (stopped before its End) would otherwise come back over the screen under
+        // test. One that finished long ago is restored as nothing, and cleared.
+        let run = flags.contains("-qaRunElapsed") || flags.contains("-qaWatchRun") ? [] : ["-qaRunElapsed", "100000"]
         app.launchArguments = [
             "-phone.welcomeSeen.v1", "YES", "-phone.editorTipSeen.v1", "YES",
             "-qaWatch", "installed", "-qaPro", pro ? "pro" : "free",
-        ] + flags
+        ] + run + flags
         app.launch()
         return app
     }
