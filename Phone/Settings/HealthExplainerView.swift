@@ -93,6 +93,17 @@ struct HealthExplainerView: View {
                     .prominentCapsule()
                     .disabled(history.isConnecting)
                 }
+
+                NavigationLink {
+                    RunDiagnosticsView()
+                } label: {
+                    Label("Workout Diagnostics", systemImage: "stethoscope")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.capsule)
+                .neutralGlass()
             }
             .padding(20)
             .readableColumn()

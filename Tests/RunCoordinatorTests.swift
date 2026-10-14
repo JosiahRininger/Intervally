@@ -1060,3 +1060,38 @@ struct RunCoordinatorProGatingTests {
         #expect(coordinator.engine.position.phase?.kind == .warmup)
     }
 }
+
+@Suite("Run diagnostics")
+struct RunDiagnosticsTests {
+    private func tempURL() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("diag-\(UUID().uuidString).json")
+    }
+
+    @Test("Entries survive a relaunch, newest last, and stop at the capacity")
+    func keepsAndCaps() {
+        let url = tempURL()
+        let log = RunDiagnostics(url: url)
+        for index in 0..<(RunDiagnostics.capacity + 5) { log.note("entry \(index)") }
+        let reopened = RunDiagnostics(url: url)
+        #expect(reopened.all.count == RunDiagnostics.capacity)
+        #expect(reopened.all.last?.text == "entry \(RunDiagnostics.capacity + 4)")
+        #expect(reopened.all.first?.text == "entry 5")
+        reopened.clear()
+        #expect(RunDiagnostics(url: url).all.isEmpty)
+    }
+
+    @Test("Errors read with their domain and code")
+    func describesErrors() {
+        let error = NSError(domain: "com.apple.healthkit", code: 4, userInfo: [NSLocalizedDescriptionKey: "Not authorized"])
+        #expect(RunDiagnostics.describe(error) == "com.apple.healthkit 4: Not authorized")
+    }
+
+    @Test("Shared text is one line per entry")
+    func text() {
+        let log = RunDiagnostics(url: nil)
+        log.note("one")
+        log.note("two")
+        #expect(log.text.split(separator: "\n").count == 2)
+        #expect(log.text.hasSuffix("two"))
+    }
+}

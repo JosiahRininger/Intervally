@@ -83,6 +83,7 @@ final class WorkoutSessionController: NSObject {
                     if once.claim() { continuation.resume(returning: true) }
                 } catch {
                     self.log.error("health authorization failed: \(error.localizedDescription, privacy: .public)")
+                    RunDiagnostics.shared.note("Health request failed: \(RunDiagnostics.describe(error))")
                     if once.claim() { continuation.resume(returning: false) }
                 }
             }
@@ -91,6 +92,7 @@ final class WorkoutSessionController: NSObject {
                     try? await Task.sleep(for: .seconds(timeout))
                     if once.claim() {
                         self.log.notice("health authorization did not answer in \(timeout)s; proceeding")
+                        RunDiagnostics.shared.note("Health request: no answer in \(Int(timeout))s")
                         continuation.resume(returning: true)
                     }
                 }
@@ -185,6 +187,7 @@ final class WorkoutSessionController: NSObject {
                 try? await Task.sleep(for: .seconds(seconds))
                 if once.claim() {
                     self.log.notice("beginCollection did not answer in \(seconds)s; abandoning the session")
+                    RunDiagnostics.shared.note("Session: collection didn't start in \(Int(seconds))s; ending it")
                     continuation.resume(returning: .timedOut)
                 }
             }
@@ -219,6 +222,7 @@ final class WorkoutSessionController: NSObject {
                 try? await Task.sleep(for: .seconds(2))
                 if once.claim() {
                     self.log.notice("health authorization status did not answer in 2s; treating it as decided")
+                    RunDiagnostics.shared.note("Health status: no answer in 2s")
                     continuation.resume(returning: true)
                 }
             }
@@ -252,6 +256,7 @@ final class WorkoutSessionController: NSObject {
                 try? await Task.sleep(for: .seconds(seconds))
                 if once.claim() {
                     self.log.notice("previous workout still saving after \(seconds)s; starting anyway")
+                    RunDiagnostics.shared.note("Previous workout still saving after \(Int(seconds))s")
                     continuation.resume()
                 }
             }
@@ -279,6 +284,7 @@ final class WorkoutSessionController: NSObject {
                 try? await Task.sleep(for: .seconds(seconds))
                 if once.claim() {
                     self.log.notice("workout recovery did not answer in \(seconds)s; proceeding without it")
+                    RunDiagnostics.shared.note("Recovery: no answer in \(Int(seconds))s")
                     continuation.resume(returning: nil)
                 }
             }
@@ -300,6 +306,11 @@ final class WorkoutSessionController: NSObject {
     private func start(at date: Date, tagging workout: IntervalWorkout?) async -> Bool {
         // Wait out any teardown still in flight rather than reporting its stale state.
         await awaitTeardown(seconds: 8)
+        RunDiagnostics.shared.note(
+            "Session: asking. Health available \(Self.isSupported), "
+                + "workouts \(Self.describe(store.authorizationStatus(for: HKObjectType.workoutType()))), "
+                + "existing \(session != nil), starting \(isStarting)"
+        )
         guard Self.isSupported, session == nil else { return isRunning && !isStarting }
         isStarting = true
         defer { isStarting = false }
@@ -340,10 +351,12 @@ final class WorkoutSessionController: NSObject {
 
             isRunning = true
             log.info("workout session started")
+            RunDiagnostics.shared.note("Session: started (\(configuration.activityType.rawValue), \(configuration.locationType == .indoor ? "indoor" : "outdoor"))")
             startMirroring()
             return true
         } catch {
             log.error("could not start workout session: \(error.localizedDescription, privacy: .public)")
+            RunDiagnostics.shared.note("Session: could not start: \(RunDiagnostics.describe(error))")
             teardown()
             return false
         }
@@ -541,6 +554,29 @@ final class WorkoutSessionController: NSObject {
     }
 }
 
+extension WorkoutSessionController {
+    nonisolated static func describe(_ state: HKWorkoutSessionState) -> String {
+        switch state {
+        case .notStarted: "not started"
+        case .prepared: "prepared"
+        case .running: "running"
+        case .paused: "paused"
+        case .stopped: "stopped"
+        case .ended: "ended"
+        @unknown default: "state \(state.rawValue)"
+        }
+    }
+
+    nonisolated static func describe(_ status: HKAuthorizationStatus) -> String {
+        switch status {
+        case .notDetermined: "not asked"
+        case .sharingDenied: "DENIED"
+        case .sharingAuthorized: "allowed"
+        @unknown default: "status \(status.rawValue)"
+        }
+    }
+}
+
 extension WorkoutSessionController: HKWorkoutSessionDelegate {
     nonisolated func workoutSession(
         _ workoutSession: HKWorkoutSession,
@@ -548,12 +584,14 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
         from fromState: HKWorkoutSessionState,
         date: Date
     ) {
+        RunDiagnostics.shared.note("Session: \(Self.describe(fromState)) → \(Self.describe(toState))")
         Task { @MainActor in
             self.isRunning = (toState == .running)
             // The system can end a session out from under the app — another workout app
             // takes over, or the watch decides to stop it.
             if toState == .ended, !self.isEnding, self.session != nil {
                 self.log.notice("workout session ended by the system")
+                RunDiagnostics.shared.note("Session: ENDED BY THE SYSTEM (another workout, or iOS)")
                 self.teardown()
                 self.onUnexpectedEnd?()
             }
@@ -583,6 +621,7 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
+        RunDiagnostics.shared.note("Session: failed: \(RunDiagnostics.describe(error))")
         Task { @MainActor in
             self.log.error("workout session failed: \(error.localizedDescription, privacy: .public)")
             let wasExpected = self.isEnding

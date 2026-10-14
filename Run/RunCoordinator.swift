@@ -70,7 +70,11 @@ final class RunCoordinator {
         var deliversHaptics: Bool { self == .workout }
     }
 
-    private(set) var tier: RuntimeTier = .none
+    private(set) var tier: RuntimeTier = .none {
+        didSet {
+            if tier != oldValue { RunDiagnostics.shared.note("Run: keeps running by \(tier.rawValue) (was \(oldValue.rawValue))") }
+        }
+    }
 
     /// What the finished run amounted to, for the summary screen.
     struct Summary: Equatable, Sendable {
@@ -206,6 +210,7 @@ final class RunCoordinator {
             summary = nil
         }
         guard engine.status == .idle, beginTask == nil else { return }
+        RunDiagnostics.shared.note("Run: started \(engine.plan.workout.name)")
         // The one place Pro gates the warmup and cooldown. The snapshot, the widget, the
         // notifications and a later restore all inherit the plan built here, and Siri,
         // Shortcuts, Control Center and the complication all start through this method.
@@ -345,6 +350,7 @@ final class RunCoordinator {
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.engine.isActive,
                       self.tier == .extendedRuntime else { return }
+                RunDiagnostics.shared.note("Run: retrying the workout session")
                 self.upgradeAttemptInFlight = true
                 let started = await self.workout.start(for: self.engine.plan.workout)
                 self.upgradeAttemptInFlight = false
@@ -670,6 +676,7 @@ final class RunCoordinator {
     /// catching up — elapsed time comes from the clock — but events since the last tick
     /// still have to be dispatched and the notification schedule re-aligned.
     func handleForeground() {
+        RunDiagnostics.shared.note("App: in front. Run \(engine.status), keeps running by \(tier.rawValue)")
         advance()
         // Being foreground-active is the only state in which a session may be started, so
         // this is the moment to re-take a tier the system took away. Idempotent: the attach
@@ -691,8 +698,12 @@ final class RunCoordinator {
         guard !hasRequestedPermissions else { return }
         hasRequestedPermissions = true
         canNotify = await notifications.requestAuthorization()
+        RunDiagnostics.shared.note("Permissions: notifications \(canNotify ? "allowed" : "NOT ALLOWED")")
         if workout.isSupported {
-            await workout.requestAuthorization()
+            let asked = await workout.requestAuthorization()
+            RunDiagnostics.shared.note("Permissions: Health request \(asked ? "answered" : "failed")")
+        } else {
+            RunDiagnostics.shared.note("Permissions: Health not available on this device")
         }
     }
 

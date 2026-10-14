@@ -89,6 +89,12 @@ final class CueAudio: NSObject, CueOutput {
                 players[tone] = player
             }
         }
+        // What takes the audio away (a call, Siri, another app's non-mixable audio) and gives
+        // it back, for the diagnostics.
+        NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: nil) { note in
+            let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init(rawValue:))
+            RunDiagnostics.shared.note("Audio: interrupted, \(type == .began ? "began" : type == .ended ? "ended" : "unknown")")
+        }
         volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] session, _ in
             let volume = session.outputVolume
             Task { @MainActor in self?.onVolumeChange?(volume) }
@@ -100,7 +106,8 @@ final class CueAudio: NSObject, CueOutput {
         guard let player = players[tone] else { return 0 }
         prepareSession(for: player.duration)
         player.currentTime = 0
-        player.play()
+        let played = player.play()
+        noteIfAway("tone \(tone)", played: played)
         return player.duration
     }
 
@@ -118,7 +125,8 @@ final class CueAudio: NSObject, CueOutput {
             self.speaking?.stop()
             self.prepareSession(for: player.duration)
             player.currentTime = 0
-            player.play()
+            let played = player.play()
+            self.noteIfAway("voice \"\(phrase)\"", played: played)
             self.speaking = player
         }
     }
@@ -182,6 +190,15 @@ final class CueAudio: NSObject, CueOutput {
         return player
     }
 
+    /// A cue played, or not, with the app away: the case the diagnostics are for. In front,
+    /// cues are heard and not worth a line each.
+    private func noteIfAway(_ cue: String, played: Bool) {
+        let state = UIApplication.shared.applicationState
+        guard state != .active || !played else { return }
+        let where_ = state == .background ? "in the background" : state == .inactive ? "while inactive" : "in front"
+        RunDiagnostics.shared.note("Cue: \(cue) \(played ? "played" : "FAILED TO PLAY") \(where_), session active \(isActive)")
+    }
+
     // MARK: - Session
 
     private func setCategory(ducking: Bool) {
@@ -230,6 +247,7 @@ final class CueAudio: NSObject, CueOutput {
             }
         } catch {
             log.notice("could not lower other audio: \(error.localizedDescription, privacy: .public)")
+            RunDiagnostics.shared.note("Audio: couldn't lower other audio: \(RunDiagnostics.describe(error))")
             setCategory(ducking: false)
             hold()
         }
@@ -281,6 +299,7 @@ final class CueAudio: NSObject, CueOutput {
             isActive = true
             onVolumeChange?(session.outputVolume)
         } catch {
+            RunDiagnostics.shared.note("Audio: session not activated: \(RunDiagnostics.describe(error))")
             // A phone call, or another app holding audio that can't be mixed: the cue is lost,
             // the tap and the screen still mark the change. The next cue tries again.
             log.notice("audio session not activated: \(error.localizedDescription, privacy: .public)")

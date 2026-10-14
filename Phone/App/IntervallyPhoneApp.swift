@@ -32,12 +32,22 @@ struct IntervallyPhoneApp: App {
                 .environment(services.run)
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase == .background {
+                RunDiagnostics.shared.note("App: left (background time \(Self.backgroundTime))")
+            }
             guard phase == .active else {
                 services.handleBackground()
                 return
             }
             Task { await services.handleForeground() }
         }
+    }
+
+    /// What iOS grants an app that just left: a finite number when nothing keeps it running,
+    /// "unlimited" when something (a workout session, audio) does.
+    @MainActor static var backgroundTime: String {
+        let remaining = UIApplication.shared.backgroundTimeRemaining
+        return remaining > 1_000_000 ? "unlimited" : "\(Int(remaining))s"
     }
 
     private var root: some View {
