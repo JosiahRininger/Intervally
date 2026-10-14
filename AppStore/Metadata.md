@@ -73,7 +73,7 @@ Press Start and hear every interval, even over your music. Name each interval an
 Intervally is an interval timer for iPhone, iPad and Apple Watch. Set how long to work, how long to rest, and how many rounds, press Start, and train. Every interval change is marked for you, with a tone on your iPhone or a tap on your wrist, so you never have to watch the clock.
 
 TRAIN WITH YOUR IPHONE OR IPAD
-Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. Your music dips for each cue and comes straight back up, so you hear every change over a loud song. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
+Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. With Intervally open, your music dips for each cue and comes straight back up; with your phone locked, the cues play right over it. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
 
 OR ON YOUR WRIST
 With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone, then tap Start on Watch to run one on your wrist right away. Tap Put on Watch and it's the next workout your watch starts. Changes reach your watch on their own, and each app keeps working without the other.
