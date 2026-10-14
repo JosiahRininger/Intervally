@@ -43,6 +43,7 @@ struct PresetEditorView: View {
     var open: (UUID) -> Void = { _ in }
 
     @Environment(WorkoutStore.self) private var store
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
     @Environment(PhoneRun.self) private var run
@@ -233,6 +234,11 @@ struct PresetEditorView: View {
                     .font(.hero((52 * side / EditorLayout.ringSides.upperBound).rounded()))
                     .lineLimit(1)
                     .minimumScaleFactor(0.45)
+                    // The wheels save as they turn, with the ring in view above the sheet:
+                    // the total rolls to its new value rather than jumping. On this text
+                    // only, so the ring's arcs don't morph into their neighbours.
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+                    .animation(AppMotion.animation(.snappy, reduceMotion: reduceMotion), value: runs.totalSeconds)
                 RhythmLine(workout: runs)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)

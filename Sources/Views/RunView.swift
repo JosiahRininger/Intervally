@@ -236,6 +236,7 @@ struct RunView: View {
             Button { coordinator.togglePause() } label: {
                 Image(systemName: paused ? "play.fill" : "pause.fill")
                     .font(.system(size: side * 0.4, weight: .semibold))
+                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
                     .frame(width: side, height: side)
             }
             .buttonStyle(.glassProminent)

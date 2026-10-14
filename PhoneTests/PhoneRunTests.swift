@@ -574,3 +574,31 @@ struct CueEngineAudioTests {
         #expect(CueAudio.buffer([], format: format) == nil)
     }
 }
+
+@Suite("Motion")
+struct MotionTests {
+    @Test("Reduce Motion turns every added animation off, and leaves it otherwise")
+    func reduceMotion() {
+        #expect(AppMotion.animation(.snappy, reduceMotion: true) == nil)
+        #expect(AppMotion.animation(.snappy, reduceMotion: false) == .snappy)
+    }
+
+    @Test("Which hint the run screen shows: the volume first, the tip only while getting ready")
+    func hints() {
+        #expect(RunScreenLayout.hint(volumeLow: true, tipSeen: false, mirroring: false, kind: .prepare) == .volumeLow)
+        #expect(RunScreenLayout.hint(volumeLow: false, tipSeen: false, mirroring: false, kind: .prepare) == .setVolume)
+        #expect(RunScreenLayout.hint(volumeLow: false, tipSeen: true, mirroring: false, kind: .prepare) == nil)
+        #expect(RunScreenLayout.hint(volumeLow: false, tipSeen: false, mirroring: true, kind: .prepare) == nil)
+        #expect(RunScreenLayout.hint(volumeLow: false, tipSeen: false, mirroring: false, kind: .work) == nil)
+    }
+
+    @Test("The Health line is one line that changes: saving, saved, couldn't, or nothing")
+    func healthLine() {
+        #expect(HealthSaveLine(.notRecorded, onWatch: false) == nil)
+        #expect(HealthSaveLine(.saving, onWatch: false)?.symbol == "heart")
+        #expect(HealthSaveLine(.saving, onWatch: true)?.text == "Your watch is saving it to Health")
+        let saved = HealthSaveLine(.saved, onWatch: false)
+        #expect(saved?.text == "Saved to Health" && saved?.symbol == "heart.fill" && saved?.isDone == true)
+        #expect(HealthSaveLine(.failed, onWatch: false)?.symbol == "heart.slash")
+    }
+}

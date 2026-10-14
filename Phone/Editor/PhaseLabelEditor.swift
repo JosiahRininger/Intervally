@@ -20,6 +20,7 @@ struct PhaseLabelEditor: View {
     @FocusState private var nameFocused: Bool
     @Environment(\.palette) private var palette
     @Environment(\.dynamicTypeSize) private var typeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(kind: IntervalPhase.Kind, label: PhaseLabel, onChange: @escaping (PhaseLabel?) -> Void) {
         self.kind = kind
@@ -89,6 +90,9 @@ struct PhaseLabelEditor: View {
             }
             .padding(20)
         }
+        // The Use button eases in and out as the label stops or starts being the phase's own.
+        .animation(AppMotion.animation(.default, reduceMotion: reduceMotion), value: isCustom)
+        .sensoryFeedback(.selection, trigger: symbol)
         .scrollDismissesKeyboard(.interactively)
         .onDisappear(perform: save)
         .navigationTitle("Name & Icon")
@@ -113,6 +117,7 @@ struct PhaseLabelEditor: View {
                 .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(.plain)
+        .animation(AppMotion.animation(.snappy(duration: 0.2), reduceMotion: reduceMotion), value: selected)
         .accessibilityLabel(option.spokenName)
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

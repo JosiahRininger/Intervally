@@ -17,6 +17,7 @@ struct SessionDetailView: View {
     @Environment(ReviewLedger.self) private var reviews
     @Environment(\.requestReview) private var requestReview
     @Environment(\.palette) private var palette
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Which per-interval chart shows, when the session has both. Calories first.
     @State private var metric: IntervalMetric?
 
@@ -182,6 +183,8 @@ struct SessionDetailView: View {
                 .accessibilityLabel(interval.title)
                 .accessibilityValue(shown.spoken(shown.value(of: interval) ?? 0))
             }
+            // Calories to heart rate: the bars and the axis morph to the other, by tap only.
+            .animation(AppMotion.animation(.snappy, reduceMotion: reduceMotion), value: shown)
             .chartXAxis(.hidden)
             .chartYAxis {
                 AxisMarks(position: .leading) { _ in

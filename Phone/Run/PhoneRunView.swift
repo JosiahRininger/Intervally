@@ -9,6 +9,16 @@ import SwiftUI
 /// How big the run screen's ring is: as wide as the screen allows with a margin, but never so
 /// tall that the controls drop off an iPhone SE.
 enum RunScreenLayout {
+    /// The line above the controls about the sound, if any.
+    enum Hint: Equatable { case volumeLow, setVolume }
+
+    /// The volume being too low comes first; the first-run tip shows while getting ready.
+    static func hint(volumeLow: Bool, tipSeen: Bool, mirroring: Bool, kind: IntervalPhase.Kind?) -> Hint? {
+        if volumeLow { return .volumeLow }
+        if !tipSeen, !mirroring, kind == .prepare { return .setVolume }
+        return nil
+    }
+
     /// Where the first run's volume tip is remembered as seen, per iPhone.
     static let soundTipSeenKey = "phone.run.soundTipSeen.v1"
 
@@ -216,18 +226,29 @@ struct PhoneRunView: View {
             .accessibilityLabel(next.map { "Next, \($0.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
     }
 
-    @ViewBuilder
+    /// Faded in and out rather than popping: the spacers around the ring take up the room a
+    /// hint leaves, and the ring jumped with it. Keyed on which hint shows, so it animates
+    /// only when that changes, never on the countdown's ticks.
     private func hints(_ position: IntervalPlan.Position) -> some View {
-        if run.isVolumeLow {
-            hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
-                .padding(.bottom, 16)
-                .transition(.opacity)
-        } else if !soundTipSeen, !run.isMirroring, position.phase?.kind == .prepare {
-            // While getting ready, before the first change: the moment to set the volume.
-            hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
-                .padding(.bottom, 16)
-                .transition(.opacity)
+        let current = RunScreenLayout.hint(
+            volumeLow: run.isVolumeLow, tipSeen: soundTipSeen, mirroring: run.isMirroring, kind: position.phase?.kind
+        )
+        return ZStack {
+            switch current {
+            case .volumeLow:
+                hint("Turn up the volume to hear each interval", systemImage: "speaker.wave.1.fill")
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            case .setVolume:
+                // While getting ready, before the first change: the moment to set the volume.
+                hint("Set how loud the beeps are with the volume buttons", systemImage: "speaker.wave.2.fill")
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+            case nil:
+                EmptyView()
+            }
         }
+        .animation(AppMotion.animation(.easeInOut(duration: 0.25), reduceMotion: reduceMotion), value: current)
     }
 
     /// A line about the sound. The cues play at the media volume, which the volume buttons set
@@ -372,6 +393,7 @@ struct RunSummaryView: View {
     let workoutName: String
     /// A run the watch ran: it repeats from the watch, not from here.
     var onWatch = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let done: () -> Void
     let repeatRun: () -> Void
 
@@ -436,23 +458,37 @@ struct RunSummaryView: View {
 
     /// Nothing at all when the run had no workout session: Health was declined, and saying
     /// "Not saved" after every run would only nag.
+    /// One line that changes, rather than one of several swapped in: "Saving to Health"
+    /// becomes "Saved to Health" with its heart filling in, where the save lands.
     @ViewBuilder
     private var healthLine: some View {
-        switch summary.health {
-        case .notRecorded:
-            EmptyView()
-        case .saving:
-            Label(onWatch ? "Your watch is saving it to Health" : "Saving to Health", systemImage: "heart")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        case .saved:
-            Label("Saved to Health", systemImage: "heart.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(palette.workInk)
-        case .failed:
-            Label("Couldn't save to Health", systemImage: "heart.slash")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+        if let line = HealthSaveLine(summary.health, onWatch: onWatch) {
+            Label {
+                Text(line.text)
+            } icon: {
+                Image(systemName: line.symbol)
+                    .contentTransition(reduceMotion ? .identity : .symbolEffect(.replace))
+            }
+            .font(line.isDone ? .subheadline.weight(.semibold) : .subheadline)
+            .foregroundStyle(line.isDone ? AnyShapeStyle(palette.workInk) : AnyShapeStyle(.secondary))
+            .animation(AppMotion.animation(.smooth, reduceMotion: reduceMotion), value: line)
+        }
+    }
+}
+
+/// What the summary says of the run's Health workout. Nil when the run had none.
+struct HealthSaveLine: Equatable {
+    let text: String
+    let symbol: String
+    /// Saved: said in the work colour.
+    let isDone: Bool
+
+    init?(_ health: RunCoordinator.HealthSave, onWatch: Bool) {
+        switch health {
+        case .notRecorded: return nil
+        case .saving: (text, symbol, isDone) = (onWatch ? "Your watch is saving it to Health" : "Saving to Health", "heart", false)
+        case .saved: (text, symbol, isDone) = ("Saved to Health", "heart.fill", true)
+        case .failed: (text, symbol, isDone) = ("Couldn't save to Health", "heart.slash", false)
         }
     }
 }
