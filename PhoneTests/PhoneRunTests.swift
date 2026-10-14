@@ -23,7 +23,11 @@ final class FakeCueOutput: CueOutput {
 
     private(set) var calls: [Call] = []
     var onVolumeChange: ((Float) -> Void)?
+    var onHealthChange: ((Bool) -> Void)?
     var lowersOtherAudio = true
+    /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
+    private(set) var holds = 0
+    func holdForRun() { holds += 1 }
 
     /// What the media volume would report, as the audio session's KVO does.
     func report(volume: Float) { onVolumeChange?(volume) }
@@ -204,6 +208,19 @@ struct PhoneCuePlayerTests {
         let player = PhoneCuePlayer(output: output, pro: pro, defaults: defaults)
         player.roundsInRun = { 8 }
         return player
+    }
+
+    @Test("A run with any sound on holds the audio from its first event, so cues can sound away from the app")
+    func holdsTheAudio() {
+        let phase = IntervalPhase(id: 0, kind: .prepare, duration: 10, round: 1, start: 0)
+        player().play(.phaseBegan(phase), context: .immediate)
+        #expect(output.holds == 1)
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        player().play(.phaseBegan(phase), context: .immediate)
+        #expect(output.holds == 2, "The voice alone still needs the audio")
+        defaults.set(false, forKey: CueSettings.Key.voice)
+        player().play(.phaseBegan(phase), context: .immediate)
+        #expect(output.holds == 2, "Nothing to hear: nothing held")
     }
 
     @Test("The voice waits for the tone to finish, and a tap goes with it")

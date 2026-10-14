@@ -27,6 +27,10 @@ final class PhoneCuePlayer: BoundaryHaptics {
     }
 
     func play(_ event: TimerEvent, context: BoundaryContext) {
+        // Taken at Start, in front, and kept: away from the app the audio can carry on but
+        // can't be started. Every event re-checks it; it costs nothing while it runs.
+        let settings = self.settings
+        if settings.beeps || settings.voice { output.holdForRun() }
         let plan = CuePlan.make(for: event, context: context, settings: settings, totalRounds: roundsInRun())
         perform(plan)
     }

@@ -28,6 +28,13 @@ protocol CueOutput: AnyObject {
     /// The media volume the cues play at, 0 to 1, whenever it changes while a run holds the
     /// audio.
     var onVolumeChange: ((Float) -> Void)? { get set }
+    /// Takes the audio for a run and keeps it running until `handBackAudio`, so cues can
+    /// sound away from the app. Called at Start, in front, where the audio may be started.
+    func holdForRun()
+    /// Whether the cues can sound, each time that changes while a run holds the audio: false
+    /// when the audio has stopped and can't be started again away from the app, so the run
+    /// can mark the changes with notifications instead.
+    var onHealthChange: ((Bool) -> Void)? { get set }
 }
 
 /// The real output: synthesized tones, the system voice and the Taptic Engine.
@@ -57,9 +64,10 @@ protocol CueOutput: AnyObject {
 @MainActor
 final class CueAudio: NSObject, CueOutput {
     private let session = AVAudioSession.sharedInstance()
-    private let engine = AVAudioEngine()
-    private let tonePlayer = AVAudioPlayerNode()
-    private let voicePlayer = AVAudioPlayerNode()
+    // Rebuilt from scratch if iOS resets its media services, which invalidates every node.
+    private var engine = AVAudioEngine()
+    private var tonePlayer = AVAudioPlayerNode()
+    private var voicePlayer = AVAudioPlayerNode()
     /// Every cue's format: the tones' own rate, mono. Speech is resampled into it.
     private let format = AVAudioFormat(standardFormatWithSampleRate: Double(ToneSynth.sampleRate), channels: 1)!
     private var tones: [CueTone: AVAudioPCMBuffer] = [:]
@@ -79,6 +87,12 @@ final class CueAudio: NSObject, CueOutput {
 
     var lowersOtherAudio = true
     var onVolumeChange: ((Float) -> Void)?
+    var onHealthChange: ((Bool) -> Void)?
+    /// What was last reported through `onHealthChange`.
+    private var isHealthy = true
+    /// Checks the engine every second while a run holds the audio, and restarts it if
+    /// something stopped it without saying so.
+    private var watchdog: Task<Void, Never>?
 
     /// Whether other audio is lowered right now, and until when.
     private var isDucking = false
@@ -92,12 +106,7 @@ final class CueAudio: NSObject, CueOutput {
     override init() {
         super.init()
         setCategory(ducking: false)
-        engine.attach(tonePlayer)
-        engine.attach(voicePlayer)
-        engine.connect(tonePlayer, to: engine.mainMixerNode, format: format)
-        engine.connect(voicePlayer, to: engine.mainMixerNode, format: format)
-        // Running means running: the hardware is never let go between cues.
-        engine.isAutoShutdownEnabled = false
+        buildEngine()
         for tone in CueTone.allCases {
             tones[tone] = Self.buffer(ToneSynth.samples(for: tone).map { Float($0) / Float(Int16.max) }, format: format)
         }
@@ -107,6 +116,15 @@ final class CueAudio: NSObject, CueOutput {
         observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] note in
             let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init(rawValue:))
             MainActor.assumeIsolated { self?.interrupted(began: type == .began) }
+        })
+        // iOS reset its audio: every node is gone. Build it all again and carry on.
+        observers.append(center.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.mediaServicesReset() }
+        })
+        // Headphones or AirPods in or out, or the output otherwise changed: the engine stops.
+        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] note in
+            let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
+            MainActor.assumeIsolated { self?.routeChanged(reason) }
         })
         // Leaving with the music lowered: lift it now, while the engine can still be
         // restarted, rather than from the background, where it can't.
@@ -161,8 +179,16 @@ final class CueAudio: NSObject, CueOutput {
         voicePlayer.stop()
     }
 
+    func holdForRun() {
+        _ = ensureRunning()
+        startWatchdog()
+    }
+
     func handBackAudio() {
         isHeld = false
+        watchdog?.cancel()
+        watchdog = nil
+        isHealthy = true
         silence()
         restoreTask?.cancel()
         restoreTask = nil
@@ -184,6 +210,7 @@ final class CueAudio: NSObject, CueOutput {
     /// Plays `buffer` now on `node`, cutting off what it was playing. False if the engine
     /// isn't running and can't be started (in the background, after an interruption).
     private func schedule(_ buffer: AVAudioPCMBuffer, on node: AVAudioPlayerNode) -> Bool {
+        startWatchdog()
         guard ensureRunning() else { return false }
         node.scheduleBuffer(buffer, at: nil, options: .interrupts)
         if !node.isPlaying { node.play() }
@@ -194,18 +221,88 @@ final class CueAudio: NSObject, CueOutput {
     private func ensureRunning() -> Bool {
         isHeld = true
         hold()
-        guard !engine.isRunning else { return true }
+        guard !engine.isRunning else {
+            report(healthy: true)
+            return true
+        }
         do {
             try engine.start()
             if UIApplication.shared.applicationState != .active {
                 RunDiagnostics.shared.note("Audio: engine restarted away from the app")
             }
+            report(healthy: true)
             return true
         } catch {
             RunDiagnostics.shared.note("Audio: engine didn't start: \(RunDiagnostics.describe(error))")
             log.notice("cue engine didn't start: \(error.localizedDescription, privacy: .public)")
+            report(healthy: false)
             return false
         }
+    }
+
+    private func report(healthy: Bool) {
+        guard isHeld, healthy != isHealthy else { return }
+        isHealthy = healthy
+        RunDiagnostics.shared.note(healthy ? "Audio: cues can sound again" : "Audio: CUES CAN'T SOUND; marking changes with notifications")
+        onHealthChange?(healthy)
+    }
+
+    private func startWatchdog() {
+        guard watchdog == nil else { return }
+        watchdog = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard let self, !Task.isCancelled, self.isHeld else { return }
+                // Lowering the music stops the engine on purpose, for a moment, in front.
+                if !self.engine.isRunning, !self.isDucking {
+                    RunDiagnostics.shared.note("Audio: watchdog found the engine stopped")
+                    _ = self.ensureRunning()
+                }
+            }
+        }
+    }
+
+    /// The engine and its two players, wired up: on launch, and again after a media reset.
+    private func buildEngine() {
+        engine = AVAudioEngine()
+        tonePlayer = AVAudioPlayerNode()
+        voicePlayer = AVAudioPlayerNode()
+        engine.attach(tonePlayer)
+        engine.attach(voicePlayer)
+        engine.connect(tonePlayer, to: engine.mainMixerNode, format: format)
+        engine.connect(voicePlayer, to: engine.mainMixerNode, format: format)
+        // Running means running: the hardware is never let go between cues.
+        engine.isAutoShutdownEnabled = false
+        // Stopped by a change of output the route notification didn't cover.
+        observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.isHeld, !self.isDucking else { return }
+                RunDiagnostics.shared.note("Audio: engine configuration changed; restarting")
+                _ = self.ensureRunning()
+            }
+        })
+    }
+
+    private func mediaServicesReset() {
+        RunDiagnostics.shared.note("Audio: media services were reset; rebuilding")
+        isActive = false
+        isDucking = false
+        buildEngine()
+        setCategory(ducking: false)
+        if isHeld { _ = ensureRunning() }
+    }
+
+    private func routeChanged(_ reason: AVAudioSession.RouteChangeReason?) {
+        guard isHeld, !isDucking else { return }
+        let why: String = switch reason {
+        case .newDeviceAvailable: "headphones or a speaker connected"
+        case .oldDeviceUnavailable: "headphones or a speaker disconnected"
+        default: "output changed"
+        }
+        RunDiagnostics.shared.note("Audio: \(why)")
+        // The engine stops when its output goes; it may also carry on. Either way it is
+        // running again before the next cue.
+        _ = ensureRunning()
     }
 
     private func interrupted(began: Bool) {

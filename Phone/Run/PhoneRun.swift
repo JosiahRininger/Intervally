@@ -95,6 +95,10 @@ final class PhoneRun {
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
         resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
+        // Cues that can't sound fall back to notifications rather than to silence.
+        resolvedOutput.onHealthChange = { [weak coordinator] healthy in
+            coordinator?.cuesHealthChanged(healthy: healthy)
+        }
         // The iPhone's own run comes first: a watch run takes the screen only from no run
         // here at all, and the Lock Screen only while nothing here is showing.
         mirror.onShow = { [weak self] in

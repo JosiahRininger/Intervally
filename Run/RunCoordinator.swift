@@ -70,6 +70,11 @@ final class RunCoordinator {
         var deliversHaptics: Bool { self == .workout }
     }
 
+    /// The iPhone's cues can't sound right now (their audio stopped away from the app and
+    /// couldn't be started again). The notification backstop marks the changes meanwhile,
+    /// whatever keeps the run going. See `cuesHealthChanged(healthy:)`.
+    private(set) var cuesFailing = false
+
     private(set) var tier: RuntimeTier = .none {
         didSet {
             if tier != oldValue { RunDiagnostics.shared.note("Run: keeps running by \(tier.rawValue) (was \(oldValue.rawValue))") }
@@ -211,6 +216,8 @@ final class RunCoordinator {
         }
         guard engine.status == .idle, beginTask == nil else { return }
         RunDiagnostics.shared.note("Run: started \(engine.plan.workout.name)")
+        // A new run's cues start out sounding; a failure the last run ended on is not this one's.
+        cuesFailing = false
         // The one place Pro gates the warmup and cooldown. The snapshot, the widget, the
         // notifications and a later restore all inherit the plan built here, and Siri,
         // Shortcuts, Control Center and the complication all start through this method.
@@ -388,7 +395,7 @@ final class RunCoordinator {
         // with its own refreshBackstop(), and it is bounded, so deferring is safe.
         guard supportTask == nil else { return }
         let wanted: (plan: IntervalPlan, anchor: Date)?
-        if engine.status == .running, !tier.deliversHaptics, let anchor = engine.anchor {
+        if engine.status == .running, !tier.deliversHaptics || cuesFailing, let anchor = engine.anchor {
             wanted = (engine.plan, anchor)
         } else {
             wanted = nil
@@ -407,6 +414,15 @@ final class RunCoordinator {
                 await notifications.cancelAll()
             }
         }
+    }
+
+    /// The cues' audio stopped, or came back. A workout session keeps the app running, but
+    /// running isn't sounding: with the audio gone, the changes would pass unmarked. So the
+    /// notification backstop takes over until the cues can sound again.
+    func cuesHealthChanged(healthy: Bool) {
+        guard cuesFailing == healthy else { return }
+        cuesFailing = !healthy
+        refreshBackstop()
     }
 
     /// Called when the run screen goes away.

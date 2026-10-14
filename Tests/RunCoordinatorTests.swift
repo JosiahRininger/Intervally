@@ -1095,3 +1095,39 @@ struct RunDiagnosticsTests {
         #expect(log.text.hasSuffix("two"))
     }
 }
+
+@Suite("Run coordinator — cues that can't sound")
+@MainActor
+struct RunCoordinatorCueHealthTests {
+    @Test("A workout session plays its own cues, but when they can't sound, notifications mark the changes")
+    func backstopWhileCuesFail() async {
+        let (coordinator, _, _, _, spy, _, _) = makeCoordinator()
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .workout)
+        #expect(spy.calls.last == .cancelAll, "Under a session the app plays the cues itself")
+
+        coordinator.cuesHealthChanged(healthy: false)
+        await coordinator.backstopSettled()
+        #expect(coordinator.cuesFailing)
+        #expect(spy.scheduleCount >= 1, "The rest of the run is scheduled as notifications")
+
+        coordinator.cuesHealthChanged(healthy: true)
+        await coordinator.backstopSettled()
+        #expect(!coordinator.cuesFailing)
+        #expect(spy.calls.last == .cancelAll, "Sound is back: no double alerts")
+    }
+
+    @Test("A failure the last run ended on doesn't carry into the next")
+    func resetsAtStart() async {
+        let (coordinator, _, _, _, _, _, _) = makeCoordinator()
+        coordinator.begin()
+        await settle(coordinator)
+        coordinator.cuesHealthChanged(healthy: false)
+        coordinator.stopAndExit()
+        await settle(coordinator)
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(!coordinator.cuesFailing)
+    }
+}
