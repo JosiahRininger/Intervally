@@ -117,9 +117,22 @@ final class RunCoordinator {
 
     /// A pending retry of the workout session after a fallback. See `scheduleWorkoutUpgrade`.
     @ObservationIgnored private var upgradeTask: Task<Void, Never>?
+    /// The retry is inside `workout.start` rather than waiting for its next try: cancelling
+    /// it then would discard a session that may just have started.
+    @ObservationIgnored private var upgradeAttemptInFlight = false
 
     /// How long to wait before each retry. Injectable so tests need not sleep for real.
-    @ObservationIgnored var upgradeRetryDelays: [TimeInterval] = [1.0, 3.0]
+    ///
+    /// Out to half a minute: on a real iPhone the first workout session raises a one-time
+    /// system prompt about workout data while the phone is locked, and a session asked for
+    /// while it is still up doesn't start. Two retries a few seconds apart ran out before
+    /// anyone had answered it, and the whole run went without a session: silent the moment
+    /// the user left the app. Coming back to the app tries again too (`handleForeground`).
+    @ObservationIgnored var upgradeRetryDelays: [TimeInterval] = [1.0, 3.0, 10.0, 30.0]
+
+    /// Whether a runtime tier is still being taken for this run, so the run screen can tell
+    /// "not yet" from "not at all" before saying the sounds stop outside the app.
+    private(set) var isAcquiringTier = false
 
     /// Drives event dispatch. Owned by the coordinator, not the view: an `autoconnect()`
     /// publisher tears its timer down when the last subscriber disappears, so tying it to
@@ -225,6 +238,7 @@ final class RunCoordinator {
     ///   belongs to this run and should be adopted. Only a brand-new run says no.
     private func attachBackgroundSupport(recovering: Bool = true) {
         guard engine.status == .running, tier == .none, supportTask == nil else { return }
+        isAcquiringTier = true
         supportTask = Task {
             // Asked here rather than at launch: the permission only means something once
             // the user has actually started a workout, and a prompt on the very first
@@ -234,6 +248,7 @@ final class RunCoordinator {
             // Clear BEFORE the deciding refresh: refreshBackstop defers while an acquisition
             // is in flight, and this is the one call that must not be deferred.
             supportTask = nil
+            isAcquiringTier = false
             refreshBackstop()
         }
     }
@@ -322,12 +337,18 @@ final class RunCoordinator {
     private func scheduleWorkoutUpgrade() {
         upgradeTask?.cancel()
         upgradeTask = Task { [weak self] in
+            // Done, one way or the other: a later return to the app may try again. Not when
+            // cancelled, as whoever cancelled it has already replaced or cleared it.
+            defer { if !Task.isCancelled { self?.upgradeTask = nil } }
             guard let delays = self?.upgradeRetryDelays else { return }
             for delay in delays {
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self, !Task.isCancelled, self.engine.isActive,
                       self.tier == .extendedRuntime else { return }
-                guard await self.workout.start(for: self.engine.plan.workout) else { continue }
+                self.upgradeAttemptInFlight = true
+                let started = await self.workout.start(for: self.engine.plan.workout)
+                self.upgradeAttemptInFlight = false
+                guard started else { continue }
 
                 // The run may have ended while the session was starting.
                 guard self.engine.isActive, !Task.isCancelled else {
@@ -654,6 +675,15 @@ final class RunCoordinator {
         // this is the moment to re-take a tier the system took away. Idempotent: the attach
         // is guarded on tier == .none.
         attachBackgroundSupport()
+        // A run that fell back still has no workout session, and on iPhone the fallback
+        // never ends on its own to send it back through the attach above. Back in front is
+        // when one may be started, perhaps with Health just allowed in Settings, so try
+        // again rather than staying silent outside the app for the rest of the run.
+        // Restarted rather than left waiting: allowing Health and coming straight back
+        // otherwise waited out the rest of a 30-second pause before the next try.
+        if tier == .extendedRuntime, workout.isSupported, !upgradeAttemptInFlight {
+            scheduleWorkoutUpgrade()
+        }
         refreshBackstop()
     }
 

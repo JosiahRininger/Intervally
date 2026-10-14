@@ -699,6 +699,57 @@ struct RunCoordinatorUpgradeTests {
         #expect(spy.scheduleCount >= 1)
     }
 
+    /// Health declined at the first Start, then allowed in Settings: the run must take its
+    /// session when the user comes back, or it stays silent outside the app to the end.
+    @Test("Back in the app after the retries ran out, a fallen-back run tries for a session again")
+    func foregroundRetriesTheSession() async {
+        let (coordinator, _, workout, _, spy, _, _) = makeCoordinator()
+        coordinator.upgradeRetryDelays = [0.01]
+        workout.startResult = false
+
+        coordinator.begin()
+        await settle(coordinator)
+        try? await Task.sleep(for: .milliseconds(60))
+        await settle(coordinator)
+        #expect(coordinator.tier == .extendedRuntime)
+        #expect(coordinator.isAcquiringTier == false)
+        #expect(workout.startCount == 2)
+
+        workout.startResult = true
+        coordinator.handleForeground()
+        await eventually(coordinator) { coordinator.tier == .workout }
+
+        #expect(coordinator.tier == .workout)
+        #expect(workout.startCount == 3)
+        #expect(spy.calls.last == .cancelAll, "A session plays the cues itself, so the backstop goes")
+    }
+
+    @Test("Coming back to the app tries again at once instead of waiting out a long pause")
+    func foregroundRestartsAWaitingRetry() async {
+        let (coordinator, _, workout, _, _, _, _) = makeCoordinator()
+        coordinator.upgradeRetryDelays = [0.02, 5]
+        workout.startResult = false
+
+        coordinator.begin()
+        await settle(coordinator)
+        try? await Task.sleep(for: .milliseconds(80))
+        await settle(coordinator)
+        // The first attempt and the quick retry; the next is five seconds off.
+        #expect(workout.startCount == 2)
+
+        workout.startResult = true
+        coordinator.handleForeground()
+        await eventually(coordinator) { coordinator.tier == .workout }
+        #expect(coordinator.tier == .workout, "Restarted from the quick retry, not the five-second one")
+        #expect(workout.startCount == 3)
+    }
+
+    @Test("The retries reach half a minute, past the iPhone's one-time workout prompt")
+    func retriesOutlastThePrompt() {
+        let (coordinator, _, _, _, _, _, _) = makeCoordinator()
+        #expect(coordinator.upgradeRetryDelays.reduce(0, +) >= 30)
+    }
+
     @Test("A run that ends before the retry does not get a session attached afterwards")
     func endedRunIsNotUpgraded() async {
         let (coordinator, _, workout, _, _, _, _) = makeCoordinator()

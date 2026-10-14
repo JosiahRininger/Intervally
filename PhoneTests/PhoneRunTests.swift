@@ -529,3 +529,28 @@ struct PhoneRunTests {
         run.close()
     }
 }
+
+@Suite("Silent outside the app")
+struct SoundsStopOutsideAppTests {
+    @Test("Warned only for this iPhone's own run, once it has settled without a workout session")
+    func rule() {
+        func warns(mirroring: Bool = false, running: Bool = true, tier: RunCoordinator.RuntimeTier = .extendedRuntime,
+                   acquiring: Bool = false, supported: Bool = true) -> Bool {
+            PhoneRun.soundsStopOutsideApp(isMirroring: mirroring, isRunning: running, tier: tier, isAcquiring: acquiring, sessionsSupported: supported)
+        }
+        #expect(warns())
+        #expect(warns(tier: .none))
+        #expect(!warns(tier: .workout), "A workout session keeps the app playing")
+        #expect(!warns(acquiring: true), "Not while the session is still being asked for")
+        #expect(!warns(mirroring: true), "The watch runs it and taps the wrist")
+        #expect(!warns(running: false), "Paused or over: nothing is playing")
+        #expect(!warns(supported: false), "No Health on this device: nothing Settings could fix")
+    }
+
+    @Test("The warning says what happens and what fixes it")
+    func copy() {
+        #expect(RunScreenText.silentOutsideTitle == "Sounds stop if you leave Intervally")
+        #expect(RunScreenText.silentOutsideDetail.contains("Apple Health"))
+        #expect(RunScreenText.healthSteps.contains(HistoryMessage.whereToCheck), "The same way to Health that History gives")
+    }
+}

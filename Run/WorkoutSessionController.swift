@@ -33,6 +33,11 @@ final class WorkoutSessionController: NSObject {
     /// Set while the app is deliberately tearing the session down, so an expected `.ended`
     /// transition is not mistaken for a failure.
     @ObservationIgnored private var isEnding = false
+    /// A start still waiting on `beginCollection`. The delegate marks the session running
+    /// as soon as its activity starts, before collection has: a second caller then took
+    /// "running" for a session that the timeout went on to end, and its run sat on the
+    /// workout tier with no session and no notification backstop.
+    @ObservationIgnored private var isStarting = false
     /// The in-flight Health save, so a restart waits for it instead of racing it.
     @ObservationIgnored private var teardownTask: Task<Void, Never>?
 
@@ -101,7 +106,7 @@ final class WorkoutSessionController: NSObject {
     /// instead leaves that session never ended and never finished, so everything recorded
     /// before the termination is lost and the workout never lands in Health.
     func adoptRecoveredSession() async -> Bool {
-        guard Self.isSupported, session == nil else { return isRunning }
+        guard Self.isSupported, session == nil else { return isRunning && !isStarting }
         // Errors and a stuck call both come back as nil: there is nothing to adopt.
         guard let recovered = await recoverWithTimeout(seconds: 3) else { return false }
         let builder = recovered.associatedWorkoutBuilder()
@@ -295,7 +300,9 @@ final class WorkoutSessionController: NSObject {
     private func start(at date: Date, tagging workout: IntervalWorkout?) async -> Bool {
         // Wait out any teardown still in flight rather than reporting its stale state.
         await awaitTeardown(seconds: 8)
-        guard Self.isSupported, session == nil else { return isRunning }
+        guard Self.isSupported, session == nil else { return isRunning && !isStarting }
+        isStarting = true
+        defer { isStarting = false }
 
         // The preset's own activity: what Fitness shows it as, and on the watch what its
         // calories are estimated for.
@@ -312,7 +319,10 @@ final class WorkoutSessionController: NSObject {
             self.builder = builder
 
             session.startActivity(with: date)
-            let outcome = await beginCollection(at: date, timeout: 6)
+            // Long enough to answer the one-time prompt a real iPhone shows with its first
+            // workout session, which collection waits behind; short enough that a wedged
+            // healthd still falls back within the first interval.
+            let outcome = await beginCollection(at: date, timeout: 15)
             if case .began = outcome {} else {
                 // The session is already running in HealthKit by this point. Dropping our
                 // references is not enough — it would carry on with nobody holding it, keep
