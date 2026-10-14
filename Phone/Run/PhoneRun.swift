@@ -94,9 +94,10 @@ final class PhoneRun {
             presenter: self.presenter
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
+        cues.runIsActive = { [weak coordinator] in coordinator?.engine.isActive ?? false }
         resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
         // Cues that can't sound fall back to notifications rather than to silence.
-        resolvedOutput.onHealthChange = { [weak coordinator] healthy in
+        resolvedOutput.onHealthReport = { [weak coordinator] healthy in
             coordinator?.cuesHealthChanged(healthy: healthy)
         }
         // The iPhone's own run comes first: a watch run takes the screen only from no run
@@ -299,6 +300,11 @@ final class PhoneRun {
         let restored = coordinator.restoreIfNeeded()
         if restored {
             isPresented = true
+            // Taken now, while the app comes to the front, rather than at the next change, by
+            // which time the phone may be locked and the audio can't be started. Launched in
+            // the background, this finds out at once that the cues can't sound, and the run
+            // marks the changes with notifications until the app is in front.
+            cues.holdIfSounding()
         } else {
             // A snapshot that turned out to be finished: nothing to show.
             activity.present(nil)
@@ -308,12 +314,17 @@ final class PhoneRun {
     /// iOS relaunched the app to hand back a workout session that outlived it.
     func recoverWorkoutSession() {
         coordinator.recoverWorkoutSession()
-        if coordinator.engine.isActive { isPresented = true }
+        guard coordinator.engine.isActive else { return }
+        isPresented = true
+        cues.holdIfSounding()
     }
 
     func handleForeground() {
         guard coordinator.engine.isActive else { return }
         coordinator.handleForeground()
+        // In front, where the audio can be started: a run whose audio isn't held yet, or
+        // stopped, takes it before the phone is locked again.
+        cues.holdIfSounding()
     }
 
     // MARK: - Screen

@@ -15,6 +15,12 @@ final class PhoneCuePlayer: BoundaryHaptics {
     private let defaults: UserDefaults
     /// The rounds in the run under way, for "Last round". Set by whoever owns the run.
     var roundsInRun: () -> Int = { 1 }
+    /// Whether a run is under way (running or paused). Set by whoever owns the run.
+    var runIsActive: () -> Bool = { false }
+    /// How long after the finish the audio is handed back: the chime and "Workout complete"
+    /// are over well before.
+    var releaseAfterFinish: TimeInterval = 5
+    private var finishRelease: Task<Void, Never>?
 
     init(output: any CueOutput, pro: any ProGating, defaults: UserDefaults = SharedDefaults.suite) {
         self.output = output
@@ -27,12 +33,23 @@ final class PhoneCuePlayer: BoundaryHaptics {
     }
 
     func play(_ event: TimerEvent, context: BoundaryContext) {
+        // An event is a run going on: a finished run's release still waiting is off.
+        finishRelease?.cancel()
+        finishRelease = nil
         // Taken at Start, in front, and kept: away from the app the audio can carry on but
         // can't be started. Every event re-checks it; it costs nothing while it runs.
-        let settings = self.settings
-        if settings.beeps || settings.voice { output.holdForRun() }
+        holdIfSounding()
         let plan = CuePlan.make(for: event, context: context, settings: settings, totalRounds: roundsInRun())
         perform(plan)
+        if case .finished = event { releaseOnceFinished() }
+    }
+
+    /// Takes the audio for a run, if it has anything to be heard: at each event, and for a run
+    /// already under way that comes back after a relaunch or to the front, so the next change
+    /// sounds even if the phone is locked by then.
+    func holdIfSounding() {
+        let settings = self.settings
+        if settings.beeps || settings.voice { output.holdForRun() }
     }
 
     func cancelPending() {
@@ -41,7 +58,22 @@ final class PhoneCuePlayer: BoundaryHaptics {
 
     /// The run is over: the audio goes back, and with it the volume buttons, to the ringer.
     func release() {
+        finishRelease?.cancel()
+        finishRelease = nil
         output.handBackAudio()
+    }
+
+    /// A finished run's audio goes back once the finish has sounded, with no Done needed: a
+    /// summary left on screen in a pocket must not hold the audio, and with it the app, open
+    /// for nothing. Unless another run has started meanwhile (Repeat).
+    private func releaseOnceFinished() {
+        let delay = releaseAfterFinish
+        finishRelease = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard let self, !Task.isCancelled, !self.runIsActive() else { return }
+            self.finishRelease = nil
+            self.output.handBackAudio()
+        }
     }
 
     /// Whether the cues would be hard to hear at `volume`: with something to hear (beeps,

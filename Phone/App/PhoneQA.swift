@@ -27,6 +27,9 @@ import WatchConnectivity
 /// - `-qaWatchRun running|paused|finished` shows a run of the preset up next as if the watch
 ///   were running it and mirroring it here (`-qaRunElapsed` sets how far in; 40 s without).
 ///   The simulator can't mirror a real watch's session.
+/// - `-qaWorkout <bpm>,<kcal>` runs this iPhone's runs on a stand-in workout session
+///   (`QAWorkoutSession`) that reports that heart rate and those calories, with no Health or
+///   notification prompts, and nothing saved: the simulator measures neither.
 struct PhoneQAOptions: Equatable {
     var pro: Bool?
     var watch: QAWatchState?
@@ -36,11 +39,12 @@ struct PhoneQAOptions: Equatable {
     var theme: AppTheme?
     var runElapsed: TimeInterval?
     var watchRun: RunMirrorState.Status?
+    var workout: QAWorkoutFigures?
 
     /// Any QA flag at all: such a launch is being driven or captured, never really used.
     var isActive: Bool {
         pro != nil || watch != nil || welcome || screen != nil || history != nil || theme != nil
-            || runElapsed != nil || watchRun != nil
+            || runElapsed != nil || watchRun != nil || workout != nil
     }
 
     static let current = parse(ProcessInfo.processInfo.arguments)
@@ -66,6 +70,7 @@ struct PhoneQAOptions: Equatable {
         options.runElapsed = value(after: "-qaRunElapsed").flatMap(TimeInterval.init).map { max(0, $0) }
         options.watchRun = value(after: "-qaWatchRun").flatMap(RunMirrorState.Status.init(rawValue:))
             .flatMap { $0 == .stopped ? nil : $0 }
+        options.workout = value(after: "-qaWorkout").flatMap(QAWorkoutFigures.init)
         return options
     }
 
@@ -133,6 +138,57 @@ final class QAWatchTransport: SyncTransport {
     func updateApplicationContext(_ context: [String: Any]) throws {
         applicationContext = context
     }
+}
+
+/// What `-qaWorkout` reports: "152,37" is 152 BPM and 37 calories.
+struct QAWorkoutFigures: Equatable, Sendable {
+    let heartRate: Double
+    let activeEnergy: Double
+
+    init?(_ spec: String) {
+        let parts = spec.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 2, parts.allSatisfy({ $0 >= 0 }) else { return nil }
+        heartRate = parts[0]
+        activeEnergy = parts[1]
+    }
+}
+
+/// The workout session for `-qaWorkout`: starts at once, reports fixed figures, and saves
+/// nothing, so the run screen can be checked with its heart rate and calories showing.
+@MainActor
+final class QAWorkoutSession: WorkoutSessioning {
+    let figures: QAWorkoutFigures
+    var isSupported: Bool { true }
+    private(set) var isRunning = false
+    var heartRate: Double? { isRunning ? figures.heartRate : nil }
+    var activeEnergy: Double? { isRunning ? figures.activeEnergy : nil }
+    var onUnexpectedEnd: (() -> Void)?
+
+    init(figures: QAWorkoutFigures) {
+        self.figures = figures
+    }
+
+    func requestAuthorization() async -> Bool { true }
+    func adoptRecoveredSession() async -> Bool { false }
+    func start(at date: Date) async -> Bool {
+        isRunning = true
+        return true
+    }
+    func beginActivity(for phase: IntervalPhase, at date: Date) {}
+    func pause() {}
+    func resume() {}
+    func end(at date: Date) async -> Bool {
+        isRunning = false
+        return true
+    }
+    func discard() { isRunning = false }
+}
+
+/// The notification backstop for `-qaWorkout`: asks for nothing and schedules nothing.
+struct QABackstop: BoundaryScheduling {
+    func requestAuthorization() async -> Bool { true }
+    func schedule(plan: IntervalPlan, anchor: Date) async {}
+    func cancelAll() async {}
 }
 
 /// A screen `-qaOpen` opens on launch, for screenshots.

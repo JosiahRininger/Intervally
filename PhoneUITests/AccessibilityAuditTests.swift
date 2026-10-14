@@ -101,6 +101,20 @@ final class AccessibilityAuditTests: XCTestCase {
         PhoneApp.endRun(app)
     }
 
+    /// This iPhone's own run, with heart rate and calories from a stand-in workout session
+    /// (`-qaWorkout`), so no Health prompt stands in the way and nothing is saved. Paused
+    /// before the audit, for the same reason as above.
+    func testRunScreenWithFigures() throws {
+        let app = PhoneApp.launch(["-qaRunElapsed", "40", "-qaWorkout", "152,37"], pro: true)
+        let pause = app.buttons["Pause"]
+        XCTAssertTrue(pause.waitForExistence(timeout: 15))
+        XCTAssertTrue(app.descendants(matching: .any)["Heart rate 152 beats per minute"].firstMatch.waitForExistence(timeout: 5))
+        pause.tap()
+        XCTAssertTrue(app.buttons["Resume"].waitForExistence(timeout: 5))
+        try audit(app)
+        PhoneApp.endRun(app)
+    }
+
     // MARK: - Settings
 
     func testSettings() throws {

@@ -1086,6 +1086,34 @@ struct RunDiagnosticsTests {
         #expect(RunDiagnostics.describe(error) == "com.apple.healthkit 4: Not authorized")
     }
 
+    @Test("The same line again, straight after, is counted on one entry, so a flood can't push the rest out")
+    func collapsesRepeats() throws {
+        let url = tempURL()
+        let log = RunDiagnostics(url: url)
+        let start = Date(timeIntervalSince1970: 1_000_000)
+        log.note("Run: started Tabata", at: start)
+        for second in 1...(RunDiagnostics.capacity + 50) {
+            log.note("Audio: engine didn't start", at: start.addingTimeInterval(Double(second)))
+        }
+        log.note("Audio: cues can sound again", at: start.addingTimeInterval(1_000))
+        let entries = RunDiagnostics(url: url).all
+        #expect(entries.map(\.text) == ["Run: started Tabata", "Audio: engine didn't start", "Audio: cues can sound again"])
+        #expect(entries[1].repeats == RunDiagnostics.capacity + 49)
+        #expect(entries[1].lastDate == start.addingTimeInterval(Double(RunDiagnostics.capacity + 50)))
+        #expect(log.text.contains("\(RunDiagnostics.capacity + 50) times, until"))
+        log.clear()
+    }
+
+    @Test("A log saved before repeats were counted still opens")
+    func readsOldEntries() throws {
+        let url = tempURL()
+        try Data(#"[{"date":0,"text":"Run: started Tabata"}]"#.utf8).write(to: url)
+        let entries = RunDiagnostics(url: url).all
+        #expect(entries.map(\.text) == ["Run: started Tabata"])
+        #expect(entries.first?.repeats == 0)
+        try? FileManager.default.removeItem(at: url)
+    }
+
     @Test("Shared text is one line per entry")
     func text() {
         let log = RunDiagnostics(url: nil)

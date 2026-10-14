@@ -27,6 +27,11 @@ struct RunDiagnosticsView: View {
                             Text(entry.text)
                                 .font(.footnote.monospaced())
                                 .textSelection(.enabled)
+                            if entry.repeats > 0, let last = entry.lastDate {
+                                Text("\(entry.repeats + 1) times, until \(last.formatted(.dateTime.hour().minute().second()))")
+                                    .font(.caption.monospacedDigit())
+                                    .foregroundStyle(.secondary)
+                            }
                         }
                         .accessibilityElement(children: .combine)
                     }

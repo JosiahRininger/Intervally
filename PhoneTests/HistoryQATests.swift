@@ -25,6 +25,27 @@ struct HistoryQATests {
         }
     }
 
+    @Test("-qaWorkout reads a heart rate and calories, and ignores anything else")
+    func parseWorkout() {
+        let figures = PhoneQAOptions.parse(["-qaWorkout", "152,37"]).workout
+        #expect(figures?.heartRate == 152)
+        #expect(figures?.activeEnergy == 37)
+        #expect(PhoneQAOptions.parse(["-qaWorkout", "152"]).workout == nil)
+        #expect(PhoneQAOptions.parse(["-qaWorkout", "fast,37"]).workout == nil)
+        #expect(PhoneQAOptions.parse(["-qaWorkout", "152,37"]).isActive)
+    }
+
+    @Test("The stand-in workout session reports its figures only while it runs")
+    func standInSession() async throws {
+        let session = QAWorkoutSession(figures: try #require(QAWorkoutFigures("152,37")))
+        #expect(session.heartRate == nil)
+        #expect(await session.start(at: Date()))
+        #expect(session.heartRate == 152)
+        #expect(session.activeEnergy == 37)
+        session.discard()
+        #expect(session.activeEnergy == nil)
+    }
+
     @Test("Each fixture lands History in its state", arguments: [
         (QAHistory.sample, HistoryModel.State.loaded),
         (.empty, .empty),

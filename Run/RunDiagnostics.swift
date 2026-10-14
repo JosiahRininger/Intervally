@@ -18,6 +18,10 @@ final class RunDiagnostics: @unchecked Sendable {
     struct Entry: Codable, Equatable, Sendable {
         let date: Date
         let text: String
+        /// How many more times the same line was noted straight after this one, and when it
+        /// last was: one entry for a run of them, so a flood can't push the rest out.
+        var repeats = 0
+        var lastDate: Date?
     }
 
     /// Enough for a few workouts, small enough to read on a phone.
@@ -44,8 +48,13 @@ final class RunDiagnostics: @unchecked Sendable {
 
     func note(_ text: String, at date: Date = Date()) {
         lock.withLock {
-            entries.append(Entry(date: date, text: text))
-            if entries.count > Self.capacity { entries.removeFirst(entries.count - Self.capacity) }
+            if let last = entries.indices.last, entries[last].text == text {
+                entries[last].repeats += 1
+                entries[last].lastDate = date
+            } else {
+                entries.append(Entry(date: date, text: text))
+                if entries.count > Self.capacity { entries.removeFirst(entries.count - Self.capacity) }
+            }
             save()
         }
     }
@@ -63,7 +72,11 @@ final class RunDiagnostics: @unchecked Sendable {
     var text: String {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withFullDate, .withFullTime, .withFractionalSeconds]
-        return all.map { "\(formatter.string(from: $0.date))  \($0.text)" }.joined(separator: "\n")
+        return all.map { entry in
+            let line = "\(formatter.string(from: entry.date))  \(entry.text)"
+            guard entry.repeats > 0, let last = entry.lastDate else { return line }
+            return line + "  (\(entry.repeats + 1) times, until \(formatter.string(from: last)))"
+        }.joined(separator: "\n")
     }
 
     /// An error as HealthKit and AVFoundation report it: domain and code, which say far more
@@ -78,5 +91,16 @@ final class RunDiagnostics: @unchecked Sendable {
         guard let url, let data = try? JSONEncoder().encode(entries) else { return }
         try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: url, options: .atomic)
+    }
+}
+
+extension RunDiagnostics.Entry {
+    /// Entries saved before repeats were counted have neither field.
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        date = try container.decode(Date.self, forKey: .date)
+        text = try container.decode(String.self, forKey: .text)
+        repeats = try container.decodeIfPresent(Int.self, forKey: .repeats) ?? 0
+        lastDate = try container.decodeIfPresent(Date.self, forKey: .lastDate)
     }
 }

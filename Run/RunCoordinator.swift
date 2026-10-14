@@ -416,9 +416,10 @@ final class RunCoordinator {
         }
     }
 
-    /// The cues' audio stopped, or came back. A workout session keeps the app running, but
-    /// running isn't sounding: with the audio gone, the changes would pass unmarked. So the
-    /// notification backstop takes over until the cues can sound again.
+    /// Whether the cues' audio can sound, at every check of it; only a change does anything. A
+    /// workout session keeps the app running, but running isn't sounding: with the audio gone,
+    /// the changes would pass unmarked. So the notification backstop takes over until the
+    /// cues can sound again.
     func cuesHealthChanged(healthy: Bool) {
         guard cuesFailing == healthy else { return }
         cuesFailing = !healthy

@@ -73,7 +73,12 @@ final class PhoneServices {
         let sync = qa.watch.map { WatchSync(store: store, theme: theme, transport: QAWatchTransport(state: $0, store: store)) }
         // A fixture in place of Health, so nothing is read from it or written to it.
         let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
-        let services = PhoneServices(store: store, theme: theme, sync: sync, history: history)
+        // A stand-in workout session with figures to show, and no prompts.
+        let pro = ProStore()
+        let run = qa.workout.map {
+            PhoneRun(store: store, pro: pro, theme: theme, workout: QAWorkoutSession(figures: $0), notifications: QABackstop())
+        }
+        let services = PhoneServices(store: store, pro: pro, theme: theme, sync: sync, history: history, run: run)
         services.qa = qa
         services.reviews.isSuppressed = qa.isActive
         current = services

@@ -16,7 +16,7 @@ settings:
     # One version for every bundle: the embedded watch app and its widget must carry the same
     # CFBundleShortVersionString and CFBundleVersion as the iPhone app. Never override per target.
     MARKETING_VERSION: "1.2"
-    CURRENT_PROJECT_VERSION: "9"
+    CURRENT_PROJECT_VERSION: "10"
     SWIFT_EMIT_LOC_STRINGS: YES
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     GENERATE_INFOPLIST_FILE: NO
@@ -82,8 +82,9 @@ targets:
         # The run's countdown on the Lock Screen and in the Dynamic Island.
         NSSupportsLiveActivities: true
         # Each interval change is a tone or the voice coach, played while the phone is locked
-        # during the run's HKWorkoutSession (iOS 26 runs one on iPhone). The cues are the
-        # audio: the app never plays silence to stay awake.
+        # or another app is in front. iOS won't start an app's audio from the background, so
+        # the cues' audio output stays open from a run's Start until a few seconds after its
+        # finish (or End), and is handed back then: never held outside a run.
         UIBackgroundModes:
           - audio
     entitlements:

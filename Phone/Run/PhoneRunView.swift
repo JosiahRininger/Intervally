@@ -72,6 +72,7 @@ struct PhoneRunView: View {
     @Environment(\.requestReview) private var requestReview
     @Environment(\.palette) private var palette
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var confirmingEnd = false
     @State private var flash: Double = 0
@@ -148,7 +149,7 @@ struct PhoneRunView: View {
                 HStack(spacing: 32) {
                     ring(position, kind: kind, paused: paused, side: RunScreenLayout.sideRingSide(width: size.width, height: size.height))
                     VStack(spacing: 0) {
-                        header
+                        headerRow
                         Spacer(minLength: 12)
                         nextLine(position, next: next)
                         Spacer(minLength: 12)
@@ -161,7 +162,7 @@ struct PhoneRunView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 VStack(spacing: 0) {
-                    header
+                    headerRow
                     Spacer(minLength: 12)
                     ring(position, kind: kind, paused: paused, side: side)
                     nextLine(position, next: next)
@@ -177,19 +178,6 @@ struct PhoneRunView: View {
             }
         }
         .padding(.horizontal, 24)
-        // Heart rate and calories in the top corners, beside the header, once Health has
-        // them: the run's own workout session only, never a watch run's mirror.
-        .overlay(alignment: .top) {
-            if !run.isMirroring {
-                HStack(alignment: .top) {
-                    metric(LiveMetric.heartRate(coordinatorWorkout.heartRate))
-                    Spacer(minLength: 0)
-                    metric(LiveMetric.calories(coordinatorWorkout.activeEnergy))
-                }
-                .padding(.horizontal, 20)
-                .padding(.top, 10)
-            }
-        }
         .onChange(of: position.phase?.id) { _, _ in
             // The tip has had its moment once the run is past getting ready.
             if position.phase?.kind != .prepare, engine.status == .running { soundTipSeen = true }
@@ -266,6 +254,43 @@ struct PhoneRunView: View {
 
     private var coordinatorWorkout: any WorkoutSessioning { run.coordinator.workout }
 
+    /// The header, with heart rate and calories either side once Health has them: the run's
+    /// own workout session only, never a watch run's mirror. Beside the header, never over
+    /// it: it gets the room between them, and a long name shortens. At the accessibility text
+    /// sizes there's no room beside it, and they go on a line below, kept while the session
+    /// lasts so nothing moves when the first reading arrives.
+    private var headerRow: some View {
+        let heartRate = LiveMetric.heartRate(coordinatorWorkout.heartRate)
+        let calories = LiveMetric.calories(coordinatorWorkout.activeEnergy)
+        return Group {
+            if run.isMirroring {
+                header
+            } else if typeSize.isAccessibilitySize {
+                VStack(spacing: 6) {
+                    header
+                    if run.coordinator.tier == .workout || heartRate != nil || calories != nil {
+                        ZStack {
+                            // Holds the line's height while it is still empty.
+                            metric(LiveMetric.heartRate(100)).hidden()
+                            HStack(alignment: .firstTextBaseline) {
+                                metric(heartRate)
+                                Spacer(minLength: 8)
+                                metric(calories)
+                            }
+                        }
+                    }
+                }
+            } else {
+                FlankedLayout {
+                    metric(heartRate)
+                    header
+                    metric(calories)
+                }
+            }
+        }
+        .padding(.top, 8)
+    }
+
     /// One live figure, or nothing: an iPhone with no heart-rate source shows no heart.
     @ViewBuilder
     private func metric(_ metric: LiveMetric?) -> some View {
@@ -285,6 +310,9 @@ struct PhoneRunView: View {
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(metric.spoken)
+        } else {
+            // Nothing, but still a view, so `FlankedLayout` always has its three.
+            Color.clear.frame(width: 0, height: 0)
         }
     }
 
@@ -315,10 +343,12 @@ struct PhoneRunView: View {
                 .font(.subheadline.weight(.medium))
                 .monospacedDigit()
                 .foregroundStyle(.secondary)
+                // Between the figures on a small iPhone: smaller, rather than on two lines.
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
         }
         .multilineTextAlignment(.center)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
-        .padding(.top, 8)
         .accessibilityElement(children: .combine)
     }
 
@@ -401,6 +431,9 @@ struct PhoneRunView: View {
             .accessibilityLabel("Skip Interval")
         }
         .frame(maxWidth: 360)
+        // The glyphs are fixed, but the glass around them grows with the text size: at the
+        // largest, the row came out wider than an SE and pushed the whole screen right.
+        .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
     }
 
     private func spokenStatus(_ position: IntervalPlan.Position, kind: IntervalPhase.Kind, paused: Bool) -> String {
@@ -527,6 +560,53 @@ struct HealthSaveLine: Equatable {
         case .saved: (text, symbol, isDone) = ("Saved to Health", "heart.fill", true)
         case .failed: (text, symbol, isDone) = ("Couldn't save to Health", "heart.slash", false)
         }
+    }
+}
+
+/// The run screen's top line: the header centred between heart rate and calories. Each side
+/// is as wide as the wider of the two, so the header stays centred as figures come and go,
+/// and the header gets only the room between them: a long name shortens rather than running
+/// under a figure. The figures sit on the header's first line.
+struct FlankedLayout: Layout {
+    var spacing: CGFloat = 8
+
+    /// The room for the centre in `width`, between sides `leading` and `trailing` wide.
+    static func centreWidth(in width: CGFloat, leading: CGFloat, trailing: CGFloat, spacing: CGFloat) -> CGFloat {
+        let side = max(leading, trailing)
+        guard side > 0 else { return max(0, width) }
+        return max(0, width - 2 * (side + spacing))
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrangement(width: proposal.width, subviews: subviews)?.size ?? .zero
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard let arrangement = arrangement(width: bounds.width, subviews: subviews) else { return }
+        for (subview, frame) in zip(subviews, arrangement.frames) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                proposal: ProposedViewSize(frame.size)
+            )
+        }
+    }
+
+    /// The leading side, the centre and the trailing side, in that order.
+    private func arrangement(width proposed: CGFloat?, subviews: Subviews) -> (size: CGSize, frames: [CGRect])? {
+        guard subviews.count == 3 else { return nil }
+        let leading = subviews[0].dimensions(in: .unspecified)
+        let trailing = subviews[2].dimensions(in: .unspecified)
+        let side = max(leading.width, trailing.width)
+        let width = proposed.flatMap { $0.isFinite ? $0 : nil }
+            ?? subviews[1].sizeThatFits(.unspecified).width + (side > 0 ? 2 * (side + spacing) : 0)
+        let room = Self.centreWidth(in: width, leading: leading.width, trailing: trailing.width, spacing: spacing)
+        let centre = subviews[1].dimensions(in: ProposedViewSize(width: room, height: nil))
+        let all = [leading, centre, trailing]
+        let baseline = all.map { $0[VerticalAlignment.firstTextBaseline] }.max() ?? 0
+        let tops = all.map { baseline - $0[VerticalAlignment.firstTextBaseline] }
+        let xs = [0, (width - centre.width) / 2, width - trailing.width]
+        let frames = all.indices.map { CGRect(x: xs[$0], y: tops[$0], width: all[$0].width, height: all[$0].height) }
+        return (CGSize(width: width, height: frames.map(\.maxY).max() ?? 0), frames)
     }
 }
 

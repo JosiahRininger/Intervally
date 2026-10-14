@@ -31,10 +31,12 @@ protocol CueOutput: AnyObject {
     /// Takes the audio for a run and keeps it running until `handBackAudio`, so cues can
     /// sound away from the app. Called at Start, in front, where the audio may be started.
     func holdForRun()
-    /// Whether the cues can sound, each time that changes while a run holds the audio: false
+    /// Whether the cues can sound, each time the audio is checked while a run holds it: false
     /// when the audio has stopped and can't be started again away from the app, so the run
-    /// can mark the changes with notifications instead.
-    var onHealthChange: ((Bool) -> Void)? { get set }
+    /// can mark the changes with notifications instead. Every time, not only when it changes:
+    /// a run started while the last one's failure lasts has to hear of it too, and the run
+    /// ignores what it already knows.
+    var onHealthReport: ((Bool) -> Void)? { get set }
 }
 
 /// The real output: synthesized tones, the system voice and the Taptic Engine.
@@ -87,12 +89,14 @@ final class CueAudio: NSObject, CueOutput {
 
     var lowersOtherAudio = true
     var onVolumeChange: ((Float) -> Void)?
-    var onHealthChange: ((Bool) -> Void)?
-    /// What was last reported through `onHealthChange`.
+    var onHealthReport: ((Bool) -> Void)?
+    /// What was last reported through `onHealthReport`.
     private var isHealthy = true
     /// Checks the engine every second while a run holds the audio, and restarts it if
     /// something stopped it without saying so.
     private var watchdog: Task<Void, Never>?
+    /// The cues since the app was last in front, for the diagnostics.
+    private var awayCues = CueTally()
 
     /// Whether other audio is lowered right now, and until when.
     private var isDucking = false
@@ -131,6 +135,9 @@ final class CueAudio: NSObject, CueOutput {
         observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.stopDucking() }
         })
+        observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.becameActive() }
+        })
         volumeObservation = session.observe(\.outputVolume, options: [.new]) { [weak self] session, _ in
             let volume = session.outputVolume
             Task { @MainActor in self?.onVolumeChange?(volume) }
@@ -142,7 +149,8 @@ final class CueAudio: NSObject, CueOutput {
         guard let buffer = tones[tone] else { return 0 }
         let duration = Double(buffer.frameLength) / format.sampleRate
         prepareSession(for: duration)
-        noteIfAway("tone \(tone)", played: schedule(buffer, on: tonePlayer))
+        let wasHealthy = isHealthy
+        noteCue("tone \(tone)", played: schedule(buffer, on: tonePlayer), wasHealthy: wasHealthy)
         return duration
     }
 
@@ -157,7 +165,8 @@ final class CueAudio: NSObject, CueOutput {
             if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
             guard !Task.isCancelled else { return }
             self.prepareSession(for: Double(buffer.frameLength) / self.format.sampleRate)
-            self.noteIfAway("voice \"\(phrase)\"", played: self.schedule(buffer, on: self.voicePlayer))
+            let wasHealthy = self.isHealthy
+            self.noteCue("voice \"\(phrase)\"", played: self.schedule(buffer, on: self.voicePlayer), wasHealthy: wasHealthy)
         }
     }
 
@@ -185,6 +194,8 @@ final class CueAudio: NSObject, CueOutput {
     }
 
     func handBackAudio() {
+        // A run that ended away from the app: its last stretch is noted now.
+        if let line = awayCues.close() { RunDiagnostics.shared.note(line) }
         isHeld = false
         watchdog?.cancel()
         watchdog = nil
@@ -233,7 +244,8 @@ final class CueAudio: NSObject, CueOutput {
             report(healthy: true)
             return true
         } catch {
-            RunDiagnostics.shared.note("Audio: engine didn't start: \(RunDiagnostics.describe(error))")
+            // Noted once an outage: every try after it fails the same way.
+            if isHealthy { RunDiagnostics.shared.note("Audio: engine didn't start: \(RunDiagnostics.describe(error))") }
             log.notice("cue engine didn't start: \(error.localizedDescription, privacy: .public)")
             report(healthy: false)
             return false
@@ -241,25 +253,44 @@ final class CueAudio: NSObject, CueOutput {
     }
 
     private func report(healthy: Bool) {
-        guard isHeld, healthy != isHealthy else { return }
-        isHealthy = healthy
-        RunDiagnostics.shared.note(healthy ? "Audio: cues can sound again" : "Audio: CUES CAN'T SOUND; marking changes with notifications")
-        onHealthChange?(healthy)
+        guard isHeld else { return }
+        if healthy != isHealthy {
+            isHealthy = healthy
+            RunDiagnostics.shared.note(healthy ? "Audio: cues can sound again" : "Audio: CUES CAN'T SOUND; marking changes with notifications")
+        }
+        onHealthReport?(healthy)
+    }
+
+    /// How long the watchdog waits before it looks again: a second while the engine runs, and
+    /// while it won't start, a second, then 5, then 15 for as long as that lasts. An outage
+    /// nothing here can end, a phone call, costs a try every 15 seconds, not one a second.
+    nonisolated static func watchdogDelay(afterFailures failures: Int) -> TimeInterval {
+        [1, 5, 15][min(max(failures, 0), 2)]
     }
 
     private func startWatchdog() {
         guard watchdog == nil else { return }
         watchdog = Task { [weak self] in
+            var failures = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(CueAudio.watchdogDelay(afterFailures: failures)))
                 guard let self, !Task.isCancelled, self.isHeld else { return }
                 // Lowering the music stops the engine on purpose, for a moment, in front.
-                if !self.engine.isRunning, !self.isDucking {
-                    RunDiagnostics.shared.note("Audio: watchdog found the engine stopped")
-                    _ = self.ensureRunning()
+                guard !self.engine.isRunning, !self.isDucking else {
+                    failures = 0
+                    continue
                 }
+                if failures == 0 { RunDiagnostics.shared.note("Audio: watchdog found the engine stopped") }
+                failures = self.ensureRunning() ? 0 : failures + 1
             }
         }
+    }
+
+    /// Back in front, where the engine can always be started: one still stopped starts now,
+    /// not at the watchdog's next try, and the cues while the app was away are noted.
+    private func becameActive() {
+        if let line = awayCues.close() { RunDiagnostics.shared.note(line) }
+        if isHeld, !engine.isRunning, !isDucking { _ = ensureRunning() }
     }
 
     /// The engine and its two players, wired up: on launch, and again after a media reset.
@@ -308,9 +339,16 @@ final class CueAudio: NSObject, CueOutput {
     private func interrupted(began: Bool) {
         RunDiagnostics.shared.note("Audio: interrupted, \(began ? "began" : "ended")")
         if began {
-            // The system has let the session go and stopped the engine.
+            // The system has let the session go and stopped the engine. A dip it cut short
+            // ends here: left set, the lowering category would come back with the session
+            // after the call and keep the music down for the rest of the run.
             isActive = false
-            isDucking = false
+            if isDucking {
+                isDucking = false
+                restoreTask?.cancel()
+                restoreTask = nil
+                setCategory(ducking: false)
+            }
         } else if isHeld {
             // Back after a call: the engine picks up again, which works in front and, as a
             // resumption the system offers, often away from it too.
@@ -351,11 +389,15 @@ final class CueAudio: NSObject, CueOutput {
         return buffer
     }
 
-    /// A cue played, or not, with the app away: the case the diagnostics are for. In front,
-    /// cues are heard and not worth a line each.
-    private func noteIfAway(_ cue: String, played: Bool) {
+    /// A cue, for the diagnostics, without a line for every one: a locked half hour is
+    /// hundreds. Away from the app, cues are counted, and the count is noted once the app is
+    /// back in front or the run is over. Noted in full: the first to play away, to show the
+    /// audio carried on, and one that failed while the cues could last sound. In front, a
+    /// cue that played was heard.
+    private func noteCue(_ cue: String, played: Bool, wasHealthy: Bool) {
         let state = UIApplication.shared.applicationState
-        guard state != .active || !played else { return }
+        let firstAway = state != .active && awayCues.count(played: played)
+        guard played ? firstAway : wasHealthy else { return }
         let where_ = state == .background ? "in the background" : state == .inactive ? "while inactive" : "in front"
         RunDiagnostics.shared.note("Cue: \(cue) \(played ? "played" : "FAILED TO PLAY") \(where_), engine running \(engine.isRunning)")
     }
@@ -453,11 +495,31 @@ final class CueAudio: NSObject, CueOutput {
             isActive = true
             onVolumeChange?(session.outputVolume)
         } catch {
-            RunDiagnostics.shared.note("Audio: session not activated: \(RunDiagnostics.describe(error))")
+            if isHealthy { RunDiagnostics.shared.note("Audio: session not activated: \(RunDiagnostics.describe(error))") }
             // A phone call, or another app holding audio that can't be mixed: the cue is lost,
             // the tap and the screen still mark the change. The next cue tries again.
             log.notice("audio session not activated: \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+/// The cues away from the app, counted between its times in front, so the diagnostics get
+/// one line for the stretch rather than one a cue.
+struct CueTally: Equatable {
+    private(set) var played = 0
+    private(set) var missed = 0
+
+    /// Counts a cue: true for the first of the stretch to play, the one noted in full.
+    mutating func count(played: Bool) -> Bool {
+        if played { self.played += 1 } else { missed += 1 }
+        return played && self.played == 1
+    }
+
+    /// The stretch in one line, with the count started again; nil if there was nothing.
+    mutating func close() -> String? {
+        defer { self = CueTally() }
+        guard played + missed > 0 else { return nil }
+        return "Cues away from the app: \(played) played, \(missed) didn't"
     }
 }
 

@@ -23,11 +23,16 @@ final class FakeCueOutput: CueOutput {
 
     private(set) var calls: [Call] = []
     var onVolumeChange: ((Float) -> Void)?
-    var onHealthChange: ((Bool) -> Void)?
+    var onHealthReport: ((Bool) -> Void)?
     var lowersOtherAudio = true
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
-    func holdForRun() { holds += 1 }
+    /// Whether the cues can sound, reported at every hold as the real output does.
+    var healthy = true
+    func holdForRun() {
+        holds += 1
+        onHealthReport?(healthy)
+    }
 
     /// What the media volume would report, as the audio session's KVO does.
     func report(volume: Float) { onVolumeChange?(volume) }
@@ -253,6 +258,60 @@ struct PhoneCuePlayerTests {
         #expect(output.calls.first == .tone(.go))
         #expect(output.calls.contains(.say("Work", after: ToneSynth.duration(of: .go))))
     }
+
+    /// A player that hands a finished run's audio back after 50 ms rather than seconds.
+    private func quickPlayer() -> PhoneCuePlayer {
+        let player = player()
+        player.releaseAfterFinish = 0.05
+        return player
+    }
+
+    @Test("A finished run hands the audio back once the finish has sounded, with no Done")
+    func releasesAfterTheFinish() async {
+        let player = quickPlayer()
+        player.play(.finished, context: .immediate)
+        #expect(!output.calls.contains(.release), "Not over the chime")
+        #expect(await waitUntil { output.calls.last == .release })
+        #expect(output.calls.filter { $0 == .release }.count == 1)
+    }
+
+    @Test("Repeat keeps the audio: the new run's first event calls the release off")
+    func repeatKeepsTheAudio() async throws {
+        let player = quickPlayer()
+        player.play(.finished, context: .immediate)
+        let prepare = IntervalPhase(id: 0, kind: .prepare, duration: 10, round: 1, start: 0)
+        player.play(.phaseBegan(prepare), context: .immediate)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!output.calls.contains(.release))
+    }
+
+    @Test("A run going again by the time the release is due keeps the audio")
+    func activeRunKeepsTheAudio() async throws {
+        let player = quickPlayer()
+        player.runIsActive = { true }
+        player.play(.finished, context: .immediate)
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!output.calls.contains(.release))
+    }
+
+    @Test("Done before the release hands the audio back once, not twice")
+    func doneFirst() async throws {
+        let player = quickPlayer()
+        player.play(.finished, context: .immediate)
+        player.release()
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(output.calls.filter { $0 == .release }.count == 1)
+    }
+
+    @Test("A run under way takes the audio when asked, if it has anything to be heard")
+    func holdIfSounding() {
+        player().holdIfSounding()
+        #expect(output.holds == 1)
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        defaults.set(false, forKey: CueSettings.Key.voice)
+        player().holdIfSounding()
+        #expect(output.holds == 1, "Nothing to hear: nothing held")
+    }
 }
 
 // MARK: - What the run shows outside the app
@@ -365,6 +424,22 @@ struct RunScreenLayoutTests {
         #expect(RunScreenLayout.roundLine(for: phase(.warmup, round: 1), totalRounds: 8) == nil)
         #expect(RunScreenLayout.roundLine(for: phase(.cooldown, round: 8), totalRounds: 8) == nil)
         #expect(RunScreenLayout.roundLine(for: phase(.work, round: 1), totalRounds: 1) == nil)
+    }
+
+    @Test("The header gets the room between the figures, the same each side, and never less than nothing")
+    func headerBetweenFigures() {
+        // An iPhone SE's run screen, 375 points less its margins.
+        #expect(FlankedLayout.centreWidth(in: 327, leading: 0, trailing: 0, spacing: 8) == 327, "No figures, the whole width")
+        #expect(FlankedLayout.centreWidth(in: 327, leading: 92, trailing: 80, spacing: 8) == 127, "Room for the wider figure, both sides")
+        #expect(FlankedLayout.centreWidth(in: 327, leading: 0, trailing: 80, spacing: 8) == 151, "One figure still keeps the header centred")
+        #expect(FlankedLayout.centreWidth(in: 100, leading: 90, trailing: 90, spacing: 8) == 0)
+        // Centred in what's left, the header never reaches either figure.
+        for (leading, trailing) in [(92.0, 80.0), (140.0, 60.0), (0.0, 110.0)] {
+            let width: CGFloat = 327
+            let centre = FlankedLayout.centreWidth(in: width, leading: leading, trailing: trailing, spacing: 8)
+            #expect((width - centre) / 2 >= leading + 8)
+            #expect((width + centre) / 2 <= width - trailing - 8)
+        }
     }
 
     @Test("Next names the phase and its length, or says this is the last")
@@ -537,6 +612,69 @@ struct PhoneRunTests {
         run.close()
     }
 
+    @Test("Finishing hands the audio back a few seconds later, with the summary still up")
+    func finishReleasesTheAudio() async {
+        let (run, store) = makeRun()
+        run.cues.releaseAfterFinish = 0.05
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        while run.coordinator.engine.status == .running { run.coordinator.skip() }
+        #expect(await waitUntil { output.calls.last == .release })
+        #expect(run.isPresented, "Released without Done")
+        run.close()
+    }
+
+    @Test("Repeat right after the finish keeps the audio for the new run")
+    func repeatKeepsTheAudio() async throws {
+        let (run, store) = makeRun()
+        run.cues.releaseAfterFinish = 0.05
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        while run.coordinator.engine.status == .running { run.coordinator.skip() }
+        run.coordinator.restart()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(!output.calls.contains(.release))
+        run.close()
+    }
+
+    @Test("A run restored after a relaunch takes the audio at once, not at its next change")
+    func restoredRunHoldsTheAudio() async {
+        let (first, store) = makeRun()
+        first.start(store.workouts[0])
+        first.coordinator.begin()
+        #expect(await waitUntil { first.coordinator.engine.status == .running })
+        let before = output.holds
+        let (again, _) = makeRun()
+        again.restoreAtLaunch()
+        #expect(output.holds == before + 1)
+        again.handleForeground()
+        #expect(output.holds > before + 1, "Back in front, it takes it again")
+        again.close()
+        first.close()
+    }
+
+    @Test("Cues that can't sound when a run starts bring the notifications, after a run that ended that way too")
+    func failureOutlastsTheRun() async {
+        output.healthy = false
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.cuesFailing })
+        while run.coordinator.engine.status == .running { run.coordinator.skip() }
+        run.coordinator.restart()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+        #expect(run.coordinator.cuesFailing, "Still failing: the new run is told, and marks changes with notifications")
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules >= 1)
+        output.healthy = true
+        run.cues.holdIfSounding()
+        #expect(!run.coordinator.cuesFailing)
+        run.close()
+    }
+
     @Test("Cues know the run's rounds, for Last round")
     func lastRoundUsesTheRun() async {
         let (run, store) = makeRun()
@@ -572,6 +710,46 @@ struct CueEngineAudioTests {
             #expect(abs(Double(buffer.frameLength) / format.sampleRate - ToneSynth.duration(of: tone)) < 0.01)
         }
         #expect(CueAudio.buffer([], format: format) == nil)
+    }
+
+    @Test("The watchdog backs off while the audio won't start: 1, 5, then 15 seconds")
+    func watchdogBacksOff() {
+        #expect(CueAudio.watchdogDelay(afterFailures: 0) == 1)
+        #expect(CueAudio.watchdogDelay(afterFailures: 1) == 5)
+        #expect(CueAudio.watchdogDelay(afterFailures: 2) == 15)
+        #expect(CueAudio.watchdogDelay(afterFailures: 40) == 15)
+        #expect(CueAudio.watchdogDelay(afterFailures: -1) == 1)
+    }
+
+    @Test("Cues away from the app are counted, the first to play picked out, and summed up once")
+    func awayTally() {
+        var tally = CueTally()
+        let empty = tally.close()
+        #expect(empty == nil, "Nothing away, nothing to say")
+        let firsts = [tally.count(played: true), tally.count(played: true), tally.count(played: false)]
+        #expect(firsts == [true, false, false], "Only the first to play is noted in full")
+        let summary = tally.close()
+        #expect(summary == "Cues away from the app: 2 played, 1 didn't")
+        let again = tally.close()
+        #expect(again == nil, "Started again")
+        let next = tally.count(played: true)
+        #expect(next, "A new stretch has its own first")
+    }
+
+    @Test("The audio reports whether cues can sound at every hold, not only when it changes")
+    @MainActor
+    func reportsEveryHold() {
+        let audio = CueAudio()
+        var reports: [Bool] = []
+        audio.onHealthReport = { reports.append($0) }
+        audio.holdForRun()
+        audio.holdForRun()
+        #expect(reports.count == 2)
+        #expect(reports.allSatisfy { $0 == reports.first })
+        audio.handBackAudio()
+        audio.holdForRun()
+        #expect(reports.count == 3)
+        audio.handBackAudio()
     }
 }
 
