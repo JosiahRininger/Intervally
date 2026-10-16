@@ -34,7 +34,6 @@ struct SoundsSettingsView: View {
     @AppStorage(CueSettings.Key.countdown, store: SharedDefaults.suite) private var countdown = true
     @AppStorage(CueSettings.Key.voice, store: SharedDefaults.suite) private var voice = true
     @AppStorage(CueSettings.Key.keepAwake, store: SharedDefaults.suite) private var keepAwake = true
-    @AppStorage(CueSettings.Key.lowerMusic, store: SharedDefaults.suite) private var lowerMusic = true
 
     var body: some View {
         List {
@@ -70,15 +69,7 @@ struct SoundsSettingsView: View {
             } header: {
                 Text("Volume")
             } footer: {
-                Text("Cues play at your media volume, the one your music uses, even with the Ring/Silent switch on silent. During a workout the volume buttons set it too.")
-            }
-
-            Section {
-                Toggle("Lower Music for Cues", isOn: $lowerMusic)
-            } footer: {
-                Text(lowerMusic
-                     ? "With Intervally open, music dips for each cue and comes straight back up, and a podcast pauses for it. With your iPhone locked, the cues play over them."
-                     : "Music and podcasts keep playing at full volume under the cues.")
+                Text("Cues play at your media volume, the one your music uses, even with the Ring/Silent switch on silent, and right over your music or podcast, which keeps playing. During a workout the volume buttons set it too.")
             }
 
             Section {

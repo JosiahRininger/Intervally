@@ -95,6 +95,7 @@ final class PhoneRun {
         )
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
         cues.runIsActive = { [weak coordinator] in coordinator?.engine.isActive ?? false }
+        cues.phasesInRun = { [weak coordinator] in coordinator?.engine.plan.phases ?? [] }
         resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
         // Cues that can't sound fall back to notifications rather than to silence.
         resolvedOutput.onHealthReport = { [weak coordinator] healthy in

@@ -73,7 +73,7 @@ Press Start and hear every interval, even over your music. Name each interval an
 Intervally is an interval timer for iPhone, iPad and Apple Watch. Set how long to work, how long to rest, and how many rounds, press Start, and train. Every interval change is marked for you, with a tone on your iPhone or a tap on your wrist, so you never have to watch the clock.
 
 TRAIN WITH YOUR IPHONE OR IPAD
-Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. With Intervally open, your music dips for each cue and comes straight back up; with your phone locked, the cues play right over it. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
+Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. The cues play right over your music, and the music keeps playing, with Intervally open or your phone locked. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
 
 OR ON YOUR WRIST
 With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone, then tap Start on Watch to run one on your wrist right away. Tap Put on Watch and it's the next workout your watch starts. Changes reach your watch on their own, and each app keeps working without the other.
@@ -124,7 +124,7 @@ and 1.2 is Intervally's first. Kept for the first update.
 ```
 Intervally now runs your workouts on iPhone and iPad too, no Apple Watch needed.
 
-• Press Start on any workout and hear every interval: a tone for each change, higher for work and lower for rest, with a 3-2-1 countdown before it. Your music dips for each cue and comes straight back.
+• Press Start on any workout and hear every interval: a tone for each change, higher for work and lower for rest, with a 3-2-1 countdown before it, right over your music.
 • Name every interval and give it an icon: Run and Walk, Lift and Breathe. The voice coach says your names.
 • Choose what Apple Health records each workout as, from HIIT to running, cycling or rowing.
 • Set any length to the five seconds, with a wheel for minutes and one for seconds.
@@ -177,7 +177,7 @@ ON IPHONE
 4. History reads the interval workouts saved to Apple Health by either device. Tap Connect Apple Health.
 5. Settings (the gear at top left) has Intervally Pro, Theme, Sounds & Voice, Apple Watch, Apple Health, Restore Purchases, Redeem Code, Support and the Privacy Policy.
 6. Settings > Theme switches between Classic and Pastel. Pastel is part of Intervally Pro, and also changes the Home Screen icon.
-7. Settings > Sounds & Voice turns the beeps, the 3-2-1 countdown and Keep Screen On on or off, and plays a sample. Its Voice Coach, which calls out each interval as it starts, is part of Intervally Pro. Lower Music for Cues dips other apps' music during each cue.
+7. Settings > Sounds & Voice turns the beeps, the 3-2-1 countdown and Keep Screen On on or off, and plays a sample. Its Voice Coach, which calls out each interval as it starts, is part of Intervally Pro.
 
 ON APPLE WATCH
 1. Tap Start. Allow notifications and Apple Health when asked.

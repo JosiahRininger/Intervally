@@ -15,6 +15,9 @@ final class PhoneCuePlayer: BoundaryHaptics {
     private let defaults: UserDefaults
     /// The rounds in the run under way, for "Last round". Set by whoever owns the run.
     var roundsInRun: () -> Int = { 1 }
+    /// The phases of the run under way, for the phrases rendered ahead. Set by whoever owns
+    /// the run.
+    var phasesInRun: () -> [IntervalPhase] = { [] }
     /// Whether a run is under way (running or paused). Set by whoever owns the run.
     var runIsActive: () -> Bool = { false }
     /// How long after the finish the audio is handed back: the chime and "Workout complete"
@@ -50,6 +53,15 @@ final class PhoneCuePlayer: BoundaryHaptics {
     func holdIfSounding() {
         let settings = self.settings
         if settings.beeps || settings.voice { output.holdForRun() }
+        // Every phrase the run can say, rendered now, in front, where it can be.
+        if settings.voice { output.prepare(Self.phrases(for: phasesInRun(), totalRounds: roundsInRun())) }
+    }
+
+    /// What the voice coach can say in a run of `phases`, each once, in the order it comes.
+    static func phrases(for phases: [IntervalPhase], totalRounds: Int) -> [String] {
+        var seen = Set<String>()
+        return (phases.map { CuePlan.phrase(for: $0, totalRounds: totalRounds) } + [CuePlan.finishPhrase])
+            .filter { seen.insert($0).inserted }
     }
 
     func cancelPending() {
@@ -98,7 +110,6 @@ final class PhoneCuePlayer: BoundaryHaptics {
     }
 
     private func perform(_ plan: CuePlan) {
-        output.lowersOtherAudio = settings.lowerMusic
         var delay: TimeInterval = 0
         if let tone = plan.tone {
             delay = output.play(tone)

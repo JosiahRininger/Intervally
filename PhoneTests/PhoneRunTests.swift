@@ -24,7 +24,9 @@ final class FakeCueOutput: CueOutput {
     private(set) var calls: [Call] = []
     var onVolumeChange: ((Float) -> Void)?
     var onHealthReport: ((Bool) -> Void)?
-    var lowersOtherAudio = true
+    /// Every phrase asked to be rendered ahead, in order.
+    private(set) var prepared: [String] = []
+    func prepare(_ phrases: [String]) { prepared += phrases }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
     /// Whether the cues can sound, reported at every hold as the real output does.
@@ -301,6 +303,19 @@ struct PhoneCuePlayerTests {
         player.release()
         try await Task.sleep(for: .milliseconds(250))
         #expect(output.calls.filter { $0 == .release }.count == 1)
+    }
+
+    @Test("Every phrase the run can say is rendered at its start, each once, in order")
+    func preparesPhrases() {
+        let player = player()
+        let phases = IntervalPlan(workout: IntervalWorkout(name: "T", prepareSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 3)).phases
+        player.phasesInRun = { phases }
+        player.roundsInRun = { 3 }
+        player.play(.phaseBegan(phases[0]), context: .immediate)
+        #expect(output.prepared == ["Get ready", "Work", "Rest", "Last round", "Workout complete"])
+        defaults.set(false, forKey: CueSettings.Key.voice)
+        player.play(.phaseBegan(phases[1]), context: .immediate)
+        #expect(output.prepared.count == 5, "No voice, nothing to render")
     }
 
     @Test("A run under way takes the audio when asked, if it has anything to be heard")

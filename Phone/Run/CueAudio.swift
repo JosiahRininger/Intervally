@@ -18,13 +18,15 @@ protocol CueOutput: AnyObject {
     /// so eight quick Skips say only where they landed, not "Work, Rest" eight times over.
     func say(_ phrase: String, after delay: TimeInterval)
     func tap(_ tap: CueTap)
+    /// Renders `phrases` ahead of time, in front, so the voice can say them with the app in
+    /// the background, where the system voice may not render at all. Those already rendered
+    /// this run are skipped.
+    func prepare(_ phrases: [String])
     /// Stops whatever is still sounding.
     func silence()
     /// The run is over: the audio is handed back, and the volume buttons go back to the
     /// ringer.
     func handBackAudio()
-    /// Whether music or a podcast playing underneath is lowered while a cue sounds.
-    var lowersOtherAudio: Bool { get set }
     /// The media volume the cues play at, 0 to 1, whenever it changes while a run holds the
     /// audio.
     var onVolumeChange: ((Float) -> Void)? { get set }
@@ -51,15 +53,18 @@ protocol CueOutput: AnyObject {
 /// screen when there is no workout session to (Health declined, another app's workout).
 ///
 /// The audio session is held for the whole run, mixed with whatever else is playing, so
-/// the volume buttons set the cues' volume. With music or a podcast playing and the app in
-/// front, each cue lowers it for as long as it sounds, as Seconds and Runkeeper do; cues
-/// close together share one dip. Lowering means letting the session go and taking it
-/// again, which stops the engine, and that can be restarted only in front: away from the
-/// screen the cues play over the music, and a dip still on when the app leaves is lifted
-/// as it goes.
+/// the volume buttons set the cues' volume, and it is never let go and taken again until
+/// the run is over. The cues play over music and podcasts, in front and away alike. 1.2's
+/// builds up to 11 lowered the music for each cue with the app in front, which means
+/// letting the session go and taking it again with other options: on a real iPhone that
+/// paused Spotify instead of lowering it, lost the beep caught in the switch, and after a
+/// few cues left Spotify pausing itself every half second until it was closed (2026-10-16).
+/// The tones are made to carry over music (`ToneSynth`) without it.
 ///
 /// The voice is rendered to audio first and played like a tone: spoken by the system
-/// synthesizer directly, it takes the audio session over.
+/// synthesizer directly, it takes the audio session over. Every phrase a run can say is
+/// rendered at its start (`prepare`), in front: away from the app the synthesizer may not
+/// render, and a phrase first needed there went unsaid.
 ///
 /// Cues play with the Ring/Silent switch on silent too, as a workout timer has to: the
 /// Sounds settings turn them off.
@@ -87,7 +92,6 @@ final class CueAudio: NSObject, CueOutput {
     /// Each phrase, rendered once and kept for the run.
     private var phrases: [String: AVAudioPCMBuffer] = [:]
 
-    var lowersOtherAudio = true
     var onVolumeChange: ((Float) -> Void)?
     var onHealthReport: ((Bool) -> Void)?
     /// What was last reported through `onHealthReport`.
@@ -98,18 +102,18 @@ final class CueAudio: NSObject, CueOutput {
     /// The cues since the app was last in front, for the diagnostics.
     private var awayCues = CueTally()
 
-    /// Whether other audio is lowered right now, and until when.
-    private var isDucking = false
-    private var duckUntil = Date.distantPast
-    private var restoreTask: Task<Void, Never>?
-    /// How long the music stays down after a cue ends: longer than the widest gap between
-    /// the 3-2-1 ticks (a second apart, up to 1.5 s as the run's half-second ticker finds
-    /// them), so the countdown, the change and the word after it are one dip, not four.
-    static let duckTail: TimeInterval = 1.6
+    /// Phrases being rendered, so a phrase asked for twice is rendered once, and the last
+    /// render asked for, which the next waits on: the synthesizer renders one at a time.
+    private var rendering: [String: Task<Void, Never>] = [:]
+    private var lastRender: Task<Void, Never>?
+
+    /// Mixed with whatever else is playing, and nothing more: never lowering it, never
+    /// interrupting it.
+    nonisolated static let categoryOptions: AVAudioSession.CategoryOptions = [.mixWithOthers]
 
     override init() {
         super.init()
-        setCategory(ducking: false)
+        setCategory()
         buildEngine()
         for tone in CueTone.allCases {
             tones[tone] = Self.buffer(ToneSynth.samples(for: tone).map { Float($0) / Float(Int16.max) }, format: format)
@@ -130,11 +134,6 @@ final class CueAudio: NSObject, CueOutput {
             let reason = (note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init(rawValue:))
             MainActor.assumeIsolated { self?.routeChanged(reason) }
         })
-        // Leaving with the music lowered: lift it now, while the engine can still be
-        // restarted, rather than from the background, where it can't.
-        observers.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.stopDucking() }
-        })
         observers.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.becameActive() }
         })
@@ -148,7 +147,6 @@ final class CueAudio: NSObject, CueOutput {
     func play(_ tone: CueTone) -> TimeInterval {
         guard let buffer = tones[tone] else { return 0 }
         let duration = Double(buffer.frameLength) / format.sampleRate
-        prepareSession(for: duration)
         let wasHealthy = isHealthy
         noteCue("tone \(tone)", played: schedule(buffer, on: tonePlayer), wasHealthy: wasHealthy)
         return duration
@@ -164,7 +162,6 @@ final class CueAudio: NSObject, CueOutput {
             let wait = start.timeIntervalSinceNow
             if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
             guard !Task.isCancelled else { return }
-            self.prepareSession(for: Double(buffer.frameLength) / self.format.sampleRate)
             let wasHealthy = self.isHealthy
             self.noteCue("voice \"\(phrase)\"", played: self.schedule(buffer, on: self.voicePlayer), wasHealthy: wasHealthy)
         }
@@ -201,9 +198,6 @@ final class CueAudio: NSObject, CueOutput {
         watchdog = nil
         isHealthy = true
         silence()
-        restoreTask?.cancel()
-        restoreTask = nil
-        isDucking = false
         phrases.removeAll()
         engine.stop()
         guard isActive else { return }
@@ -213,7 +207,12 @@ final class CueAudio: NSObject, CueOutput {
             log.notice("audio session not released: \(error.localizedDescription, privacy: .public)")
         }
         isActive = false
-        setCategory(ducking: false)
+    }
+
+    func prepare(_ phrases: [String]) {
+        for phrase in phrases where self.phrases[phrase] == nil && rendering[phrase] == nil {
+            Task { _ = await buffer(for: phrase) }
+        }
     }
 
     // MARK: - Playing
@@ -275,8 +274,7 @@ final class CueAudio: NSObject, CueOutput {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(CueAudio.watchdogDelay(afterFailures: failures)))
                 guard let self, !Task.isCancelled, self.isHeld else { return }
-                // Lowering the music stops the engine on purpose, for a moment, in front.
-                guard !self.engine.isRunning, !self.isDucking else {
+                guard !self.engine.isRunning else {
                     failures = 0
                     continue
                 }
@@ -290,7 +288,7 @@ final class CueAudio: NSObject, CueOutput {
     /// not at the watchdog's next try, and the cues while the app was away are noted.
     private func becameActive() {
         if let line = awayCues.close() { RunDiagnostics.shared.note(line) }
-        if isHeld, !engine.isRunning, !isDucking { _ = ensureRunning() }
+        if isHeld, !engine.isRunning { _ = ensureRunning() }
     }
 
     /// The engine and its two players, wired up: on launch, and again after a media reset.
@@ -307,7 +305,7 @@ final class CueAudio: NSObject, CueOutput {
         // Stopped by a change of output the route notification didn't cover.
         observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self, self.isHeld, !self.isDucking else { return }
+                guard let self, self.isHeld else { return }
                 RunDiagnostics.shared.note("Audio: engine configuration changed; restarting")
                 _ = self.ensureRunning()
             }
@@ -317,14 +315,13 @@ final class CueAudio: NSObject, CueOutput {
     private func mediaServicesReset() {
         RunDiagnostics.shared.note("Audio: media services were reset; rebuilding")
         isActive = false
-        isDucking = false
         buildEngine()
-        setCategory(ducking: false)
+        setCategory()
         if isHeld { _ = ensureRunning() }
     }
 
     private func routeChanged(_ reason: AVAudioSession.RouteChangeReason?) {
-        guard isHeld, !isDucking else { return }
+        guard isHeld else { return }
         let why: String = switch reason {
         case .newDeviceAvailable: "headphones or a speaker connected"
         case .oldDeviceUnavailable: "headphones or a speaker disconnected"
@@ -339,16 +336,8 @@ final class CueAudio: NSObject, CueOutput {
     private func interrupted(began: Bool) {
         RunDiagnostics.shared.note("Audio: interrupted, \(began ? "began" : "ended")")
         if began {
-            // The system has let the session go and stopped the engine. A dip it cut short
-            // ends here: left set, the lowering category would come back with the session
-            // after the call and keep the music down for the rest of the run.
+            // The system has let the session go and stopped the engine.
             isActive = false
-            if isDucking {
-                isDucking = false
-                restoreTask?.cancel()
-                restoreTask = nil
-                setCategory(ducking: false)
-            }
         } else if isHeld {
             // Back after a call: the engine picks up again, which works in front and, as a
             // resumption the system offers, often away from it too.
@@ -358,10 +347,30 @@ final class CueAudio: NSObject, CueOutput {
 
     // MARK: - Voice
 
-    /// `phrase` as audio in the cues' format, rendered by the system voice without it ever
-    /// touching the audio session. Nil if the voice produced nothing.
+    /// `phrase` as audio in the cues' format: rendered once a run, one render at a time.
+    /// Nil if the voice produced nothing.
     private func buffer(for phrase: String) async -> AVAudioPCMBuffer? {
         if let cached = phrases[phrase] { return cached }
+        if let inFlight = rendering[phrase] {
+            await inFlight.value
+            return phrases[phrase]
+        }
+        let previous = lastRender
+        // Kept in `phrases` as it lands; whoever waits reads it from there.
+        let task = Task { [weak self] in
+            await previous?.value
+            guard let self, let buffer = await self.render(phrase) else { return }
+            self.phrases[phrase] = buffer
+        }
+        rendering[phrase] = task
+        lastRender = task
+        await task.value
+        rendering[phrase] = nil
+        return phrases[phrase]
+    }
+
+    /// `phrase` rendered by the system voice without it ever touching the audio session.
+    private func render(_ phrase: String) async -> AVAudioPCMBuffer? {
         let utterance = AVSpeechUtterance(string: phrase)
         utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
@@ -374,9 +383,11 @@ final class CueAudio: NSObject, CueOutput {
         guard !pcm.samples.isEmpty,
               let buffer = Self.buffer(pcm.resampled(to: format.sampleRate), format: format) else {
             log.notice("phrase not rendered: \(phrase, privacy: .public)")
+            if UIApplication.shared.applicationState != .active {
+                RunDiagnostics.shared.note("Voice: \"\(phrase)\" not rendered away from the app")
+            }
             return nil
         }
-        phrases[phrase] = buffer
         return buffer
     }
 
@@ -404,86 +415,12 @@ final class CueAudio: NSObject, CueOutput {
 
     // MARK: - Session
 
-    private func setCategory(ducking: Bool) {
+    private func setCategory() {
         do {
-            // Mixed always; lowering others only for a cue with something playing under it.
-            let options: AVAudioSession.CategoryOptions = ducking
-                ? [.mixWithOthers, .duckOthers, .interruptSpokenAudioAndMixWithOthers]
-                : [.mixWithOthers]
-            try session.setCategory(.playback, mode: .default, options: options)
+            try session.setCategory(.playback, mode: .default, options: Self.categoryOptions)
         } catch {
             log.error("audio session category refused: \(error.localizedDescription, privacy: .public)")
         }
-    }
-
-    /// Ready for a cue of `duration`: held as always, and with music or a podcast playing
-    /// and the app in front, lowering it until the cue, and any cue close behind it, is
-    /// done. Never away from the screen: lowering lets the session go, which stops the
-    /// engine, and there it couldn't be started again.
-    private func prepareSession(for duration: TimeInterval) {
-        guard UIApplication.shared.applicationState == .active, lowersOtherAudio,
-              isDucking || session.isOtherAudioPlaying else {
-            hold()
-            return
-        }
-        duckUntil = max(duckUntil, Date().addingTimeInterval(duration + Self.duckTail))
-        if !isDucking { startDucking() }
-        scheduleRestore()
-    }
-
-    /// Ducking takes hold when the session is activated with it, so the held session is let
-    /// go and taken again. Nothing of ours is sounding at that moment: a cue starts after.
-    private func startDucking() {
-        engine.stop()
-        if isActive {
-            try? session.setActive(false)
-            isActive = false
-        }
-        setCategory(ducking: true)
-        do {
-            try session.setActive(true)
-            isActive = true
-            isDucking = true
-        } catch {
-            log.notice("could not lower other audio: \(error.localizedDescription, privacy: .public)")
-            RunDiagnostics.shared.note("Audio: couldn't lower other audio: \(RunDiagnostics.describe(error))")
-            setCategory(ducking: false)
-            hold()
-        }
-    }
-
-    private func scheduleRestore() {
-        restoreTask?.cancel()
-        restoreTask = Task { [weak self] in
-            while let self, !Task.isCancelled {
-                let wait = self.duckUntil.timeIntervalSinceNow
-                guard wait <= 0 else {
-                    try? await Task.sleep(for: .seconds(wait))
-                    continue
-                }
-                self.restoreTask = nil
-                self.stopDucking()
-                return
-            }
-        }
-    }
-
-    /// The music comes back up, and the session is held again, unlowered, with the engine
-    /// running for the next cue.
-    private func stopDucking() {
-        guard isDucking else { return }
-        isDucking = false
-        restoreTask?.cancel()
-        restoreTask = nil
-        engine.stop()
-        do {
-            try session.setActive(false, options: .notifyOthersOnDeactivation)
-        } catch {
-            log.notice("other audio not restored: \(error.localizedDescription, privacy: .public)")
-        }
-        isActive = false
-        setCategory(ducking: false)
-        if isHeld { _ = ensureRunning() }
     }
 
     /// Takes the audio for the run, once: from then on the volume buttons set the cues'

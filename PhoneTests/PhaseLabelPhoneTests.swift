@@ -106,18 +106,9 @@ struct PhaseLabelPhoneTests {
         #expect(DurationWheels.value(minutes: 0, seconds: 0, field: .cooldown) == 0, "Off")
     }
 
-    @Test("Lower Music is on until turned off, and every cue says so to the output")
-    func lowerMusic() {
-        let defaults = makeTestDefaults()
-        #expect(CueSettings.stored(in: defaults).lowerMusic)
-        let output = FakeCueOutput()
-        let player = PhoneCuePlayer(output: output, pro: FakePro(), defaults: defaults)
-        defaults.set(false, forKey: CueSettings.Key.lowerMusic)
-        player.preview()
-        #expect(output.lowersOtherAudio == false)
-        defaults.set(true, forKey: CueSettings.Key.lowerMusic)
-        player.preview()
-        #expect(output.lowersOtherAudio == true)
+    @Test("The cues' audio only ever mixes: it never lowers or interrupts other audio")
+    func neverDucks() {
+        #expect(CueAudio.categoryOptions == [.mixWithOthers])
     }
 
     @Test("The tones are richer but never clip, peaking where they're set")

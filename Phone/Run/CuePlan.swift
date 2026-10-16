@@ -33,14 +33,11 @@ struct CueSettings: Equatable, Sendable {
     var countdown = true
     /// The voice coach. Intervally Pro: `effective(isPro:)` drops it without.
     var voice = true
-    /// Music or a podcast underneath dips while a cue sounds, and comes straight back.
-    var lowerMusic = true
 
     enum Key {
         static let beeps = "phone.cues.beeps"
         static let countdown = "phone.cues.countdown"
         static let voice = "phone.cues.voice"
-        static let lowerMusic = "phone.cues.lowerMusic"
         /// Whether the screen stays on while a run is in front.
         static let keepAwake = "phone.run.keepAwake"
     }
@@ -49,8 +46,7 @@ struct CueSettings: Equatable, Sendable {
     static func stored(in defaults: UserDefaults) -> CueSettings {
         func flag(_ key: String) -> Bool { defaults.object(forKey: key) as? Bool ?? true }
         return CueSettings(
-            beeps: flag(Key.beeps), countdown: flag(Key.countdown), voice: flag(Key.voice),
-            lowerMusic: flag(Key.lowerMusic)
+            beeps: flag(Key.beeps), countdown: flag(Key.countdown), voice: flag(Key.voice)
         )
     }
 
@@ -94,7 +90,7 @@ struct CuePlan: Equatable, Sendable {
         case .finished:
             return CuePlan(
                 tone: settings.beeps ? .finish : nil,
-                phrase: settings.voice ? "Workout complete" : nil,
+                phrase: settings.voice ? finishPhrase : nil,
                 tap: .success
             )
         }
@@ -110,6 +106,9 @@ struct CuePlan: Equatable, Sendable {
 
     /// Short enough to finish inside a 10-second rest, and never a number the screen
     /// already shows bigger.
+    /// What the coach says at the end.
+    static let finishPhrase = "Workout complete"
+
     static func phrase(for phase: IntervalPhase, totalRounds: Int) -> String {
         // A name the preset gave the phase is what the coach calls it, "Last round" aside.
         if let label = phase.label {
