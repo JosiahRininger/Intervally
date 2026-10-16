@@ -4,6 +4,7 @@
 //
 
 import AVFoundation
+import CryptoKit
 import UIKit
 import os
 
@@ -18,9 +19,9 @@ protocol CueOutput: AnyObject {
     /// so eight quick Skips say only where they landed, not "Work, Rest" eight times over.
     func say(_ phrase: String, after delay: TimeInterval)
     func tap(_ tap: CueTap)
-    /// Renders `phrases` ahead of time, in front, so the voice can say them with the app in
-    /// the background, where the system voice may not render at all. Those already rendered
-    /// this run are skipped.
+    /// Renders `phrases` ahead of time, in front and while nothing else plays, so the voice
+    /// can say them away from the app, where the system voice may not render, and with music
+    /// playing, which rendering would pause. Those already rendered are skipped.
     func prepare(_ phrases: [String])
     /// Stops whatever is still sounding.
     func silence()
@@ -62,9 +63,9 @@ protocol CueOutput: AnyObject {
 /// The tones are made to carry over music (`ToneSynth`) without it.
 ///
 /// The voice is rendered to audio first and played like a tone: spoken by the system
-/// synthesizer directly, it takes the audio session over. Every phrase a run can say is
-/// rendered at its start (`prepare`), in front: away from the app the synthesizer may not
-/// render, and a phrase first needed there went unsaid.
+/// synthesizer directly, it takes the audio session over. Rendering at all pauses music
+/// playing at the time, so every phrase is rendered ahead, while nothing else plays, and
+/// kept on disk (`buffer(for:)`, `VoiceCache`).
 ///
 /// Cues play with the Ring/Silent switch on silent too, as a workout timer has to: the
 /// Sounds settings turn them off.
@@ -111,7 +112,13 @@ final class CueAudio: NSObject, CueOutput {
     /// interrupting it.
     nonisolated static let categoryOptions: AVAudioSession.CategoryOptions = [.mixWithOthers]
 
-    override init() {
+    /// Every phrase rendered on this iPhone, kept on disk, so each is rendered once ever.
+    private let voiceCache: VoiceCache
+    /// Phrases the voice skipped this run, noted once each.
+    private var skippedPhrases: Set<String> = []
+
+    init(voiceCache: VoiceCache = VoiceCache()) {
+        self.voiceCache = voiceCache
         super.init()
         setCategory()
         buildEngine()
@@ -199,6 +206,7 @@ final class CueAudio: NSObject, CueOutput {
         isHealthy = true
         silence()
         phrases.removeAll()
+        skippedPhrases.removeAll()
         engine.stop()
         guard isActive else { return }
         do {
@@ -347,20 +355,38 @@ final class CueAudio: NSObject, CueOutput {
 
     // MARK: - Voice
 
-    /// `phrase` as audio in the cues' format: rendered once a run, one render at a time.
-    /// Nil if the voice produced nothing.
+    /// `phrase` as audio in the cues' format: from memory, from the disk, or rendered, one
+    /// render at a time. Nil if it couldn't be had without interrupting other audio.
+    ///
+    /// The system voice renders in a process of its own, and on a real iPhone that pauses
+    /// music playing at the time, even when it only renders and nothing is spoken: build 12
+    /// rendered every phrase during Get Ready and stopped Josiah's Spotify for good
+    /// (2026-10-16). So a phrase is rendered only while nothing else plays: ahead, at launch
+    /// and back in front (`prepare`), and kept on disk. One not ready while music plays is
+    /// skipped; the tone still marks the change.
     private func buffer(for phrase: String) async -> AVAudioPCMBuffer? {
         if let cached = phrases[phrase] { return cached }
         if let inFlight = rendering[phrase] {
             await inFlight.value
             return phrases[phrase]
         }
+        if let samples = voiceCache.samples(for: phrase, voice: voiceID), let buffer = Self.buffer(samples, format: format) {
+            phrases[phrase] = buffer
+            return buffer
+        }
+        guard !session.isOtherAudioPlaying else {
+            if isHeld, skippedPhrases.insert(phrase).inserted {
+                RunDiagnostics.shared.note("Voice: \"\(phrase)\" skipped: not rendered yet, and other audio was playing")
+            }
+            return nil
+        }
         let previous = lastRender
         // Kept in `phrases` as it lands; whoever waits reads it from there.
         let task = Task { [weak self] in
             await previous?.value
-            guard let self, let buffer = await self.render(phrase) else { return }
+            guard let self, let samples = await self.render(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
             self.phrases[phrase] = buffer
+            self.voiceCache.store(samples, for: phrase, voice: self.voiceID)
         }
         rendering[phrase] = task
         lastRender = task
@@ -369,8 +395,12 @@ final class CueAudio: NSObject, CueOutput {
         return phrases[phrase]
     }
 
-    /// `phrase` rendered by the system voice without it ever touching the audio session.
-    private func render(_ phrase: String) async -> AVAudioPCMBuffer? {
+    /// Which voice renders, for the disk cache: a new system voice renders afresh.
+    private var voiceID: String { voice?.identifier ?? "default" }
+
+    /// `phrase` rendered by the system voice, at the cues' rate, without it ever touching
+    /// the app's audio session.
+    private func render(_ phrase: String) async -> [Float]? {
         let utterance = AVSpeechUtterance(string: phrase)
         utterance.voice = voice
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 1.05
@@ -380,15 +410,15 @@ final class CueAudio: NSObject, CueOutput {
                 if collector.add(buffer) { continuation.resume(returning: collector.result) }
             }
         }
-        guard !pcm.samples.isEmpty,
-              let buffer = Self.buffer(pcm.resampled(to: format.sampleRate), format: format) else {
+        let samples = pcm.resampled(to: format.sampleRate)
+        guard !samples.isEmpty else {
             log.notice("phrase not rendered: \(phrase, privacy: .public)")
             if UIApplication.shared.applicationState != .active {
                 RunDiagnostics.shared.note("Voice: \"\(phrase)\" not rendered away from the app")
             }
             return nil
         }
-        return buffer
+        return samples
     }
 
     nonisolated static func buffer(_ samples: [Float], format: AVAudioFormat) -> AVAudioPCMBuffer? {
@@ -437,6 +467,37 @@ final class CueAudio: NSObject, CueOutput {
             // the tap and the screen still mark the change. The next cue tries again.
             log.notice("audio session not activated: \(error.localizedDescription, privacy: .public)")
         }
+    }
+}
+
+/// Phrases the system voice rendered, kept on disk as samples at the cues' rate, so each is
+/// rendered once on this iPhone, ever, rather than once a run (`CueAudio.buffer(for:)`).
+struct VoiceCache: Sendable {
+    let directory: URL?
+    /// Bumped when the rendering changes, so old files are left behind.
+    static let version = 1
+
+    init(directory: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
+        .appendingPathComponent("voice", isDirectory: true)) {
+        self.directory = directory
+    }
+
+    /// The file for `phrase` in `voice`: named by a hash, as phrases are the user's own.
+    func url(for phrase: String, voice: String) -> URL? {
+        let digest = SHA256.hash(data: Data("\(Self.version)|\(voice)|\(phrase)".utf8))
+        return directory?.appendingPathComponent(digest.map { String(format: "%02x", $0) }.joined() + ".f32")
+    }
+
+    func samples(for phrase: String, voice: String) -> [Float]? {
+        guard let url = url(for: phrase, voice: voice), let data = try? Data(contentsOf: url),
+              !data.isEmpty, data.count % MemoryLayout<Float>.size == 0 else { return nil }
+        return data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+    }
+
+    func store(_ samples: [Float], for phrase: String, voice: String) {
+        guard let url = url(for: phrase, voice: voice), !samples.isEmpty else { return }
+        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? samples.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: url, options: .atomic)
     }
 }
 

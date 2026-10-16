@@ -198,7 +198,9 @@ struct PresetEditorView: View {
         // The tabs stay, as in Apple's own apps: hidden here, they only came back once Back's
         // animation had finished, a beat after the workouts were already showing. The ring
         // gives up the room they take (EditorLayout.ringSide).
-        .confirmationDialog("Delete “\(workout.name)”?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+        // An alert: iOS 26's confirmation dialog shows no Cancel.
+        .alert("Delete “\(workout.name)”?", isPresented: $confirmingDelete) {
+            Button("Cancel", role: .cancel) {}
             Button("Delete Workout", role: .destructive) {
                 if actions.delete(workout) { dismiss() }
             }

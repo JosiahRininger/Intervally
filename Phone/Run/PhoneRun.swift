@@ -320,7 +320,13 @@ final class PhoneRun {
         cues.holdIfSounding()
     }
 
+    /// The voice's phrases for every workout in the library, rendered ahead of any run.
+    func prepareVoice() {
+        cues.prepareAhead(store.workouts)
+    }
+
     func handleForeground() {
+        prepareVoice()
         guard coordinator.engine.isActive else { return }
         coordinator.handleForeground()
         // In front, where the audio can be started: a run whose audio isn't held yet, or

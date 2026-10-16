@@ -57,6 +57,19 @@ final class PhoneCuePlayer: BoundaryHaptics {
         if settings.voice { output.prepare(Self.phrases(for: phasesInRun(), totalRounds: roundsInRun())) }
     }
 
+    /// Renders what the voice coach can say in any of `workouts`, ahead of a run: at launch
+    /// and back in front. The output renders only while nothing else plays, and keeps each.
+    func prepareAhead(_ workouts: [IntervalWorkout]) {
+        let settings = self.settings
+        guard settings.voice else { return }
+        var seen = Set<String>()
+        let phrases = workouts.flatMap { workout in
+            let plan = IntervalPlan(workout: workout.effective(isPro: pro.isPro))
+            return Self.phrases(for: plan.phases, totalRounds: plan.totalRounds)
+        }.filter { seen.insert($0).inserted }
+        output.prepare(phrases)
+    }
+
     /// What the voice coach can say in a run of `phases`, each once, in the order it comes.
     static func phrases(for phases: [IntervalPhase], totalRounds: Int) -> [String] {
         var seen = Set<String>()

@@ -54,7 +54,9 @@ struct RunDiagnosticsView: View {
                     .disabled(entries.isEmpty)
             }
         }
-        .confirmationDialog("Clear the diagnostics?", isPresented: $confirmingClear, titleVisibility: .visible) {
+        // An alert: iOS 26's confirmation dialog shows no Cancel.
+        .alert("Clear the diagnostics?", isPresented: $confirmingClear) {
+            Button("Cancel", role: .cancel) {}
             Button("Clear", role: .destructive) {
                 RunDiagnostics.shared.clear()
                 entries = []

@@ -318,6 +318,18 @@ struct PhoneCuePlayerTests {
         #expect(output.prepared.count == 5, "No voice, nothing to render")
     }
 
+    @Test("Ahead of any run, every phrase the library's workouts can say is rendered, names included")
+    func preparesTheLibrary() {
+        var sprint = IntervalWorkout(name: "Sprints", prepareSeconds: 10, workSeconds: 20, restSeconds: 10, rounds: 2)
+        sprint.setLabel(PhaseLabel(name: "Sprint", symbol: .sprint), for: .work)
+        let single = IntervalWorkout(name: "One", prepareSeconds: 5, workSeconds: 30, restSeconds: 0, rounds: 1)
+        player().prepareAhead([sprint, single])
+        #expect(output.prepared == ["Get ready", "Sprint", "Rest", "Last round", "Workout complete", "Work"])
+        defaults.set(false, forKey: CueSettings.Key.voice)
+        player().prepareAhead([sprint])
+        #expect(output.prepared.count == 6, "No voice, nothing to render")
+    }
+
     @Test("A run under way takes the audio when asked, if it has anything to be heard")
     func holdIfSounding() {
         player().holdIfSounding()
@@ -713,6 +725,35 @@ struct CueEngineAudioTests {
         #expect(zip(resampled, resampled.dropFirst()).allSatisfy { $0 <= $1 }, "No glitches between samples")
         #expect(pcm.resampled(to: 22_050) == pcm.samples)
         #expect(SpokenPCM().resampled(to: 44_100).isEmpty)
+    }
+
+    @Test("A rendered phrase is kept on disk, by phrase and voice, and read back whole")
+    func voiceCache() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("voice-\(UUID().uuidString)")
+        let cache = VoiceCache(directory: directory)
+        #expect(cache.samples(for: "Work", voice: "v1") == nil)
+        cache.store([0.1, -0.2, 0.3], for: "Work", voice: "v1")
+        #expect(cache.samples(for: "Work", voice: "v1") == [0.1, -0.2, 0.3])
+        #expect(cache.samples(for: "Work", voice: "v2") == nil, "Another voice renders afresh")
+        #expect(cache.samples(for: "Rest", voice: "v1") == nil)
+        #expect(cache.url(for: "Work", voice: "v1") == cache.url(for: "Work", voice: "v1"))
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    @Test("The real voice renders a phrase ahead, with nothing else playing, and keeps it on disk")
+    @MainActor
+    func rendersAheadToDisk() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("voice-\(UUID().uuidString)")
+        let cache = VoiceCache(directory: directory)
+        let audio = CueAudio(voiceCache: cache)
+        audio.prepare(["Get ready", "Sprint"])
+        let voice = AVSpeechSynthesisVoice(language: "en-US")?.identifier ?? "default"
+        #expect(await waitUntil(within: .seconds(20)) {
+            cache.samples(for: "Get ready", voice: voice) != nil && cache.samples(for: "Sprint", voice: voice) != nil
+        })
+        #expect((cache.samples(for: "Sprint", voice: voice)?.count ?? 0) > 4_410, "More than a tenth of a second of speech")
+        audio.handBackAudio()
+        try? FileManager.default.removeItem(at: directory)
     }
 
     @Test("Every tone becomes a playable buffer of its own length")

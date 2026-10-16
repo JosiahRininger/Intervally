@@ -112,9 +112,11 @@ struct PhoneRunView: View {
                 .allowsHitTesting(false)
         }
         .preferredColorScheme(palette.colorScheme)
-        .confirmationDialog("End workout?", isPresented: $confirmingEnd, titleVisibility: .visible) {
-            Button("End Workout", role: .destructive) { run.end() }
+        // An alert, not a confirmation dialog: on iOS 26 the dialog hangs off the button and
+        // drops its Keep Going, which left no visible way back.
+        .alert("End workout?", isPresented: $confirmingEnd) {
             Button("Keep Going", role: .cancel) {}
+            Button("End Workout", role: .destructive) { run.end() }
         } message: {
             Text(run.isMirroring ? "It ends on your Apple Watch too, and won't be saved." : "This workout won't be saved.")
         }
