@@ -37,7 +37,7 @@ app inside its build. Archive and upload the `IntervallyPhone` scheme only.
 | SKU | `intervally` |
 | Primary category | Health & Fitness |
 | Secondary category | Sports |
-| Age rating | 4+ (no objectionable content; Health or Wellness Topics: No) |
+| Age rating | 4+ (no objectionable content; Health or Wellness Topics: Yes, as App Review asked 2026-10-20) |
 | Content rights | Does not contain third-party content |
 | Regulated medical device | No (App Information; asked of Health & Fitness apps) |
 | Price | Free |
