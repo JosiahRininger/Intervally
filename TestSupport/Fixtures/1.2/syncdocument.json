@@ -1,0 +1,119 @@
+{
+  "presets" : [
+    {
+      "deleted" : false,
+      "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+      "order" : -65536,
+      "orderStamp" : {
+        "device" : "8E4B1C7A-2D9F-4A63-B0E5-6C1F3A8D7E24",
+        "millis" : 1793170000000
+      },
+      "stamp" : {
+        "device" : "8E4B1C7A-2D9F-4A63-B0E5-6C1F3A8D7E24",
+        "millis" : 1793100042000
+      },
+      "workout" : {
+        "activity" : "outdoorRun",
+        "cooldownSeconds" : 300,
+        "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+        "name" : "Hill Sprints",
+        "phaseLabels" : {
+          "rest" : {
+            "name" : "Walk",
+            "symbol" : "walk"
+          },
+          "work" : {
+            "name" : "Sprint",
+            "symbol" : "sprint"
+          }
+        },
+        "prepareSeconds" : 15,
+        "restSeconds" : 90,
+        "rounds" : 6,
+        "warmupSeconds" : 300,
+        "workSeconds" : 30
+      }
+    },
+    {
+      "deleted" : false,
+      "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000001",
+      "order" : 0,
+      "orderStamp" : {
+        "device" : "",
+        "millis" : 0
+      },
+      "stamp" : {
+        "device" : "",
+        "millis" : 0
+      },
+      "workout" : {
+        "cooldownSeconds" : 0,
+        "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000001",
+        "name" : "Classic",
+        "prepareSeconds" : 10,
+        "restSeconds" : 15,
+        "rounds" : 8,
+        "warmupSeconds" : 0,
+        "workSeconds" : 30
+      }
+    },
+    {
+      "deleted" : false,
+      "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000002",
+      "order" : 1,
+      "orderStamp" : {
+        "device" : "",
+        "millis" : 0
+      },
+      "stamp" : {
+        "device" : "F1A63D9E-7B2C-4085-9E4D-3B7A1C6F0D58",
+        "millis" : 1793150000000
+      },
+      "workout" : {
+        "cooldownSeconds" : 0,
+        "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000002",
+        "name" : "Tabata",
+        "prepareSeconds" : 10,
+        "restSeconds" : 10,
+        "rounds" : 10,
+        "warmupSeconds" : 0,
+        "workSeconds" : 20
+      }
+    },
+    {
+      "deleted" : true,
+      "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000003",
+      "order" : 2,
+      "orderStamp" : {
+        "device" : "",
+        "millis" : 0
+      },
+      "stamp" : {
+        "device" : "8E4B1C7A-2D9F-4A63-B0E5-6C1F3A8D7E24",
+        "millis" : 1793160000000
+      },
+      "workout" : {
+        "activity" : "crossTraining",
+        "cooldownSeconds" : 0,
+        "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000003",
+        "name" : "EMOM",
+        "phaseLabels" : {
+
+        },
+        "prepareSeconds" : 10,
+        "restSeconds" : 15,
+        "rounds" : 10,
+        "warmupSeconds" : 0,
+        "workSeconds" : 45
+      }
+    }
+  ],
+  "schema" : 1,
+  "selected" : {
+    "stamp" : {
+      "device" : "F1A63D9E-7B2C-4085-9E4D-3B7A1C6F0D58",
+      "millis" : 1793180000000
+    },
+    "value" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81"
+  }
+}

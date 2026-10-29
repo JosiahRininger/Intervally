@@ -1,0 +1,107 @@
+[
+  {
+    "cooldownSeconds" : 0,
+    "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000001",
+    "name" : "Classic",
+    "prepareSeconds" : 10,
+    "restSeconds" : 15,
+    "rounds" : 8,
+    "warmupSeconds" : 0,
+    "workSeconds" : 30
+  },
+  {
+    "cooldownSeconds" : 0,
+    "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000002",
+    "name" : "Tabata",
+    "prepareSeconds" : 10,
+    "restSeconds" : 10,
+    "rounds" : 8,
+    "warmupSeconds" : 0,
+    "workSeconds" : 20
+  },
+  {
+    "cooldownSeconds" : 0,
+    "id" : "6A1E0C2B-5D4F-4E43-9C1A-000000000003",
+    "name" : "EMOM",
+    "prepareSeconds" : 10,
+    "restSeconds" : 15,
+    "rounds" : 10,
+    "warmupSeconds" : 0,
+    "workSeconds" : 45
+  },
+  {
+    "activity" : "outdoorRun",
+    "cooldownSeconds" : 300,
+    "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+    "name" : "Hill Sprints",
+    "phaseLabels" : {
+      "rest" : {
+        "name" : "Walk",
+        "symbol" : "walk"
+      },
+      "work" : {
+        "name" : "Sprint",
+        "symbol" : "sprint"
+      }
+    },
+    "prepareSeconds" : 15,
+    "restSeconds" : 90,
+    "rounds" : 6,
+    "warmupSeconds" : 300,
+    "workSeconds" : 30
+  },
+  {
+    "activity" : "boxing",
+    "cooldownSeconds" : 120,
+    "id" : "C83F1A6D-0B4E-47A2-8D5C-9E61F2B7A043",
+    "name" : "Boxing",
+    "phaseLabels" : {
+      "prepare" : {
+        "name" : "Gloves On",
+        "symbol" : "hourglass"
+      },
+      "rest" : {
+        "name" : "Corner",
+        "symbol" : "breathe"
+      },
+      "work" : {
+        "name" : "Fight",
+        "symbol" : "boxing"
+      }
+    },
+    "prepareSeconds" : 10,
+    "restSeconds" : 60,
+    "rounds" : 12,
+    "warmupSeconds" : 180,
+    "workSeconds" : 180
+  },
+  {
+    "activity" : "rowing",
+    "cooldownSeconds" : 300,
+    "id" : "2D7A9F03-6C1B-4E85-B4A0-7F3E8D2C5B16",
+    "name" : "Row Ladder",
+    "phaseLabels" : {
+      "cooldown" : {
+        "name" : "Stretch",
+        "symbol" : "stretch"
+      },
+      "rest" : {
+        "name" : "Rest",
+        "symbol" : "breathe"
+      },
+      "warmup" : {
+        "name" : "Easy Row",
+        "symbol" : "row"
+      },
+      "work" : {
+        "name" : "Pull",
+        "symbol" : "row"
+      }
+    },
+    "prepareSeconds" : 0,
+    "restSeconds" : 30,
+    "rounds" : 10,
+    "warmupSeconds" : 600,
+    "workSeconds" : 60
+  }
+]
