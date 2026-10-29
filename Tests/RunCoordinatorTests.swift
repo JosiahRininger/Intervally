@@ -1049,9 +1049,11 @@ struct RunCoordinatorTimingLineTests {
         _ = await coordinator.tick(on: time) { coordinator.engine.status != .running }
 
         #expect(coordinator.engine.status == .finished)
-        // The second work and the finish. The rest, announced 0.5 s after Resume, is left out.
+        // The second work and the finish. The rest, announced 0.5 s after Resume, is left out;
+        // counted, it would be a third boundary at 0.50 s. The skip put the clock on a whole
+        // second at Resume, so from there every deadline falls on a half-second wake.
         #expect(notes.timing == [
-            "Run timing: 2 boundaries, median 0.01 s late, max 0.01 s; 0 over 1.0 s (one tap instead of the full pattern)",
+            "Run timing: 2 boundaries, median 0.00 s late, max 0.00 s; 0 over 1.0 s (one tap instead of the full pattern)",
         ])
         coordinator.stopAndExit()
     }
