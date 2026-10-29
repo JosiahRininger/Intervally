@@ -99,6 +99,13 @@ final class RecordingPresenter: RunPresenting {
     func present(_ run: RunPresentation?) { shown.append(run) }
 }
 
+/// What a run noted for its diagnostics, in order.
+@MainActor
+final class RecordingDiagnostics {
+    private(set) var lines: [String] = []
+    func note(_ line: String) { lines.append(line) }
+}
+
 // MARK: - Cues
 
 @Suite("iPhone cues")
@@ -710,6 +717,64 @@ struct PhoneRunTests {
         #expect(await waitUntil { run.coordinator.engine.status == .running })
         #expect(run.cues.roundsInRun() == run.coordinator.engine.plan.totalRounds)
         run.close()
+    }
+
+    @Test("Each change sounds 8 ms past its second, not up to half a second later")
+    func cuesLandOnTheSecond() async throws {
+        let (run, store) = makeRun()
+        // The run's clock and its ticker on one virtual clock, moved only by the test.
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { time.sleeping == 1 })
+        // Polling from there, every change would have sounded 0.3 s late.
+        await run.coordinator.pauseOffTheGrid(on: time)
+
+        // Wake by wake to the work, noting when each tone played.
+        var tones: [(at: TimeInterval, tone: CueTone)] = []
+        while time.elapsed < 10 {
+            let heard = output.calls.count
+            guard await run.coordinator.nextWake(on: time) != nil else { break }
+            for case .tone(let tone) in output.calls.dropFirst(heard) { tones.append((time.elapsed, tone)) }
+        }
+
+        // 3, 2, 1, then Work, each just past its second.
+        #expect(tones.map(\.tone) == [.tick, .tick, .tick, .go])
+        for (cue, second) in zip(tones, [7.0, 8, 9, 10]) {
+            #expect(abs(cue.at - second - 0.008) < 0.000_001, "\(cue.tone) at \(cue.at) s")
+        }
+        run.close()
+    }
+
+    @Test("The run's timing goes to its diagnostics in the iPhone's words: a change noticed late played nothing")
+    func timingLine() async throws {
+        let (run, store) = makeRun()
+        let diagnostics = RecordingDiagnostics()
+        run.coordinator.diagnostics = { diagnostics.note($0) }
+        // Asleep on a clock nothing moves, so only the test advances this run.
+        let time = VirtualTime()
+        run.coordinator.tickSleep = { try await time.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.engine.status == .running })
+
+        // Back after two seconds away: the work began at 10 s and is noticed at 12 s.
+        let anchor = try #require(run.coordinator.engine.anchor)
+        run.coordinator.engine.now = { anchor.addingTimeInterval(12) }
+        output.reset()
+        run.coordinator.advance()
+        #expect(output.calls.isEmpty, "Too late to play")
+        run.close()
+
+        #expect(diagnostics.lines.filter { $0.hasPrefix("Run timing:") } == [
+            "Run timing: 1 boundary, median 2.00 s late, max 2.00 s; 1 over 1.5 s (nothing played for those)",
+        ])
+        // The iPhone's runs take the iPhone's threshold and words.
+        #expect(RunPlatform.lateBoundary == CuePlan.lateThreshold)
+        #expect(BoundaryTimingTally(lateThreshold: 1).device == .phone)
     }
 }
 

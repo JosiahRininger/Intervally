@@ -17,4 +17,8 @@ enum RunPlatform {
     static func play(cue: TransportCue) {
         Haptics.play(cue: cue)
     }
+
+    /// Noticed later than this, a boundary taps once instead of its whole pattern
+    /// (`Haptics.plan`). The run's timing line counts those.
+    static let lateBoundary = Haptics.lateThreshold
 }

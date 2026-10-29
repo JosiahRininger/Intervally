@@ -69,6 +69,12 @@ mechanisms and picks the best one available:
 Tier 3 is scheduled only when tier 1 isn't running — under a workout session the app plays
 its own haptics, and scheduling notifications as well would double-alert at every boundary.
 
+While the app is running, its taps come from `RunCoordinator`'s ticker. It sleeps until the
+plan's next countdown second or interval change (`IntervalPlan.nextEventElapsed`) and wakes
+8 ms past it, never more than half a second at a time, so a tap lands with the change on
+screen rather than up to half a second after it. Each run notes in its diagnostics how late
+its changes were announced.
+
 A `RunSnapshot` is persisted to the shared App Group on every state change, so relaunching
 after termination resumes the run exactly where it had got to, and the Smart Stack
 complication can render a live countdown without the app being awake. If the system kept a
@@ -332,7 +338,8 @@ Widget/                    Smart Stack complication + Control Center control
 Tests/                     Swift Testing, watch app
 PhoneTests/                Swift Testing, iPhone app
 SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
-TestSupport/               helpers for both bundles: the App Store listing's parser
+TestSupport/               helpers for both bundles: the App Store listing's parser, and
+                           VirtualTime, a clock only the test moves, with a run's ticker on it
 AppStore/                  Metadata.md (the App Store Connect listing, checked by tests) and
                            Screenshots/ (iPhone 6.9" and 6.3", Watch, the purchase's review
                            shot, and compose.py, which captions the iPhone captures)

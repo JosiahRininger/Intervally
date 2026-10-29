@@ -77,9 +77,17 @@ final class RunCoordinator {
 
     private(set) var tier: RuntimeTier = .none {
         didSet {
-            if tier != oldValue { RunDiagnostics.shared.note("Run: keeps running by \(tier.rawValue) (was \(oldValue.rawValue))") }
+            if tier != oldValue { diagnostics("Run: keeps running by \(tier.rawValue) (was \(oldValue.rawValue))") }
         }
     }
+
+    /// Where the run's notes go: `RunDiagnostics`, for the user to share. Injectable so tests
+    /// can read what a run noted.
+    @ObservationIgnored var diagnostics: @MainActor (String) -> Void = { RunDiagnostics.shared.note($0) }
+
+    /// How late this run's boundaries were announced, for the line its diagnostics get once
+    /// it finishes or is ended.
+    @ObservationIgnored private var timing = BoundaryTimingTally(lateThreshold: RunPlatform.lateBoundary)
 
     /// What the finished run amounted to, for the summary screen.
     struct Summary: Equatable, Sendable {
@@ -130,7 +138,7 @@ final class RunCoordinator {
     /// it then would discard a session that may just have started.
     @ObservationIgnored private var upgradeAttemptInFlight = false
 
-    /// How long to wait before each retry. Injectable so tests need not sleep for real.
+    /// How long to wait before each retry.
     ///
     /// Out to half a minute: on a real iPhone the first workout session raises a one-time
     /// system prompt about workout data while the phone is locked, and a session asked for
@@ -138,6 +146,12 @@ final class RunCoordinator {
     /// anyone had answered it, and the whole run went without a session: silent the moment
     /// the user left the app. Coming back to the app tries again too (`handleForeground`).
     @ObservationIgnored var upgradeRetryDelays: [TimeInterval] = [1.0, 3.0, 10.0, 30.0]
+
+    /// How each retry waits out its delay. Injectable so tests can move the retries on by
+    /// exactly their delays rather than sleeping for real.
+    @ObservationIgnored var upgradeSleep: @Sendable (TimeInterval) async throws -> Void = {
+        try await Task.sleep(for: .seconds($0))
+    }
 
     /// Whether a runtime tier is still being taken for this run, so the run screen can tell
     /// "not yet" from "not at all" before saying the sounds stop outside the app.
@@ -147,18 +161,49 @@ final class RunCoordinator {
     /// publisher tears its timer down when the last subscriber disappears, so tying it to
     /// the run screen meant walking away from that screen stopped the workout advancing —
     /// no boundary haptics, and no `finish()`. Display smoothness is handled separately by
-    /// `TimelineView`, so this only has to be frequent enough to catch a boundary promptly.
+    /// `TimelineView`, so this only has to wake when there is something to announce.
+    ///
+    /// It sleeps until the plan's next countdown second or interval change, and wakes just
+    /// past it: polling every half second, the cues and taps landed anywhere up to half a
+    /// second after the change on screen. It never sleeps longer than half a second, so
+    /// pausing and the clock on screen behave as they always have, and a deadline worked
+    /// out wrong is still noticed no later than polling noticed it.
     @ObservationIgnored private var ticker: Task<Void, Never>?
+
+    /// How the ticker sleeps. Injectable so tests can move a run's clock by exactly as much as
+    /// they say. Zero tolerance: the wake is when the cue plays, so it mustn't be put off to
+    /// share a later wake with other timers.
+    @ObservationIgnored var tickSleep: @Sendable (TimeInterval) async throws -> Void = {
+        try await Task.sleep(for: .seconds($0), tolerance: .zero)
+    }
+
+    /// The ticker's sleep with `remaining` seconds left until the next thing to announce: 8 ms
+    /// past it, so the engine finds the moment reached; at least 10 ms, so a wake that finds
+    /// it not quite reached can't spin; and at most half a second.
+    nonisolated static func tickDelay(_ remaining: TimeInterval) -> TimeInterval {
+        min(0.5, max(0.01, remaining + 0.008))
+    }
 
     private func startTicking() {
         guard ticker == nil else { return }
+        let sleep = tickSleep
         ticker = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(500))
+            while !Task.isCancelled, let delay = self?.nextTickDelay() {
+                // A cancelled sleep throws at once: leave, rather than advance a stopped run.
+                do { try await sleep(delay) } catch { return }
                 guard let self, !Task.isCancelled else { return }
                 self.advance()
             }
         }
+    }
+
+    /// How long the ticker sleeps from now: until the next countdown second, interval change
+    /// or finish, padded by `tickDelay`.
+    private func nextTickDelay() -> TimeInterval {
+        let elapsed = engine.elapsed
+        // At the end already: the next advance finishes the run.
+        guard let next = engine.plan.nextEventElapsed(afterElapsed: elapsed) else { return Self.tickDelay(0) }
+        return Self.tickDelay(next - elapsed)
     }
 
     private func stopTicking() {
@@ -215,7 +260,7 @@ final class RunCoordinator {
             summary = nil
         }
         guard engine.status == .idle, beginTask == nil else { return }
-        RunDiagnostics.shared.note("Run: started \(engine.plan.workout.name)")
+        diagnostics("Run: started \(engine.plan.workout.name)")
         // A new run's cues start out sounding; a failure the last run ended on is not this one's.
         cuesFailing = false
         // The one place Pro gates the warmup and cooldown. The snapshot, the widget, the
@@ -348,16 +393,17 @@ final class RunCoordinator {
     /// reaches Health. Declined access fails every retry and the run stays as it was.
     private func scheduleWorkoutUpgrade() {
         upgradeTask?.cancel()
+        let sleep = upgradeSleep
         upgradeTask = Task { [weak self] in
             // Done, one way or the other: a later return to the app may try again. Not when
             // cancelled, as whoever cancelled it has already replaced or cleared it.
             defer { if !Task.isCancelled { self?.upgradeTask = nil } }
             guard let delays = self?.upgradeRetryDelays else { return }
             for delay in delays {
-                try? await Task.sleep(for: .seconds(delay))
+                try? await sleep(delay)
                 guard let self, !Task.isCancelled, self.engine.isActive,
                       self.tier == .extendedRuntime else { return }
-                RunDiagnostics.shared.note("Run: retrying the workout session")
+                self.diagnostics("Run: retrying the workout session")
                 self.upgradeAttemptInFlight = true
                 let started = await self.workout.start(for: self.engine.plan.workout)
                 self.upgradeAttemptInFlight = false
@@ -491,12 +537,28 @@ final class RunCoordinator {
         }
     }
 
-    /// Hands `event` to the boundary haptics along with its timing.
+    /// Hands `event` to the boundary haptics along with its timing, and keeps that timing for
+    /// the run's diagnostics.
     private func announce(_ event: TimerEvent, wallElapsed: TimeInterval? = nil) {
         let context = Self.boundaryContext(
             for: event, wallElapsed: wallElapsed, totalDuration: engine.plan.totalDuration
         )
         haptics.play(event, context: context)
+        switch event {
+        case .phaseBegan, .finished:
+            // Only a change the clock noticed says how promptly it was announced: a start or
+            // a skip is on time by construction.
+            if wallElapsed != nil { timing.record(lateness: context.lateness) }
+        case .countdown:
+            // A tick carries no lateness of its own (`BoundaryContext.immediate`).
+            break
+        }
+    }
+
+    /// Writes the run's timing line. The finish and an End both call this; whichever comes
+    /// first writes it, and the other finds nothing left to say.
+    private func noteTiming() {
+        if let line = timing.close() { diagnostics(line) }
     }
 
     private func dispatch(_ events: [TimerEvent], wallElapsed: TimeInterval?) {
@@ -588,6 +650,7 @@ final class RunCoordinator {
         upgradeTask?.cancel()
         upgradeTask = nil
         stopTicking()
+        noteTiming()
         runtime.stop()
         let wasWorkoutTier = tier == .workout
         tier = .none
@@ -631,6 +694,7 @@ final class RunCoordinator {
         upgradeTask?.cancel()
         upgradeTask = nil
         stopTicking()
+        noteTiming()
         summary = nil
         engine.stop()
         runtime.stop()
@@ -693,7 +757,7 @@ final class RunCoordinator {
     /// catching up — elapsed time comes from the clock — but events since the last tick
     /// still have to be dispatched and the notification schedule re-aligned.
     func handleForeground() {
-        RunDiagnostics.shared.note("App: in front. Run \(engine.status), keeps running by \(tier.rawValue)")
+        diagnostics("App: in front. Run \(engine.status), keeps running by \(tier.rawValue)")
         advance()
         // Being foreground-active is the only state in which a session may be started, so
         // this is the moment to re-take a tier the system took away. Idempotent: the attach
@@ -715,12 +779,12 @@ final class RunCoordinator {
         guard !hasRequestedPermissions else { return }
         hasRequestedPermissions = true
         canNotify = await notifications.requestAuthorization()
-        RunDiagnostics.shared.note("Permissions: notifications \(canNotify ? "allowed" : "NOT ALLOWED")")
+        diagnostics("Permissions: notifications \(canNotify ? "allowed" : "NOT ALLOWED")")
         if workout.isSupported {
             let asked = await workout.requestAuthorization()
-            RunDiagnostics.shared.note("Permissions: Health request \(asked ? "answered" : "failed")")
+            diagnostics("Permissions: Health request \(asked ? "answered" : "failed")")
         } else {
-            RunDiagnostics.shared.note("Permissions: Health not available on this device")
+            diagnostics("Permissions: Health not available on this device")
         }
     }
 

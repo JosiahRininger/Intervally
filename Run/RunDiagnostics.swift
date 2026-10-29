@@ -7,8 +7,9 @@ import Foundation
 
 /// A record of what a run went through, kept on the device for the user to share: Health
 /// access, each workout session asked for and what HealthKit said, the app moving between
-/// foreground and background, and the cues. The unified log needs a Mac and a cable to read;
-/// this needs neither, and shows why a run fell silent or never reached Health.
+/// foreground and background, the cues, and how late the run's interval changes were
+/// announced (`BoundaryTimingTally`). The unified log needs a Mac and a cable to read; this
+/// needs neither, and shows why a run fell silent or never reached Health.
 ///
 /// Thread-safe, as HealthKit calls back on its own queues. Nothing leaves the device unless
 /// the user shares it from Settings > Apple Health > Diagnostics.
