@@ -345,8 +345,10 @@ Widget/                    Smart Stack complication + Control Center control
 Tests/                     Swift Testing, watch app
 PhoneTests/                Swift Testing, iPhone app
 SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
-TestSupport/               helpers for both bundles: the App Store listing's parser, and
-                           VirtualTime, a clock only the test moves, with a run's ticker on it
+TestSupport/               helpers for both bundles: the App Store listing's parser;
+                           VirtualTime, a clock only the test moves, with a run's ticker on it;
+                           and Fixtures/, what 1.2 stored, sent and decided, frozen so later
+                           versions are held to it (Fixture.swift has the rules)
 AppStore/                  Metadata.md (the App Store Connect listing, checked by tests) and
                            Screenshots/ (iPhone 6.9" and 6.3", Watch, the purchase's review
                            shot, and compose.py, which captions the iPhone captures)

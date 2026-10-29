@@ -1,0 +1,162 @@
+{
+  "command-end" : {
+    "command" : {
+      "_0" : {
+        "end" : {
+
+        }
+      }
+    }
+  },
+  "command-pause" : {
+    "command" : {
+      "_0" : {
+        "pause" : {
+
+        }
+      }
+    }
+  },
+  "command-refresh" : {
+    "command" : {
+      "_0" : {
+        "refresh" : {
+
+        }
+      }
+    }
+  },
+  "command-resume" : {
+    "command" : {
+      "_0" : {
+        "resume" : {
+
+        }
+      }
+    }
+  },
+  "command-skip" : {
+    "command" : {
+      "_0" : {
+        "skip" : {
+          "phase" : 2
+        }
+      }
+    }
+  },
+  "state-finished" : {
+    "state" : {
+      "_0" : {
+        "health" : "saved",
+        "status" : "finished",
+        "workout" : {
+          "activity" : "outdoorRun",
+          "cooldownSeconds" : 300,
+          "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+          "name" : "Hill Sprints",
+          "phaseLabels" : {
+            "rest" : {
+              "name" : "Walk",
+              "symbol" : "walk"
+            },
+            "work" : {
+              "name" : "Sprint",
+              "symbol" : "sprint"
+            }
+          },
+          "prepareSeconds" : 15,
+          "restSeconds" : 90,
+          "rounds" : 6,
+          "warmupSeconds" : 300,
+          "workSeconds" : 30
+        }
+      }
+    }
+  },
+  "state-paused" : {
+    "state" : {
+      "_0" : {
+        "pausedElapsed" : 330.5,
+        "status" : "paused",
+        "workout" : {
+          "activity" : "outdoorRun",
+          "cooldownSeconds" : 300,
+          "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+          "name" : "Hill Sprints",
+          "phaseLabels" : {
+            "rest" : {
+              "name" : "Walk",
+              "symbol" : "walk"
+            },
+            "work" : {
+              "name" : "Sprint",
+              "symbol" : "sprint"
+            }
+          },
+          "prepareSeconds" : 15,
+          "restSeconds" : 90,
+          "rounds" : 6,
+          "warmupSeconds" : 300,
+          "workSeconds" : 30
+        }
+      }
+    }
+  },
+  "state-running" : {
+    "state" : {
+      "_0" : {
+        "anchor" : 814881600,
+        "status" : "running",
+        "workout" : {
+          "activity" : "outdoorRun",
+          "cooldownSeconds" : 300,
+          "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+          "name" : "Hill Sprints",
+          "phaseLabels" : {
+            "rest" : {
+              "name" : "Walk",
+              "symbol" : "walk"
+            },
+            "work" : {
+              "name" : "Sprint",
+              "symbol" : "sprint"
+            }
+          },
+          "prepareSeconds" : 15,
+          "restSeconds" : 90,
+          "rounds" : 6,
+          "warmupSeconds" : 300,
+          "workSeconds" : 30
+        }
+      }
+    }
+  },
+  "state-stopped" : {
+    "state" : {
+      "_0" : {
+        "status" : "stopped",
+        "workout" : {
+          "activity" : "outdoorRun",
+          "cooldownSeconds" : 300,
+          "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+          "name" : "Hill Sprints",
+          "phaseLabels" : {
+            "rest" : {
+              "name" : "Walk",
+              "symbol" : "walk"
+            },
+            "work" : {
+              "name" : "Sprint",
+              "symbol" : "sprint"
+            }
+          },
+          "prepareSeconds" : 15,
+          "restSeconds" : 90,
+          "rounds" : 6,
+          "warmupSeconds" : 300,
+          "workSeconds" : 30
+        }
+      }
+    }
+  }
+}

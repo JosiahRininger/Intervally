@@ -1,0 +1,25 @@
+{
+  "anchor" : 814881930.5,
+  "pausedElapsed" : 330.5,
+  "workout" : {
+    "activity" : "outdoorRun",
+    "cooldownSeconds" : 300,
+    "id" : "5B2E8C41-3F6A-4D17-9A0C-1E7D4B6F2A81",
+    "name" : "Hill Sprints",
+    "phaseLabels" : {
+      "rest" : {
+        "name" : "Walk",
+        "symbol" : "walk"
+      },
+      "work" : {
+        "name" : "Sprint",
+        "symbol" : "sprint"
+      }
+    },
+    "prepareSeconds" : 15,
+    "restSeconds" : 90,
+    "rounds" : 6,
+    "warmupSeconds" : 300,
+    "workSeconds" : 30
+  }
+}
