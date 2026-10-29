@@ -891,6 +891,63 @@ struct RunCoordinatorTickerTests {
         #expect(time.requested.count == asked + 1)
         coordinator.stopAndExit()
     }
+
+    @Test("A ticker whose run has ended without it stops itself rather than waking every 10 ms")
+    func endedRunStopsTheTicker() async {
+        let (coordinator, _, _, _, _, _, haptics) = makeCoordinator()
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        // Finished behind the coordinator's back, so nothing calls `stopTicking()`. The clock
+        // then sits at the run's end, with no deadline left to sleep until.
+        while coordinator.engine.status == .running { coordinator.engine.skipPhase() }
+        #expect(coordinator.engine.status == .finished)
+        let asked = time.requested.count
+        let played = haptics.played.count
+
+        time.advanceToNextWake()
+        #expect(await waitUntil { !coordinator.isTicking }, "The ticker let go of itself")
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(time.requested.count == asked, "No further sleep")
+        #expect(time.sleeping == 0)
+        #expect(haptics.played.count == played, "Nothing announced")
+        coordinator.stopAndExit()
+    }
+
+    @Test("A phase skipped to while paused plays on the first wake after Resume, half a second on as in 1.2")
+    func skipWhilePausedPlaysAfterResume() async throws {
+        let (coordinator, store, _, _, _, _, haptics) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+        #expect(coordinator.engine.hasPendingBoundary)
+        coordinator.togglePause()
+        // Beside the sleep the pause cut short, which wakes at 0.5 s and stops there.
+        #expect(await waitUntil { time.sleeping == 2 })
+        let rest = coordinator.engine.plan.phases[1]
+        #expect(haptics.played.map(\.event) == [.phaseBegan(coordinator.engine.plan.phases[0])],
+                "Nothing played at Resume itself")
+
+        let wakes = await coordinator.tick(on: time) { haptics.played.count == 2 }
+        #expect(wakes.last.map { abs($0 - 0.8) < 0.000_001 } == true, "The first wake after Resume, at 0.8 s")
+        #expect(haptics.played.last?.event == .phaseBegan(rest))
+        #expect(coordinator.engine.hasPendingBoundary == false)
+        coordinator.stopAndExit()
+    }
 }
 
 /// The run's notes, as its diagnostics would get them.
@@ -966,6 +1023,37 @@ struct RunCoordinatorTimingLineTests {
         #expect(notes.timing == [
             "Run timing: 1 boundary, median 2.50 s late, max 2.50 s; 1 over 1.0 s (one tap instead of the full pattern)",
         ])
+    }
+
+    @Test("A phase skipped to while paused waits half a second after Resume on purpose, and isn't counted late")
+    func skipWhilePausedIsNotLate() async {
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.diagnostics = { [notes] in notes.note($0) }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+        coordinator.togglePause()
+        #expect(await waitUntil { time.sleeping == 2 })
+        _ = await coordinator.tick(on: time) { coordinator.engine.status != .running }
+
+        #expect(coordinator.engine.status == .finished)
+        // The second work and the finish. The rest, announced 0.5 s after Resume, is left out.
+        #expect(notes.timing == [
+            "Run timing: 2 boundaries, median 0.01 s late, max 0.01 s; 0 over 1.0 s (one tap instead of the full pattern)",
+        ])
+        coordinator.stopAndExit()
     }
 
     @Test("A run ended before any change has no timing to give; its other notes go the same way")

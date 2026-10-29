@@ -194,12 +194,19 @@ final class RunCoordinator {
                 guard let self, !Task.isCancelled else { return }
                 self.advance()
             }
+            // Out of the loop uncancelled, the run stopped without `stopTicking()`. Let go of
+            // the ticker, so `isTicking` says so and the next run can start one.
+            if !Task.isCancelled { self?.ticker = nil }
         }
     }
 
     /// How long the ticker sleeps from now: until the next countdown second, interval change
-    /// or finish, padded by `tickDelay`.
-    private func nextTickDelay() -> TimeInterval {
+    /// or finish, padded by `tickDelay`. Nil once the run is no longer running: every pause,
+    /// finish and stop ends the loop through `stopTicking()`, and should one ever be missed,
+    /// a finished run's clock sits at its end, where the ticker would wake every 10 ms for
+    /// good rather than every half second as in 1.2.
+    private func nextTickDelay() -> TimeInterval? {
+        guard engine.status == .running else { return nil }
         let elapsed = engine.elapsed
         // At the end already: the next advance finishes the run.
         guard let next = engine.plan.nextEventElapsed(afterElapsed: elapsed) else { return Self.tickDelay(0) }
@@ -210,6 +217,13 @@ final class RunCoordinator {
         ticker?.cancel()
         ticker = nil
     }
+
+    /// Set by a Resume with a phase change already due, which a skip while paused leaves,
+    /// until the next advance announces it. The ticker's first wake does that, half a second
+    /// after Resume as in 1.2, rather than at once: on the watch Resume plays its own tap, and
+    /// the phase's tap mustn't land on top of it. That half second is the gap kept on purpose,
+    /// not the clock noticed late, so the run's timing line leaves this change out.
+    @ObservationIgnored private var boundaryDueAtResume = false
 
     /// - Parameters:
     ///   - pro: No default, so no test can run against the real store by accident.
@@ -493,6 +507,8 @@ final class RunCoordinator {
         // `engine.elapsed` this is not clamped to the plan, so a finish noticed late says so.
         let wall = engine.anchor.map { engine.now().timeIntervalSince($0) }
         dispatch(engine.advance(), wallElapsed: wall)
+        // Whatever was due at Resume has been announced now.
+        boundaryDueAtResume = false
     }
 
     /// Jumps to the next phase. The boundary haptic and Health segment fire exactly as if
@@ -547,8 +563,8 @@ final class RunCoordinator {
         switch event {
         case .phaseBegan, .finished:
             // Only a change the clock noticed says how promptly it was announced: a start or
-            // a skip is on time by construction.
-            if wallElapsed != nil { timing.record(lateness: context.lateness) }
+            // a skip is on time by construction, and one due at Resume waits on purpose.
+            if wallElapsed != nil, !boundaryDueAtResume { timing.record(lateness: context.lateness) }
         case .countdown:
             // A tick carries no lateness of its own (`BoundaryContext.immediate`).
             break
@@ -635,6 +651,7 @@ final class RunCoordinator {
             playCue(.stop)
         case .paused:
             engine.resume()
+            boundaryDueAtResume = engine.hasPendingBoundary
             workout.resume()
             playCue(.start)
             startTicking()
