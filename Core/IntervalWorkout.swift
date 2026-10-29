@@ -25,7 +25,7 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
     var cooldownSeconds: Int
     /// What Health records it as. Nil until chosen, and always nil from a version that
     /// predates the choice, which is how a merge tells "never set" from a choice
-    /// (`PresetRecord.merged`). Read `activityKind`.
+    /// (`fillingAbsent(from:)`). Read `activityKind`.
     var activity: WorkoutActivity?
     /// The phases the preset renamed or gave another figure, by `IntervalPhase.Kind` raw
     /// value. Nil from a version that predates them; once touched, emptied rather than set
@@ -68,7 +68,7 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
     private enum CodingKeys: String, CodingKey {
         case id, name, prepareSeconds, warmupSeconds, workSeconds, restSeconds, rounds, cooldownSeconds
         // Optional, so encoded only once chosen: a preset never given one encodes exactly
-        // as it did before there was a choice.
+        // as it did before there was a choice. Each one goes in `fillingAbsent(from:)` too.
         case activity
         case phaseLabels
     }
@@ -108,6 +108,24 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         init(from decoder: Decoder) throws {
             label = try? PhaseLabel(from: decoder)
         }
+    }
+
+    // MARK: - Merging
+
+    /// This preset with each optional field it lacks taken from `other`: today `activity` and
+    /// `phaseLabels`. A merge fills the winning copy from the losing one this way
+    /// (`PresetRecord.merged`), so an edit from a version that predates a field never resets
+    /// it on either device.
+    ///
+    /// Every Optional stored property added later must be listed here, encoded only when
+    /// non-nil, and never set back to nil once touched (emptied instead, as `setLabel` does):
+    /// nil is what a version that predates the field sends, so here it can only mean "not
+    /// known", never "cleared". `IntervalWorkoutTests` fails for one that is left out.
+    func fillingAbsent(from other: IntervalWorkout) -> IntervalWorkout {
+        var filled = self
+        filled.activity = activity ?? other.activity
+        filled.phaseLabels = phaseLabels ?? other.phaseLabels
+        return filled
     }
 
     // MARK: - Limits
