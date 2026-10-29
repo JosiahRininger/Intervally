@@ -75,24 +75,25 @@ struct PresetRecord: Codable, Equatable, Sendable {
 
     /// Each register keeps the later write. On an exact tie the receiver keeps its own, as
     /// `Register` does.
+    ///
+    /// The winning contents then take each optional field they lack from the other copy
+    /// (`IntervalWorkout.fillingAbsent(from:)`), whichever copy won, and on a tie too, so
+    /// merging either way round gives the same record. A version that predates a field
+    /// writes every edit without it: its later edit still wins, but must not reset the
+    /// activity chosen on the other device to HIIT. A tie is one write, one copy filled in
+    /// by a merge and one not; without filling the gap each side would keep its own copy,
+    /// never agree, and push the preset back and forth for good.
+    ///
+    /// A filled copy reads as if its own write had set the field, so a copy without one that
+    /// meets two older copies holding different values keeps the first it meets. That takes
+    /// a third copy, or both devices editing the preset at once, and the two still agree in
+    /// the end.
     func merged(with other: PresetRecord) -> PresetRecord {
+        let (winner, loser) = other.stamp > stamp ? (other, self) : (self, other)
         var out = self
-        if other.stamp > stamp {
-            out.workout = other.workout
-            // A version that predates the activity choice writes every edit without one. Its
-            // later edit still wins, but must not reset the activity chosen here to HIIT.
-            if out.workout.activity == nil { out.workout.activity = workout.activity }
-            if out.workout.phaseLabels == nil { out.workout.phaseLabels = workout.phaseLabels }
-            out.deleted = other.deleted
-            out.stamp = other.stamp
-        } else if other.stamp == stamp {
-            // The same write, one copy filled in by the merge above and one not: the device
-            // that kept the activity or labels sends that write back at the same stamp.
-            // Without filling the gap here each side would keep its own copy on the tie,
-            // never agree, and push the preset back and forth for good.
-            if out.workout.activity == nil { out.workout.activity = other.workout.activity }
-            if out.workout.phaseLabels == nil { out.workout.phaseLabels = other.workout.phaseLabels }
-        }
+        out.workout = winner.workout.fillingAbsent(from: loser.workout)
+        out.deleted = winner.deleted
+        out.stamp = winner.stamp
         if other.orderStamp > orderStamp {
             out.order = other.order
             out.orderStamp = other.orderStamp

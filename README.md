@@ -235,6 +235,12 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
   later edit. The three starters have
   fixed IDs, so two fresh installs merge to three presets, not six. A merge is commutative,
   idempotent and associative (`SyncDocumentTests` runs 2,000 seeded two-device histories).
+- **Older versions.** A field a later version adds is optional and sent only once set, and
+  a version that predates it saves every edit without it. So the merge fills the winning
+  copy's missing fields from the other copy, whichever is newer
+  (`IntervalWorkout.fillingAbsent(from:)`): an edit made on an older version still wins,
+  and never wipes what that version can't see. `SyncFuzzTests` varies every field, and runs
+  this version beside 1.1 and 1.2.
 - **How.** `WatchSync` sends the whole document with `updateApplicationContext(_:)`, both
   ways. It reaches an app that isn't running and replaces anything older still undelivered.
   The receiver merges, never replaces, and replies only when the merge holds something the
