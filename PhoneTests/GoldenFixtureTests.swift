@@ -138,21 +138,36 @@ private enum Replay {
     /// Every phase of those, the 3, 2, 1 and the finish, each with the voice on and off, on
     /// time, late, and late enough to be a catch-up that plays nothing. Beeps and the
     /// countdown are on, as they are until turned off.
+    ///
+    /// A phase's and the finish's context come from the coordinator's own `boundaryContext`,
+    /// so a change there shows up in these rows without this replay changing too. A 3, 2, 1
+    /// keeps its lateness by hand: the coordinator always calls it on time, which would hide
+    /// the cue plan's own rule that a late tick plays nothing.
     static func cues() -> [Fixture.Row<Boundary, Cue>] {
-        var boundaries: [(event: TimerEvent, rounds: Int, phaseDuration: TimeInterval?)] = []
-        for workout in cueWorkouts {
-            let plan = IntervalPlan(workout: workout)
-            boundaries += plan.phases.map { (.phaseBegan($0), plan.totalRounds, $0.duration) }
+        // When each boundary falls, so the coordinator can tell how late it was noticed.
+        var boundaries: [(event: TimerEvent, rounds: Int, at: TimeInterval, totalDuration: TimeInterval)] = []
+        let plans = cueWorkouts.map { IntervalPlan(workout: $0) }
+        for plan in plans {
+            boundaries += plan.phases.map { (.phaseBegan($0), plan.totalRounds, $0.start, plan.totalDuration) }
         }
-        boundaries += [3, 2, 1].map { (.countdown(secondsRemaining: $0), 2, nil) }
-        boundaries.append((.finished, 2, nil))
+        boundaries += [3, 2, 1].map { (.countdown(secondsRemaining: $0), 2, 0, 0) }
+        boundaries.append((.finished, 2, plans[0].totalDuration, plans[0].totalDuration))
 
         return boundaries.flatMap { boundary in
             [true, false].flatMap { voice in
                 [0, 1.0, 2.0].map { lateness in
+                    let context: BoundaryContext
+                    if case .countdown = boundary.event {
+                        context = BoundaryContext(lateness: lateness, phaseDuration: nil)
+                    } else {
+                        context = RunCoordinator.boundaryContext(
+                            for: boundary.event, wallElapsed: boundary.at + lateness,
+                            totalDuration: boundary.totalDuration
+                        )
+                    }
                     let cue = CuePlan.make(
                         for: boundary.event,
-                        context: BoundaryContext(lateness: lateness, phaseDuration: boundary.phaseDuration),
+                        context: context,
                         settings: CueSettings(voice: voice),
                         totalRounds: boundary.rounds
                     )

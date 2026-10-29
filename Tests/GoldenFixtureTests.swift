@@ -239,26 +239,30 @@ private enum Replay {
     /// On time, at the line the haptics draw for a catch-up, and past it.
     static let latenesses: [TimeInterval] = [0, 1.0, 2.0]
 
-    /// Every phase of both workouts and the finish, each with the context the coordinator
-    /// gives it, and the 3, 2, 1, which it always announces on time.
+    /// Every phase of both workouts and the finish, each noticed that late, and the 3, 2, 1.
+    /// Each context comes from the coordinator's own `boundaryContext`, so a change there
+    /// shows up in these rows without this replay changing too.
     static func taps() -> [Fixture.Row<Boundary, Taps>] {
         var boundaries: [(event: TimerEvent, rounds: Int, context: BoundaryContext)] = []
-        for workout in tapWorkouts {
-            let plan = IntervalPlan(workout: workout)
+        func add(_ event: TimerEvent, of plan: IntervalPlan, wallElapsed: TimeInterval?) {
+            let context = RunCoordinator.boundaryContext(
+                for: event, wallElapsed: wallElapsed, totalDuration: plan.totalDuration
+            )
+            boundaries.append((event, plan.totalRounds, context))
+        }
+        let plans = tapWorkouts.map { IntervalPlan(workout: $0) }
+        for plan in plans {
             for phase in plan.phases {
                 for lateness in latenesses {
-                    boundaries.append((
-                        .phaseBegan(phase), plan.totalRounds,
-                        BoundaryContext(lateness: lateness, phaseDuration: phase.duration)
-                    ))
+                    add(.phaseBegan(phase), of: plan, wallElapsed: phase.start + lateness)
                 }
             }
         }
         for lateness in latenesses {
-            boundaries.append((.finished, 2, BoundaryContext(lateness: lateness, phaseDuration: nil)))
+            add(.finished, of: plans[0], wallElapsed: plans[0].totalDuration + lateness)
         }
         for seconds in [3, 2, 1] {
-            boundaries.append((.countdown(secondsRemaining: seconds), 2, .immediate))
+            add(.countdown(secondsRemaining: seconds), of: plans[0], wallElapsed: nil)
         }
 
         return boundaries.flatMap { boundary in
