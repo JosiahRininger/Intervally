@@ -245,7 +245,14 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
   ways. It reaches an app that isn't running and replaces anything older still undelivered.
   The receiver merges, never replaces, and replies only when the merge holds something the
   sender lacks, so the two settle within two exchanges. A burst of edits, such as the crown
-  turning through values, goes as one send.
+  turning through values, goes as one send. At activation, if the other device's last
+  context still lacks writes this one holds (by ids and stamps, `SyncDocument.digest`), the
+  whole document goes again, once for that context: a send it never took, after a reinstall
+  say, doesn't wait for the next edit.
+- **Size.** Every preset goes in the document whole, deleted ones too (the empty-list repair
+  brings one back), so every field is bounded: the numbers by their ranges, the name at 40
+  characters (`IntervalWorkout.maxNameLength`). `PayloadBudgetTests` holds 99 presets and
+  200 deleted ones under 48 KB.
 - **The watch in the background.** A WatchConnectivity wake is held until the context has
   merged, and handed back after at most 15 s (`ConnectivityWakes`). The complication reloads
   only when the next workout changed.
@@ -257,7 +264,8 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
   value from a later version is kept and passed on, and shows as Classic.
 - **Never synced:** a run in progress (it carries its own copy of the workout), Pro (StoreKit
   answers on each device), the other settings and Health data. A stored document that won't
-  decode suspends sync rather than being overwritten.
+  decode suspends sync rather than being overwritten, and the iPhone's watch status says
+  workouts aren't syncing instead of "You're set".
 
 ## Themes
 

@@ -28,7 +28,8 @@ struct WatchSyncTests {
         sleep: @escaping @Sendable (Duration) async throws -> Void = neverSends
     ) -> (WatchSync, WorkoutStore) {
         let store = store ?? WorkoutStore(defaults: defaults)
-        let sync = WatchSync(store: store, transport: transport, sleep: sleep, now: { Date(timeIntervalSince1970: 5_000) })
+        // Sync's own defaults too: what activation answered is kept there.
+        let sync = WatchSync(store: store, transport: transport, sleep: sleep, now: { Date(timeIntervalSince1970: 5_000) }, defaults: defaults)
         return (sync, store)
     }
 

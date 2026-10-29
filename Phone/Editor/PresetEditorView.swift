@@ -274,6 +274,13 @@ struct PresetEditorView: View {
             .padding(.vertical, 12)
             .padding(.horizontal, 16)
             .tileBackground()
+            // Stops at the cap as it is typed, as a phase's name does, rather than cutting
+            // the name only once it is saved.
+            .onChange(of: name) { _, new in
+                if new.count > IntervalWorkout.maxNameLength {
+                    name = String(new.prefix(IntervalWorkout.maxNameLength))
+                }
+            }
             .onSubmit { commitName() }
             .onChange(of: nameFocused) { _, focused in
                 if !focused { commitName() }
@@ -315,15 +322,11 @@ struct PresetEditorView: View {
     /// empty name puts the old one back.
     private func commitName() {
         guard var workout else { return }
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            name = workout.name
-            return
-        }
-        name = trimmed
+        let committed = IntervalWorkout.committedName(name, fallback: workout.name)
+        name = committed
         // A rename is the tip followed as much as a tile is: it has done its job.
-        if trimmed != workout.name { tipSeen = true }
-        workout.name = trimmed
+        if committed != workout.name { tipSeen = true }
+        workout.name = committed
         store.update(workout)
     }
 

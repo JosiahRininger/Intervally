@@ -3,6 +3,7 @@
 //  Intervally
 //
 
+import CryptoKit
 import Foundation
 
 /// When a record was last written, and by which install. Ordered by `millis`, then
@@ -331,6 +332,22 @@ struct SyncDocument: Equatable, Sendable {
     private mutating func place(_ id: UUID, at order: Int64, stamp: SyncStamp) {
         presets[id]?.order = order
         presets[id]?.orderStamp = stamp
+    }
+
+    // MARK: - Digest
+
+    /// Which writes the document holds, hashed: each preset's id with the stamps of its
+    /// contents and of its place, and the selection's stamp. No contents, so a version that
+    /// drops a field it doesn't know digests its copy the same, and only a missing or older
+    /// write tells two digests apart. A device that has just merged another's document holds
+    /// all of it, so if their digests then differ, the other device lacks something.
+    var digest: String {
+        var listing = "selected \(selected.stamp.millis) \(selected.stamp.device)\n"
+        for record in presets.values.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+            listing += "\(record.id.uuidString) \(record.stamp.millis) \(record.stamp.device)"
+                + " \(record.orderStamp.millis) \(record.orderStamp.device)\n"
+        }
+        return SHA256.hash(data: Data(listing.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 }
 

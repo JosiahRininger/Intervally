@@ -26,7 +26,17 @@ enum PresetNaming {
             number = suffix + 1
         }
         let names = Set(taken)
-        while names.contains("\(stem) \(number)") { number += 1 }
-        return "\(stem) \(number)"
+        while names.contains(numbered(stem, number)) { number += 1 }
+        return numbered(stem, number)
+    }
+
+    /// "Tabata 2". A stem too long to leave room for the number under the cap
+    /// (`IntervalWorkout.maxNameLength`) is cut short instead: cutting the whole name would
+    /// cut off the number, and the copy would read exactly as the preset it came from.
+    private static func numbered(_ stem: String, _ number: Int) -> String {
+        let suffix = " \(number)"
+        let room = max(0, IntervalWorkout.maxNameLength - suffix.count)
+        let cut = String(stem.prefix(room)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return cut + suffix
     }
 }

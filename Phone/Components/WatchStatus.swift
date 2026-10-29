@@ -17,11 +17,20 @@ struct WatchStatusContent: Equatable {
     /// unless the watch is paired and the app isn't on it.
     let installSteps: [String]
     /// Send to Watch Now: a forced send, for a watch that seems to have missed something.
-    /// Only when there is a watch app to send to.
+    /// Only when there is a watch app to send to, and sync isn't suspended.
     let offersSendNow: Bool
 
-    init(peer: PeerState, lastSentAt: Date?, lastReceivedAt: Date?) {
+    /// - Parameter syncSuspended: the presets stored here didn't decode, so sync sends and
+    ///   takes nothing until a launch reads them (`WatchSync.isSuspended`). Said in place of
+    ///   "You're set" and "Looking for your Apple Watch", which would read as all being well;
+    ///   in the other states the watch itself needs seeing to first.
+    init(peer: PeerState, lastSentAt: Date?, lastReceivedAt: Date?, syncSuspended: Bool = false) {
+        let notSyncing = syncSuspended && (peer == .ready || peer == .activating)
         switch peer {
+        case _ where notSyncing:
+            systemImage = "exclamationmark.arrow.triangle.2.circlepath"
+            title = "Workouts aren't syncing"
+            detail = "Your workouts are saved on this iPhone, but they can't be sent to your watch right now."
         case .unsupported:
             systemImage = "applewatch.slash"
             title = "Apple Watch isn't available"
@@ -46,7 +55,8 @@ struct WatchStatusContent: Equatable {
                 ? "Open Intervally on your watch to bring your presets over."
                 : "Workouts you change here show up on your watch."
         }
-        lastSynced = peer == .ready ? [lastSentAt, lastReceivedAt].compactMap { $0 }.max() : nil
+        // A last sync time would read as sync still working.
+        lastSynced = peer == .ready && !notSyncing ? [lastSentAt, lastReceivedAt].compactMap { $0 }.max() : nil
         installSteps = peer == .appNotInstalled
             ? [
                 "Open the Watch app on this iPhone.",
@@ -54,7 +64,7 @@ struct WatchStatusContent: Equatable {
                 "Tap Install next to Intervally.",
             ]
             : []
-        offersSendNow = peer == .ready
+        offersSendNow = peer == .ready && !notSyncing
     }
 
     /// "Synced just now", "Last synced 5 minutes ago"; nil before the first exchange.

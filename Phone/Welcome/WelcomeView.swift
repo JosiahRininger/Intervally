@@ -74,7 +74,8 @@ struct WelcomeView: View {
                         WatchStatusCard(content: WatchStatusContent(
                             peer: sync.peer,
                             lastSentAt: sync.lastSentAt,
-                            lastReceivedAt: sync.lastReceivedAt
+                            lastReceivedAt: sync.lastReceivedAt,
+                            syncSuspended: sync.isSuspended
                         ))
                     }
                 }

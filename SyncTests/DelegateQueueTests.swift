@@ -21,8 +21,10 @@ struct DelegateQueueTests {
     let transport = FakeTransport()
 
     private func makeSync() -> (WatchSync, WorkoutStore) {
-        let store = WorkoutStore(defaults: makeTestDefaults())
-        return (WatchSync(store: store, transport: transport, sleep: { _ in throw CancellationError() }), store)
+        let defaults = makeTestDefaults()
+        let store = WorkoutStore(defaults: defaults)
+        // Sync's own defaults too: what activation answered is kept there.
+        return (WatchSync(store: store, transport: transport, sleep: { _ in throw CancellationError() }, defaults: defaults), store)
     }
 
     /// Calls `body` with the sync seen only as a `WCSessionDelegate`, from a background serial
