@@ -449,6 +449,39 @@ struct ViewSources {
         }
     }
 
+    /// Swipe actions and menus that set a pending delete, `deleting = workout`, in a file
+    /// with no question bound to it that deletes: their Delete would do nothing at all.
+    func unansweredDeletes() -> [SourceFinding] {
+        pendingDeletes().filter { !$0.answered }.map(\.finding)
+    }
+
+    /// Each pending delete a swipe or a menu sets, and whether a presenter in its file reads
+    /// that state and calls a delete.
+    func pendingDeletes() -> [(finding: SourceFinding, answered: Bool)] {
+        files.flatMap { file in
+            let source = file.source
+            let questions = source.calls(of: presenters).compactMap { source.extent(ofCallAt: $0) }
+            return source.calls(of: ["swipeActions", "contextMenu"]).flatMap { name -> [(finding: SourceFinding, answered: Bool)] in
+                guard let extent = source.extent(ofCallAt: name) else { return [] }
+                return extent.compactMap { i -> (finding: SourceFinding, answered: Bool)? in
+                    let state = source.tokens[i]
+                    guard state.kind == .word, state.text.lowercased().hasPrefix("delet"),
+                          source.has("=", at: i + 1), !source.has("=", at: i + 2), !source.has("=", at: i - 1) else { return nil }
+                    let answered = questions.contains { question in
+                        question.contains { source.has(state.text, at: $0) }
+                            && question.contains { j in
+                                source.tokens[j].kind == .word && source.tokens[j].text.hasPrefix("delete") && source.has("(", at: j + 1)
+                            }
+                    }
+                    let finding = SourceFinding(
+                        file: file.path, line: state.line, what: "\(state.text) in .\(source.tokens[name].text) asks nothing"
+                    )
+                    return (finding, answered)
+                }
+            }
+        }
+    }
+
     /// Destructive buttons in swipe actions. SwiftUI takes the row off the list as one is
     /// tapped, so one that only asks loses the row on Cancel, and the delete that follows
     /// asks the list to remove it again, which crashes it.

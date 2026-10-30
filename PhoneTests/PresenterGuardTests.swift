@@ -39,6 +39,16 @@ struct PresenterGuardTests {
         #expect(views.rowActionsThatDelete() == [])
     }
 
+    /// The watch's dialog has no UI test in 1.3, so this is what notices it gone.
+    @Test("A row's Delete that only asks has a question to ask, whose Delete deletes")
+    func deletesAreAsked() {
+        #expect(views.unansweredDeletes() == [])
+        // So the rule above has the library's and the watch's swipes to read.
+        #expect(Set(views.pendingDeletes().map(\.finding.file)).isSuperset(of: [
+            "Phone/Workouts/WorkoutsView.swift", "Sources/Views/PresetListView.swift",
+        ]))
+    }
+
     @Test("A swipe with Delete in it stops at its actions")
     func noFullSwipeDelete() {
         #expect(views.fullSwipeDeletes() == [])
@@ -227,5 +237,62 @@ struct PresenterGuardRuleTests {
         #expect(snippet.rowActionsThatDelete() == [])
         #expect(snippet.fullSwipeDeletes() == [])
         #expect(snippet.destructiveSwipes() == [])
+    }
+
+    @Test("A pending delete with no question bound to it, or one whose Delete deletes nothing, is found")
+    func unanswered() {
+        let unasked = views("""
+            List { Row() }
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button { deleting = workout } label: { Label("Delete", systemImage: "trash") }
+                }
+                .confirmationDialog("Rename?", isPresented: $renaming) {
+                    Button("Rename") { store.rename(workout) }
+                }
+            """)
+        #expect(unasked.unansweredDeletes().map(\.line) == [3])
+        let deletesNothing = views("""
+            List { Row() }
+                .contextMenu {
+                    Button { deleting = workout } label: { Label("Delete", systemImage: "trash") }
+                }
+                .confirmationDialog("Delete?", isPresented: Binding { deleting != nil } set: { _ in }) {
+                    Button("Cancel", role: .cancel) {}
+                }
+            """)
+        #expect(deletesNothing.unansweredDeletes().map(\.line) == [3])
+    }
+
+    @Test("A pending delete answered by a dialog, an alert or the app's own question passes")
+    func answered() {
+        let snippet = views("""
+            extension View {
+                func confirmsDelete(of pending: Binding<IntervalWorkout?>, delete: @escaping (IntervalWorkout) -> Void) -> some View {
+                    alert("", isPresented: .constant(true)) { Button("Delete") { delete(pending.wrappedValue!) } }
+                }
+            }
+            struct Library: View {
+                var body: some View {
+                    List { Row() }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button { deleting = workout } label: { Label("Delete", systemImage: "trash") }
+                        }
+                        .confirmsDelete(of: $deleting) { actions.delete($0) }
+                }
+            }
+            struct Presets: View {
+                var body: some View {
+                    List { Row() }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button { deleting = workout } label: { Label("Delete", systemImage: "trash") }
+                        }
+                        .confirmationDialog("", isPresented: Binding { deleting != nil } set: { _ in }, presenting: deleting) { workout in
+                            Button("Delete", role: .destructive) { store.delete(workout) }
+                        }
+                }
+            }
+            """)
+        #expect(snippet.pendingDeletes().map(\.finding.line) == [10, 19])
+        #expect(snippet.unansweredDeletes() == [])
     }
 }
