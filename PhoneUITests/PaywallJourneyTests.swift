@@ -70,4 +70,20 @@ final class PaywallJourneyTests: XCTestCase {
         XCTAssertEqual(presets.count, before, "A preset was added past the free limit")
         XCTAssertFalse(app.reveal(app.buttons["workouts.preset.New Workout"], swipes: 2), "A preset was added past the free limit")
     }
+
+    /// The library's own Duplicate, apart from the editor's: its paywall is the one the
+    /// Workouts screen tells apart from +'s. Opened directly, as a card's menu makes XCUITest
+    /// wait a minute for its animations (`PresetDeleteTests`).
+    func testLibraryDuplicatePaywallHasNoEditInstead() throws {
+        let app = PhoneApp.launch(["-qaOpen", "duplicatePaywall"])
+        XCTAssertTrue(app.staticTexts["Intervally Pro"].firstMatch.waitForExistence(timeout: 10), "The paywall didn't open")
+        XCTAssertTrue(app.buttons["Close"].firstMatch.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["paywall.editInstead"].exists, "Edit a Starter Instead on the paywall from Duplicate")
+        app.terminate()
+
+        // The same screen's paywall from + offers it: the check above is of the sheet, not of a
+        // paywall that never shows it.
+        let add = PhoneApp.launch(["-qaOpen", "paywall"])
+        XCTAssertTrue(add.buttons["paywall.editInstead"].waitForExistence(timeout: 10), "No Edit a Starter Instead on the paywall from +")
+    }
 }

@@ -319,14 +319,14 @@ struct WorkoutsView: View {
     }
 
     private func editInsteadAction(on sheet: Sheet) -> (() -> Void)? {
-        guard sheet.offersEditInstead else { return nil }
-        return editInstead
+        guard sheet.offersEditInstead, let starter = actions.starterToEdit else { return nil }
+        return { editInstead(starter) }
     }
 
     /// Edit a Starter Instead, on the paywall from + at the free limit: the paywall closes and
-    /// a starter opens in its editor (`PresetActions.starterToEdit`). Nothing is added.
-    private func editInstead() {
-        followUp.instead(.edit(actions.starterToEdit.id))
+    /// `starter` opens in its editor (`PresetActions.starterToEdit`). Nothing is added.
+    private func editInstead(_ starter: IntervalWorkout) {
+        followUp.instead(.edit(starter.id))
         sheet = nil
     }
 

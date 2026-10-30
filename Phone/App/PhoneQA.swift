@@ -295,6 +295,8 @@ enum QAScreen: String, CaseIterable, Sendable {
     case bookends
     /// The paywall from + at the free limit.
     case paywall
+    /// The paywall from Duplicate in the library at the free limit.
+    case duplicatePaywall
     case settings
     /// Settings > Apple Watch.
     case watch
@@ -350,6 +352,7 @@ struct WorkoutsQAOpen: ViewModifier {
             switch screen {
             case .editor, .picker, .bookends: path = [.editor(store.selected.id, isNew: false)]
             case .paywall: sheet = .paywall
+            case .duplicatePaywall: sheet = .duplicatePaywall
             case .settings, .watch, .pro, .health, .theme, .sounds: sheet = .settings
             case .history, .session: break
             }
