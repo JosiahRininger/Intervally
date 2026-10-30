@@ -36,6 +36,14 @@ final class FakeCueOutput: CueOutput {
         askedRendered = phrases
         return phrasesRendered
     }
+    /// Every sample Hear the Coach asked to play, in order.
+    private(set) var previewed: [[String]] = []
+    /// What a sample answers; nil plays every phrase for 50 ms, as if each were rendered.
+    var previewAnswer: CoachSample?
+    func preview(_ phrases: [String]) async -> CoachSample {
+        previewed.append(phrases)
+        return previewAnswer ?? .played(phrases, seconds: 0.05)
+    }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
     /// Whether the cues can sound, reported at every hold as the real output does.

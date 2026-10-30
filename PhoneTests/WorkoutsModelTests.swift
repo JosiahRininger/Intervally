@@ -182,6 +182,16 @@ struct WorkoutsModelTests {
         #expect(followUp.closed() == nil, "Only once")
     }
 
+    @Test("Edit a Starter Instead runs as the paywall closes, with no unlock, in place of the add")
+    func followUpInstead() {
+        var followUp = PaywallFollowUp<WorkoutsView.FollowUp>()
+        let classic = WorkoutStore.starterWorkouts[0].id
+        followUp.open(for: .addNew)
+        followUp.instead(.edit(classic))
+        #expect(followUp.closed() == .edit(classic))
+        #expect(followUp.closed() == nil, "Only once")
+    }
+
     @Test("An unlock with no paywall open for anything leaves nothing to run")
     func unlockWithoutPaywall() {
         var followUp = PaywallFollowUp<WorkoutsView.FollowUp>()

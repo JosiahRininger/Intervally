@@ -68,29 +68,37 @@ struct PresetActions {
 }
 
 /// A paywall opened on the way to something, and that something, held while the paywall is
-/// up. It runs once the paywall closes, and only if Pro was unlocked there: backing out of
-/// the paywall adds nothing and opens nothing.
+/// up. It runs once the paywall closes, and only if Pro was unlocked there, or the paywall's
+/// way on without Pro was taken: backing out of the paywall adds nothing and opens nothing.
 struct PaywallFollowUp<Action: Equatable>: Equatable {
     /// What the paywall was opened for.
     private(set) var waiting: Action?
-    private var isUnlocked = false
+    /// Whether `waiting` runs once the paywall closes.
+    private var runs = false
 
     mutating func open(for action: Action) {
         waiting = action
-        isUnlocked = false
+        runs = false
     }
 
     /// A purchase or a restore on that paywall unlocked Pro.
     mutating func unlocked() {
-        isUnlocked = waiting != nil
+        runs = waiting != nil
+    }
+
+    /// The paywall's way on without Pro was tapped (Edit a Starter Instead): `action` runs
+    /// once it closes, in place of what it was opened for.
+    mutating func instead(_ action: Action) {
+        waiting = action
+        runs = true
     }
 
     /// The paywall has closed: what to finish now, at most once.
     mutating func closed() -> Action? {
         defer {
             waiting = nil
-            isUnlocked = false
+            runs = false
         }
-        return isUnlocked ? waiting : nil
+        return runs ? waiting : nil
     }
 }

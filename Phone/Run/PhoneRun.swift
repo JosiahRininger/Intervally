@@ -266,6 +266,12 @@ final class PhoneRun {
 
     @ObservationIgnored private var sampleRelease: Task<Void, Never>?
 
+    /// Hear the Coach, for a free user on the paywall or in Sounds & Voice. It hands its audio
+    /// back itself once it has played.
+    func hearCoach() async -> CoachSample {
+        await cues.previewCoach()
+    }
+
     /// The run screen's hint to turn the volume up: the cues are on, and too quiet to hear.
     var isVolumeLow: Bool {
         coordinator.engine.isActive && cues.isQuiet(atVolume: mediaVolume)

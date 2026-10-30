@@ -34,6 +34,8 @@ struct SoundsSettingsView: View {
     @AppStorage(CueSettings.Key.countdown, store: SharedDefaults.suite) private var countdown = true
     @AppStorage(CueSettings.Key.voice, store: SharedDefaults.suite) private var voice = true
     @AppStorage(CueSettings.Key.keepAwake, store: SharedDefaults.suite) private var keepAwake = true
+    /// What the last Hear the Coach needs said under it.
+    @State private var coachNote: String?
 
     var body: some View {
         List {
@@ -57,8 +59,21 @@ struct SoundsSettingsView: View {
                 }
                 .accessibilityHint(pro.isPro ? "" : "Opens Intervally Pro")
                 .accessibilityIdentifier("sounds.voice")
+                // Heard before buying: with Pro, every run plays it.
+                if !pro.isPro {
+                    Button(action: hearCoach) {
+                        Label(CoachSample.title, systemImage: "waveform")
+                    }
+                    .accessibilityIdentifier("sounds.hearCoach")
+                }
             } footer: {
-                Text("Calls out each interval as it starts, by the name you gave it: Work, Rest, Last round.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Calls out each interval as it starts, by the name you gave it: Work, Rest, Last round.")
+                    if let coachNote, !pro.isPro {
+                        Text(coachNote)
+                            .foregroundStyle(.primary)
+                    }
+                }
             }
 
             Section {
@@ -99,6 +114,14 @@ struct SoundsSettingsView: View {
             } else {
                 voice = on
             }
+        }
+    }
+
+    private func hearCoach() {
+        Task {
+            let sample = await run.hearCoach()
+            coachNote = sample.note
+            if let note = sample.note { AccessibilityNotification.Announcement(note).post() }
         }
     }
 }
