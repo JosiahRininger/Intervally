@@ -192,26 +192,26 @@ struct WorkoutsModelTests {
         #expect(followUp.closed() == nil, "Only once")
     }
 
-    @Test("Edit a Starter Instead opens the starter up next, else the first starter left, else what is up next")
+    @Test("Edit a Starter Instead opens the starter up next, else the first starter left, and isn't offered with none left")
     func starterToEdit() {
         let actions = makeActions()
         let store = actions.store
         let starters = WorkoutStore.starterWorkouts
-        #expect(actions.starterToEdit.id == starters[0].id, "A fresh install: Classic, up next")
+        #expect(actions.starterToEdit?.id == starters[0].id, "A fresh install: Classic, up next")
 
         actions.putOnWatch(store.workouts[1])
-        #expect(actions.starterToEdit.id == starters[1].id, "The starter up next")
+        #expect(actions.starterToEdit?.id == starters[1].id, "The starter up next")
 
         // A preset of their own up next, with a starter still in the library.
         store.delete(store.workouts[0])
         let own = store.add(IntervalWorkout(name: "Mine"), select: true)
         #expect(store.selectedID == own.id)
-        #expect(actions.starterToEdit.id == starters[1].id, "Not their own preset: a starter")
+        #expect(actions.starterToEdit?.id == starters[1].id, "Not their own preset: a starter")
 
-        // Every starter gone: what is up next.
+        // Every starter gone: no starter to edit, so the paywall doesn't offer one.
         store.delete(store.workouts.first { $0.id == starters[1].id }!)
         store.delete(store.workouts.first { $0.id == starters[2].id }!)
-        #expect(actions.starterToEdit.id == own.id)
+        #expect(actions.starterToEdit == nil, "Not their own preset under a starter's name")
         #expect(store.workouts.count == 1, "Nothing added")
     }
 

@@ -959,11 +959,15 @@ final class RunCoordinator {
         refreshBackstop()
         // As at the finish: the session ends next, and nothing keeps the app running after.
         flushDiagnostics()
+        // The audio, which kept the app running, goes back now, and the session ends before
+        // the save does: a phone locked straight after must not leave it to a suspended app.
+        let finished = beginBackgroundWork("Save the workout")
         Task {
             let saved = await workout.end(at: endedAt)
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
             saveSettled(snapshot)
             flushDiagnostics()
+            finished()
         }
     }
 

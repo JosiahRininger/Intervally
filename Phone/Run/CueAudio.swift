@@ -29,8 +29,12 @@ protocol CueOutput: AnyObject {
     /// Hear the Coach: `phrases` one after another, a moment apart. Each is played as
     /// rendered, or rendered first while nothing else plays; with other audio playing, one
     /// not rendered yet is left out, as in a run. The audio is taken to play it and kept:
-    /// whoever asked hands it back once it has played.
-    func preview(_ phrases: [String]) async -> CoachSample
+    /// whoever asked hands it back once it has played. Nothing plays if `runIsActive` says a
+    /// run started while the phrases rendered: the sample would talk over it.
+    func preview(_ phrases: [String], unless runIsActive: () -> Bool) async -> CoachSample
+    /// A phrase has just been rendered, so whether the voice can be heard away from the app
+    /// may have changed (`hasRendered`).
+    var onRendered: (() -> Void)? { get set }
     /// Stops whatever is still sounding.
     func silence()
     /// The run is over: the audio is handed back, and the volume buttons go back to the
@@ -103,6 +107,7 @@ final class CueAudio: NSObject, CueOutput {
 
     var onVolumeChange: ((Float) -> Void)?
     var onHealthReport: ((Bool) -> Void)?
+    var onRendered: (() -> Void)?
     /// What was last reported through `onHealthReport`.
     private var isHealthy = true
     /// Checks the engine every second while a run holds the audio, and restarts it if
@@ -262,7 +267,7 @@ final class CueAudio: NSObject, CueOutput {
         }
     }
 
-    func preview(_ phrases: [String]) async -> CoachSample {
+    func preview(_ phrases: [String], unless runIsActive: () -> Bool) async -> CoachSample {
         var said: [String] = []
         var samples: [Float] = []
         for phrase in phrases {
@@ -280,6 +285,9 @@ final class CueAudio: NSObject, CueOutput {
             // would pause it.
             return isOtherAudioPlaying() ? .needsQuiet : .played([], seconds: 0)
         }
+        // A run started while the phrases rendered: its own cues are the ones to hear, and
+        // its phrase waiting on a tone stays.
+        guard !runIsActive() else { return .runStarted }
         pendingPhrase?.cancel()
         pendingPhrase = nil
         let wasHealthy = isHealthy
@@ -459,6 +467,7 @@ final class CueAudio: NSObject, CueOutput {
             guard let self, let samples = await self.rendered(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
             self.phrases[phrase] = buffer
             self.voiceCache.store(samples, for: phrase, voice: self.voiceID)
+            self.onRendered?()
         }
         rendering[phrase] = task
         lastRender = task

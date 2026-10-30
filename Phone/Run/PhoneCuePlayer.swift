@@ -139,9 +139,10 @@ final class PhoneCuePlayer: BoundaryHaptics {
 
     /// Hear the Coach, on the paywall and in Sounds & Voice: the voice coach for someone
     /// deciding on Pro, so whatever the settings say. Half a second after its last word the
-    /// audio goes back, as a finished run's does; a sample that played nothing took none.
+    /// audio goes back, as a finished run's does; a sample that played nothing took none. A
+    /// run started while its phrases rendered is never talked over.
     func previewCoach() async -> CoachSample {
-        let sample = await output.preview(Self.coachSample)
+        let sample = await output.preview(Self.coachSample, unless: runIsActive)
         if case .played(let phrases, let seconds) = sample, !phrases.isEmpty {
             releaseOnceFinished(after: seconds + 0.5)
         }
@@ -174,6 +175,8 @@ enum CoachSample: Equatable, Sendable {
     /// Nothing: no phrase is rendered yet, and other audio is playing, which rendering one
     /// would pause.
     case needsQuiet
+    /// Nothing: a run started while the phrases rendered, and its cues are the ones to hear.
+    case runStarted
 
     static let title = "Hear the Coach"
 
@@ -182,7 +185,7 @@ enum CoachSample: Equatable, Sendable {
         switch self {
         case .needsQuiet: "Pause your music to hear the coach."
         case .played(let phrases, _) where phrases.isEmpty: "The coach couldn't play. Try again."
-        case .played: nil
+        case .played, .runStarted: nil
         }
     }
 }

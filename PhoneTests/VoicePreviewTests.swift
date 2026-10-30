@@ -36,7 +36,7 @@ struct VoicePreviewTests {
         cache.store(rendered, for: "Work", voice: audio.voiceID)
         cache.store(rendered, for: "Workout complete", voice: audio.voiceID)
 
-        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { false })
         audio.handBackAudio()
 
         guard case .played(let phrases, let seconds) = sample else {
@@ -59,7 +59,7 @@ struct VoicePreviewTests {
         defer { remove(cache) }
         let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { true })
 
-        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { false })
         audio.handBackAudio()
 
         #expect(sample == .needsQuiet)
@@ -79,7 +79,7 @@ struct VoicePreviewTests {
             return [Float](repeating: 0.1, count: 480)
         })
 
-        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { false })
         audio.handBackAudio()
 
         #expect(asked == PhoneCuePlayer.coachSample)
@@ -109,7 +109,7 @@ struct VoicePreviewTests {
             cache.store([Float](repeating: 0.1, count: 480), for: phrase, voice: audio.voiceID)
         }
 
-        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { false })
         audio.handBackAudio()
 
         #expect(asked.isEmpty, "Rendered again: \(asked)")
@@ -126,11 +126,52 @@ struct VoicePreviewTests {
         defer { remove(cache) }
         let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { _ in nil })
 
-        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { false })
         audio.handBackAudio()
 
         #expect(sample == .played([], seconds: 0))
         #expect(sample.note == "The coach couldn't play. Try again.")
+    }
+
+    @Test("A run started while the sample's phrases rendered is never talked over: nothing plays, and the renders are kept for it")
+    func runStartedDuringRenderPlaysNothing() async {
+        let cache = makeCache()
+        defer { remove(cache) }
+        // Start tapped on a preset while the first phrase rendered.
+        var runStarted = false
+        let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { _ in
+            runStarted = true
+            return [Float](repeating: 0.1, count: 480)
+        })
+
+        let sample = await audio.preview(PhoneCuePlayer.coachSample, unless: { runStarted })
+        audio.handBackAudio()
+
+        #expect(sample == .runStarted)
+        #expect(sample.note == nil, "Nothing to say under the button: the run is on screen")
+        for phrase in PhoneCuePlayer.coachSample {
+            #expect(cache.samples(for: phrase, voice: audio.voiceID) != nil, "\"\(phrase)\" wasn't kept for runs")
+        }
+    }
+
+    @Test("A phrase rendered says so, so a run can ask again whether the voice will be heard")
+    func renderTellsTheRun() async {
+        let cache = makeCache()
+        defer { remove(cache) }
+        let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { _ in
+            [Float](repeating: 0.1, count: 480)
+        })
+        var told = 0
+        audio.onRendered = { told += 1 }
+        #expect(!audio.hasRendered(["Sprint"]))
+
+        audio.prepare(["Sprint"])
+        #expect(await waitUntil { told == 1 })
+        #expect(audio.hasRendered(["Sprint"]))
+        // From memory now: nothing new, so nothing told.
+        _ = await audio.preview(["Sprint"], unless: { false })
+        audio.handBackAudio()
+        #expect(told == 1)
     }
 
     @Test("The sample hands the audio back once it has played, unless a run has started; one that played nothing took none")

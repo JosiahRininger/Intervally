@@ -40,9 +40,17 @@ final class FakeCueOutput: CueOutput {
     private(set) var previewed: [[String]] = []
     /// What a sample answers; nil plays every phrase for 50 ms, as if each were rendered.
     var previewAnswer: CoachSample?
-    func preview(_ phrases: [String]) async -> CoachSample {
+    func preview(_ phrases: [String], unless runIsActive: () -> Bool) async -> CoachSample {
         previewed.append(phrases)
+        if runIsActive() { return .runStarted }
         return previewAnswer ?? .played(phrases, seconds: 0.05)
+    }
+    var onRendered: (() -> Void)?
+    /// Every phrase of the run now rendered, as when the music stopped and a change rendered
+    /// the last of them: told as the real output tells it.
+    func render() {
+        phrasesRendered = true
+        onRendered?()
     }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
@@ -224,6 +232,13 @@ struct CuePlanTests {
         #expect(SoundsRow.subtitle(all) == "Beeps and voice coach")
         #expect(SoundsRow.subtitle(all.effective(isPro: false)) == "Beeps")
         #expect(SoundsRow.subtitle(CueSettings(beeps: false, countdown: true, voice: false)) == "Off")
+    }
+
+    @Test("Interval Changes' footer names the device the run is on")
+    func changesFooterNamesTheDevice() {
+        #expect(SoundsRow.changesFooter(on: .phone).hasSuffix("a notification marks each change while iPhone is locked."))
+        #expect(SoundsRow.changesFooter(on: .pad).hasSuffix("a notification marks each change while iPad is locked."))
+        #expect(!SoundsRow.changesFooter(on: .pad).contains("iPhone"))
     }
 }
 
@@ -747,6 +762,28 @@ struct PhoneRunTests {
         output.report(volume: 0.4)
         await run.coordinator.backstopSettled()
         #expect(await backstop.cancels == cancels + 1)
+        #expect(await backstop.schedules == 1)
+        run.close()
+    }
+
+    /// A preset renamed just before Start, or music playing at Start and paused since: the
+    /// run's last phrase renders at a change, and from then on the voice marks every one.
+    @Test("On a workout session with only the voice coach on, its last phrase rendering mid-run takes the alerts away")
+    func renderMidRunTakesTheAlertsAway() async {
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        pro.isPro = true
+        output.phrasesRendered = false
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 1, "Nothing will be heard yet, so the alerts mark the changes")
+
+        let cancels = await backstop.cancels
+        output.render()
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.cancels == cancels + 1, "Heard now: an alert as well would mark each change twice")
         #expect(await backstop.schedules == 1)
         run.close()
     }

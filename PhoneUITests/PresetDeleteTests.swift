@@ -145,16 +145,20 @@ final class PresetDeleteTests: XCTestCase {
         return name
     }
 
-    /// Opens Delete with `reveal` and taps it, until the question shows. Never taps once
+    /// Opens Delete with `reveal`, tried until it shows, and taps it once. There is no second
+    /// tap: a Delete whose first tap asks nothing is the presenter bug the question is for,
+    /// and the test should catch it, not ride over it (`confirmation`). Never taps once
     /// anything is asked, so the question's own Delete is never the one tapped.
     private func askToDelete(in app: XCUIApplication, reveal: () -> Void) {
         let delete = app.buttons["Delete"].firstMatch
         let asked = app.alerts.firstMatch
-        for _ in 0..<3 where !asked.exists {
-            if !delete.exists { reveal() }
-            if delete.waitForExistence(timeout: 5), !asked.exists { delete.tap() }
-            _ = asked.waitForExistence(timeout: 5)
+        for _ in 0..<3 where !delete.exists && !asked.exists {
+            reveal()
+            _ = delete.waitForExistence(timeout: 5)
         }
+        guard !asked.exists else { return }
+        XCTAssertTrue(delete.wait(until: "isHittable == true"), "No Delete to tap")
+        delete.tap()
     }
 
     /// Swipes the card as far as its actions and taps Delete there.

@@ -19,6 +19,12 @@ enum SoundsRow {
         case (false, false): "Off"
         }
     }
+
+    /// Under Interval Changes, naming the device it runs on.
+    static func changesFooter(on device: DeviceKind) -> String {
+        let name = device == .pad ? "iPad" : "iPhone"
+        return "A tone marks each change, higher for work and lower for rest. With the countdown on, three ticks come before it. With beeps and the voice coach off, a notification marks each change while \(name) is locked."
+    }
 }
 
 /// How a run on iPhone sounds: beeps at each change, the 3-2-1 before it, the voice coach
@@ -49,7 +55,7 @@ struct SoundsSettingsView: View {
             } header: {
                 Text("Interval Changes")
             } footer: {
-                Text("A tone marks each change, higher for work and lower for rest. With the countdown on, three ticks come before it. With beeps and the voice coach off, a notification marks each change while iPhone is locked.")
+                Text(SoundsRow.changesFooter(on: .current))
             }
 
             Section {

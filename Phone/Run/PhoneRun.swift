@@ -114,6 +114,13 @@ final class PhoneRun {
             // To or from silent changes whether the cues will be heard.
             if (volume == 0) != wasSilent { self.coordinator.awayCuesAudibilityChanged() }
         }
+        // A phrase rendered mid-run (renamed just before Start, or the music paused since)
+        // can make the voice heard, and then the alerts would mark each change a second time.
+        resolvedOutput.onRendered = { [weak self] in
+            guard let self, self.coordinator.engine.isActive,
+                  self.cues.isHeardAway(atVolume: self.mediaVolume) else { return }
+            self.coordinator.awayCuesAudibilityChanged()
+        }
         // Cues that can't sound fall back to notifications rather than to silence.
         resolvedOutput.onHealthReport = { [weak coordinator] healthy in
             coordinator?.cuesHealthChanged(healthy: healthy)

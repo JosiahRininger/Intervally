@@ -43,12 +43,12 @@ struct PresetActions {
     }
 
     /// Edit a Starter Instead, on the paywall from + at the free limit: the starter up next,
-    /// or else the first starter still in the library. With every starter gone, the preset up
-    /// next, so the button still leads somewhere.
-    var starterToEdit: IntervalWorkout {
+    /// or else the first starter still in the library. None with every starter gone, and then
+    /// the paywall doesn't offer it: the button would open a preset of their own.
+    var starterToEdit: IntervalWorkout? {
         let starters = Set(WorkoutStore.starterWorkouts.map(\.id))
         if starters.contains(store.selectedID) { return store.selected }
-        return store.workouts.first { starters.contains($0.id) } ?? store.selected
+        return store.workouts.first { starters.contains($0.id) }
     }
 
     func isUpNext(_ workout: IntervalWorkout) -> Bool {
