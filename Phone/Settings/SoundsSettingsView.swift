@@ -39,7 +39,9 @@ struct SoundsSettingsView: View {
         List {
             Section {
                 Toggle("Beeps", isOn: $beeps)
+                    .accessibilityIdentifier("sounds.beeps")
                 Toggle("3, 2, 1 Countdown", isOn: $countdown)
+                    .accessibilityIdentifier("sounds.countdown")
             } header: {
                 Text("Interval Changes")
             } footer: {
@@ -54,6 +56,7 @@ struct SoundsSettingsView: View {
                     }
                 }
                 .accessibilityHint(pro.isPro ? "" : "Opens Intervally Pro")
+                .accessibilityIdentifier("sounds.voice")
             } footer: {
                 Text("Calls out each interval as it starts, by the name you gave it: Work, Rest, Last round.")
             }
@@ -74,6 +77,7 @@ struct SoundsSettingsView: View {
 
             Section {
                 Toggle("Keep Screen On", isOn: $keepAwake)
+                    .accessibilityIdentifier("sounds.keepAwake")
             } footer: {
                 Text("While a workout is on screen, so the countdown stays in view.")
             }

@@ -26,7 +26,8 @@ xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'p
 # The iPhone app (also builds the embedded watch app): PhoneTests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 # The iPhone UI tests (PhoneUITests/), a few minutes: Apple's accessibility audit on every
-# main screen, and the editor fitting a 6.1- and 6.3-inch iPhone without scrolling
+# main screen, the editor fitting a 6.1- and 6.3-inch iPhone without scrolling, and journeys
+# end to end: a preset made and copied, a run, History, Sounds & Voice and the welcome
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhoneUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
@@ -36,7 +37,9 @@ launch with the debug build's QA flags. `PhoneUITests/AuditExceptions.swift` lis
 audit reports by design, each with its reason; anything else it finds fails. Every UI test
 launches with `-qaDefaults fresh`, as a new install with no system prompts, so nothing one
 test leaves behind reaches the next; one that checks something lasts relaunches with `keep`
-(`LaunchHygieneTests`).
+(`LaunchHygieneTests`). The journeys (`*JourneyTests`) find the app's own elements by the
+accessibility identifiers its views give them (system chrome such as the tab bar by its
+words), and wait for an element to change rather than for time to pass.
 
 Or every suite in one command, each on a simulator of the script's own (Intervally-QA-iPhone,
 -iPad and -Watch, made when missing, at most two booted, no other simulator touched), with a

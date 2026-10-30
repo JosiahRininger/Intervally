@@ -173,6 +173,8 @@ struct WorkoutsView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens the editor")
+            // The UI tests find a preset's card and its play button by the preset's name.
+            .accessibilityIdentifier("workouts.preset.\(workout.name)")
 
             if !editMode.isEditing {
                 Button {
@@ -189,6 +191,7 @@ struct WorkoutsView: View {
                 .buttonStyle(.borderless)
                 .padding(.trailing, PresetCard.startMargin)
                 .accessibilityLabel("Start \(workout.name)")
+                .accessibilityIdentifier("workouts.start.\(workout.name)")
             }
         }
         .swipeActions(edge: .trailing) {
@@ -247,6 +250,7 @@ struct WorkoutsView: View {
             }
             .neutralGlass()
             .accessibilityLabel("Settings")
+            .accessibilityIdentifier("workouts.settings")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(editMode.isEditing ? "Done" : "Edit") {
@@ -259,6 +263,7 @@ struct WorkoutsView: View {
             .neutralGlass()
             .accessibilityLabel("New Workout")
             .accessibilityHint(actions.canAdd ? "" : "Opens Intervally Pro")
+            .accessibilityIdentifier("workouts.new")
         }
     }
 

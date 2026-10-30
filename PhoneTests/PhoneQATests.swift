@@ -177,6 +177,18 @@ struct PhoneQATests {
         #expect(RunDiagnostics(url: diagnosticsURL).all.isEmpty)
     }
 
+    @Test("A fresh launch shows the welcome where a value from outside the app's defaults says it was seen")
+    func shadowsAWelcomeSeenElsewhere() throws {
+        let domain = UUID().uuidString
+        let defaults = try #require(LayeredDefaults(suiteName: domain, beneath: [Welcome.seenKey: true]))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        defaults.set(true, forKey: Welcome.seenKey)
+
+        QADefaults.clear(defaults: defaults, domain: domain, suite: defaults, support: nil)
+
+        #expect(defaults.object(forKey: Welcome.seenKey) as? Bool == false)
+    }
+
     @Test("A shared suite of its own is cleared as well")
     func clearsASeparateSuite() {
         let domain = UUID().uuidString
@@ -292,6 +304,23 @@ struct PhoneQATests {
         await reading.appear()
         #expect(reading.state == .loaded)
         #expect(reading.sessions.count == 1)
+    }
+}
+
+/// Defaults with values beneath their own, as the simulator keeps defaults for the app beside
+/// its container: removing the persistent domain leaves those showing. Registered defaults
+/// would do the same, but they are shared by every defaults object in the process, the host
+/// app's and other tests' among them.
+private final class LayeredDefaults: UserDefaults, @unchecked Sendable {
+    private let beneath: [String: Bool]
+
+    init?(suiteName: String, beneath: [String: Bool]) {
+        self.beneath = beneath
+        super.init(suiteName: suiteName)
+    }
+
+    override func object(forKey defaultName: String) -> Any? {
+        super.object(forKey: defaultName) ?? beneath[defaultName]
     }
 }
 #endif

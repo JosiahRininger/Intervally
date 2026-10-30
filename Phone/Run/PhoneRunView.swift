@@ -117,6 +117,7 @@ struct PhoneRunView: View {
         .alert("End workout?", isPresented: $confirmingEnd) {
             Button("Keep Going", role: .cancel) {}
             Button("End Workout", role: .destructive) { run.end() }
+                .accessibilityIdentifier("run.endConfirm")
         } message: {
             Text(run.isMirroring ? "It ends on your Apple Watch too, and won't be saved." : "This workout won't be saved.")
         }
@@ -216,6 +217,7 @@ struct PhoneRunView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(spokenStatus(position, kind: kind, paused: paused))
         .accessibilityAddTraits(.updatesFrequently)
+        .accessibilityIdentifier("run.status")
     }
 
     private func nextLine(_ position: IntervalPlan.Position, next: IntervalPhase?) -> some View {
@@ -227,6 +229,7 @@ struct PhoneRunView: View {
             // Grows with the text size, but not so far that it crowds the controls.
             .dynamicTypeSize(...DynamicTypeSize.accessibility2)
             .accessibilityLabel(next.map { "Next, \($0.title), \(DurationFormat.spoken(Int($0.duration)))" } ?? "Last interval")
+            .accessibilityIdentifier("run.next")
     }
 
     /// Faded in and out rather than popping: the spacers around the ring take up the room a
@@ -355,6 +358,7 @@ struct PhoneRunView: View {
         .multilineTextAlignment(.center)
         .dynamicTypeSize(...DynamicTypeSize.accessibility2)
         .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("run.header")
     }
 
     private func interior(_ position: IntervalPlan.Position, kind: IntervalPhase.Kind, paused: Bool, side: CGFloat) -> some View {
@@ -402,6 +406,7 @@ struct PhoneRunView: View {
             .buttonBorderShape(.circle)
             .neutralGlass()
             .accessibilityLabel("End Workout")
+            .accessibilityIdentifier("run.end")
 
             Spacer()
 
@@ -419,6 +424,8 @@ struct PhoneRunView: View {
             .foregroundStyle(palette.onTint)
             .disabled(engine.status == .idle)
             .accessibilityLabel(paused ? "Resume" : "Pause")
+            // One control, whichever it says.
+            .accessibilityIdentifier("run.pauseResume")
 
             Spacer()
 
@@ -434,6 +441,7 @@ struct PhoneRunView: View {
             .neutralGlass()
             .disabled(engine.status == .idle)
             .accessibilityLabel("Skip Interval")
+            .accessibilityIdentifier("run.skip")
         }
         .frame(maxWidth: 360)
         // The glyphs are fixed, but the glass around them grows with the text size: at the
@@ -493,6 +501,7 @@ struct RunSummaryView: View {
             }
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Workout complete, \(DurationFormat.spoken(Int(summary.duration)))")
+            .accessibilityIdentifier("summary.complete")
 
             Text(workoutName)
                 .font(.system(.title2, design: .rounded).weight(.bold))
@@ -502,6 +511,7 @@ struct RunSummaryView: View {
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
+                .accessibilityIdentifier("summary.rounds")
             healthLine
                 .padding(.top, 16)
             Spacer(minLength: 24)
@@ -513,6 +523,7 @@ struct RunSummaryView: View {
                         .frame(maxWidth: .infinity, minHeight: 52)
                 }
                 .prominentCapsule()
+                .accessibilityIdentifier("summary.done")
                 if !onWatch {
                     Button(action: repeatRun) {
                         Label("Repeat", systemImage: "arrow.counterclockwise")

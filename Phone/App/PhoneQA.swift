@@ -122,6 +122,13 @@ enum QADefaults: String, Sendable {
     /// Whatever the last launch left, as with no flag at all.
     case keep
 
+    /// Keys a fresh launch sets to what a new install reads, where clearing leaves a value
+    /// showing from outside the app's own defaults. A simulator can keep defaults for the app
+    /// beside its container rather than in it (`simctl spawn … defaults write` leaves them
+    /// there), and removing the app's own leaves those in place: one set up for screenshots
+    /// skipped the welcome on every fresh launch.
+    static let newInstall: [String: Bool] = [Welcome.seenKey: false]
+
     /// Clears what the app keeps, before anything reads it: its own defaults, the shared
     /// suite (the same defaults on iPhone today; a suite of its own is cleared key by key),
     /// and Application Support, where the run diagnostics live. Caches stay: the voice coach
@@ -139,6 +146,11 @@ enum QADefaults: String, Sendable {
             for key in suite.dictionaryRepresentation().keys {
                 suite.removeObject(forKey: key)
             }
+        }
+        // Only where a value from elsewhere still shows: otherwise the key stays unset, as on
+        // a new install.
+        for (key, value) in newInstall where suite.object(forKey: key) != nil {
+            suite.set(value, forKey: key)
         }
         let files = FileManager.default
         guard let support, let items = try? files.contentsOfDirectory(at: support, includingPropertiesForKeys: nil) else { return }
