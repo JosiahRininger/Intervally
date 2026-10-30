@@ -110,5 +110,113 @@ struct PhoneQATests {
             #expect(PhoneQAOptions.parse(["-qaOpen", screen.rawValue]).screen == screen)
         }
     }
+
+    // MARK: - Fresh launches
+
+    @Test("-qaDefaults fresh starts clean and shows no prompts; keep, a typo or no flag changes nothing")
+    func freshDefaults() {
+        let fresh = PhoneQAOptions.parse(["-qaDefaults", "fresh"])
+        #expect(fresh.defaults == .fresh)
+        #expect(fresh.suppressesPrompts)
+        #expect(fresh.runsOnStandIns, "Its runs ask for neither notifications nor Health")
+        #expect(fresh.isActive)
+
+        let keep = PhoneQAOptions.parse(["-qaDefaults", "keep"])
+        #expect(keep.defaults == .keep)
+        #expect(keep.suppressesPrompts == false)
+        #expect(keep.runsOnStandIns == false)
+        #expect(keep.isActive)
+
+        #expect(PhoneQAOptions.parse(["-qaDefaults", "wipe"]) == PhoneQAOptions())
+        #expect(PhoneQAOptions.parse(["-qaDefaults", "-qaPro", "pro"]) == PhoneQAOptions(pro: true))
+        #expect(PhoneQAOptions.parse(["IntervallyPhone"]).suppressesPrompts == false)
+    }
+
+    @Test("-qaAllowPrompts lets a fresh launch ask, on the real session and backstop")
+    func allowPrompts() {
+        let allowing = PhoneQAOptions.parse(["-qaDefaults", "fresh", "-qaAllowPrompts", "YES"])
+        #expect(allowing.allowPrompts)
+        #expect(allowing.suppressesPrompts == false)
+        #expect(allowing.runsOnStandIns == false)
+        #expect(PhoneQAOptions.parse(["-qaAllowPrompts", "-qaDefaults", "fresh"]).suppressesPrompts == false, "A bare flag counts")
+        // -qaWorkout's figures come from the stand-in, whatever else is asked.
+        #expect(PhoneQAOptions.parse(["-qaDefaults", "fresh", "-qaAllowPrompts", "YES", "-qaWorkout", "152,37"]).runsOnStandIns)
+    }
+
+    @Test("-qaSkipWelcome is read bare or with a value")
+    func skipWelcome() {
+        #expect(PhoneQAOptions.parse(["-qaSkipWelcome", "YES"]) == PhoneQAOptions(skipWelcome: true))
+        #expect(PhoneQAOptions.parse(["-qaSkipWelcome", "-qaDefaults", "fresh"]) == PhoneQAOptions(defaults: .fresh, skipWelcome: true))
+        #expect(PhoneQAOptions.parse(["-qaSkipWelcome", "NO"]).skipWelcome == false)
+        #expect(PhoneQAOptions.parse(["-qaSkipWelcome", "YES"]).isActive)
+    }
+
+    @Test("A fresh launch clears the defaults and Application Support: the starters, nothing seen, no diagnostics")
+    func clearsWhatTheAppKeeps() throws {
+        let domain = UUID().uuidString
+        let defaults = makeTestDefaults(domain)
+        let store = WorkoutStore(defaults: defaults)
+        store.add(IntervalWorkout(name: "Left Behind"))
+        store.saveActiveRun(RunSnapshot(workout: store.selected, anchor: Date(), pausedElapsed: nil))
+        defaults.set(true, forKey: Welcome.seenKey)
+        let support = FileManager.default.temporaryDirectory.appendingPathComponent("support-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: support) }
+        let diagnosticsURL = support.appendingPathComponent("run-diagnostics.json")
+        RunDiagnostics(url: diagnosticsURL).note("Run: started Left Behind")
+        #expect(FileManager.default.fileExists(atPath: diagnosticsURL.path))
+
+        QADefaults.clear(defaults: defaults, domain: domain, suite: defaults, support: support)
+
+        #expect(defaults.object(forKey: Welcome.seenKey) == nil)
+        #expect(WorkoutStore.activeRun(in: defaults) == nil)
+        #expect(WorkoutStore(defaults: defaults).workouts.map(\.name) == SyncDocument.starterWorkouts.map(\.name))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: support.path).isEmpty)
+        #expect(RunDiagnostics(url: diagnosticsURL).all.isEmpty)
+    }
+
+    @Test("A shared suite of its own is cleared as well")
+    func clearsASeparateSuite() {
+        let domain = UUID().uuidString
+        let defaults = makeTestDefaults(domain)
+        let suite = makeTestDefaults()
+        defaults.set(true, forKey: Welcome.seenKey)
+        WorkoutStore(defaults: suite).add(IntervalWorkout(name: "Left Behind"))
+        #expect(suite.data(forKey: WorkoutStore.Key.document) != nil)
+
+        QADefaults.clear(defaults: defaults, domain: domain, suite: suite, support: nil)
+
+        #expect(defaults.object(forKey: Welcome.seenKey) == nil)
+        #expect(suite.data(forKey: WorkoutStore.Key.document) == nil)
+        #expect(suite.data(forKey: WorkoutStore.Key.workouts) == nil)
+    }
+
+    @Test("A fresh launch's stand-in session starts at once, unasked, and reports no figures")
+    func standInWithoutFigures() async {
+        let session = QAWorkoutSession(figures: nil)
+        #expect(await session.requestAuthorization())
+        #expect(await session.start(at: Date()))
+        #expect(session.isRunning)
+        #expect(session.heartRate == nil)
+        #expect(session.activeEnergy == nil)
+    }
+
+    @Test("A fresh launch's History reads Health, but Connect never asks it")
+    func unpromptedHistory() async {
+        let health = FakeHistorySource(access: .shouldRequest)
+        let history = HistoryModel(source: QAUnpromptedHistory(source: health))
+        await history.appear()
+        #expect(history.state == .needsAccess)
+
+        await history.connect()
+        #expect(await health.accessRequests == 0)
+        #expect(await health.accessChecks == 2, "Read again after Connect, as Health's own would be")
+        #expect(history.state == .needsAccess)
+
+        let allowed = FakeHistorySource(workouts: [rawSession(at: Date().addingTimeInterval(-3600))])
+        let reading = HistoryModel(source: QAUnpromptedHistory(source: allowed))
+        await reading.appear()
+        #expect(reading.state == .loaded)
+        #expect(reading.sessions.count == 1)
+    }
 }
 #endif

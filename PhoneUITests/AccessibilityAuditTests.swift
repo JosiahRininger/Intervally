@@ -203,17 +203,30 @@ enum PhoneApp {
     /// The largest accessibility text size, for one launch.
     static let largestText = ["-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
 
-    /// The welcome and the editor's first-run tip already seen, a watch paired and installed,
-    /// Pro pinned on or off. `PhoneQAOptions` reads a flag's first occurrence, so these are
-    /// never repeated in `flags`.
-    static func launch(_ flags: [String] = [], pro: Bool = false) -> XCUIApplication {
+    /// What a launch starts from (`-qaDefaults`).
+    enum Defaults: String {
+        /// As a new install would, with no system prompt: what every test starts from.
+        case fresh
+        /// What the last launch left, for a test that checks something lasts.
+        case keep
+    }
+
+    /// A fresh launch unless `defaults` keeps the last one's, with the welcome and the
+    /// editor's first-run tip already seen, a watch paired and installed, Pro pinned on or
+    /// off. `PhoneQAOptions` reads a flag's first occurrence, so these are never repeated in
+    /// `flags`. `-qaSkipWelcome` takes a YES it doesn't need: UserDefaults reads launch
+    /// arguments in pairs, and a bare flag would take the next one as its value, leaving the
+    /// tip's flag without its YES.
+    static func launch(_ flags: [String] = [], pro: Bool = false, defaults: Defaults = .fresh) -> XCUIApplication {
         let app = XCUIApplication()
-        // A launch that doesn't ask for a run starts with none: a run an earlier test left
-        // going (stopped before its End) would otherwise come back over the screen under
-        // test. One that finished long ago is restored as nothing, and cleared.
-        let run = flags.contains("-qaRunElapsed") || flags.contains("-qaWatchRun") ? [] : ["-qaRunElapsed", "100000"]
+        // A launch that keeps the last one's defaults and doesn't ask for a run starts with
+        // none: a run an earlier test left going (stopped before its End) would otherwise
+        // come back over the screen under test. One that finished long ago is restored as
+        // nothing, and cleared. A fresh launch has none to restore.
+        let asksForRun = flags.contains("-qaRunElapsed") || flags.contains("-qaWatchRun")
+        let run = defaults == .keep && !asksForRun ? ["-qaRunElapsed", "100000"] : []
         app.launchArguments = [
-            "-phone.welcomeSeen.v1", "YES", "-phone.editorTipSeen.v1", "YES",
+            "-qaDefaults", defaults.rawValue, "-qaSkipWelcome", "YES", "-phone.editorTipSeen.v1", "YES",
             "-qaWatch", "installed", "-qaPro", pro ? "pro" : "free",
         ] + run + flags
         app.launch()

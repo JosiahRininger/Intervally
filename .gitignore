@@ -25,3 +25,6 @@ Intervally.xcodeproj
 
 ## Fastlane / archives
 *.xcarchive
+
+## scripts/test-all.sh: its own simulators, one "name UDID" a line
+.qa-sims

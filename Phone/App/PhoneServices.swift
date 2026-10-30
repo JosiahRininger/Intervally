@@ -67,17 +67,25 @@ final class PhoneServices {
     static func launch() -> PhoneServices {
         #if DEBUG
         let qa = PhoneQAOptions.current
+        // First of all: the store, Pro, the theme and the diagnostics each read what they
+        // keep as they are made.
+        if qa.defaults == .fresh { QADefaults.clear() }
+        if qa.skipWelcome { SharedDefaults.suite.set(true, forKey: Welcome.seenKey) }
         let store = WorkoutStore()
         let theme = ThemeStore()
         // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
         let sync = qa.watch.map { WatchSync(store: store, theme: theme, transport: QAWatchTransport(state: $0, store: store)) }
-        // A fixture in place of Health, so nothing is read from it or written to it.
+        // A fixture in place of Health, so nothing is read from it or written to it. Without
+        // one, a launch that shows no prompts still reads Health, but never shows its sheet.
         let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
-        // A stand-in workout session with figures to show, and no prompts.
+            ?? (qa.suppressesPrompts ? HistoryModel(source: QAUnpromptedHistory(source: HealthHistory())) : nil)
+        // A stand-in workout session and backstop, so a run asks for nothing and saves
+        // nothing: with figures to show, or none for a launch that shows no prompts, where
+        // the first Start would otherwise put the notification alert and Health's sheet up.
         let pro = ProStore()
-        let run = qa.workout.map {
-            PhoneRun(store: store, pro: pro, theme: theme, workout: QAWorkoutSession(figures: $0), notifications: QABackstop())
-        }
+        let run = qa.runsOnStandIns
+            ? PhoneRun(store: store, pro: pro, theme: theme, workout: QAWorkoutSession(figures: qa.workout), notifications: QABackstop())
+            : nil
         let services = PhoneServices(store: store, pro: pro, theme: theme, sync: sync, history: history, run: run)
         services.qa = qa
         services.reviews.isSuppressed = qa.isActive
@@ -96,6 +104,10 @@ final class PhoneServices {
         live = services
         services.start()
         #if DEBUG
+        // Off before the first view asks for an icon. iOS puts up its own alert for every
+        // change, and a fresh launch's Classic would change back a Pastel icon an earlier
+        // launch left.
+        if qa.suppressesPrompts { services.icon.isEnabled = false }
         if let status = qa.watchRun {
             // What the watch would send: the iPhone's mirror can't be fed by a simulator.
             let elapsed = qa.runElapsed ?? 40
