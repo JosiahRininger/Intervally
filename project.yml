@@ -237,6 +237,13 @@ targets:
       - path: SyncTests
       # Helpers both bundles share, such as the App Store listing's parser.
       - path: TestSupport
+        excludes:
+          - Fixtures
+      # JSON frozen from shipped versions (Fixture.swift), copied in as a folder so each
+      # version's files keep their own directory in the bundle.
+      - path: TestSupport/Fixtures
+        type: folder
+        buildPhase: resources
       # The StoreKit configuration is a resource of the test bundle only, where
       # SKTestSession loads it by URL. Never list it under Sources, Shared or Widget:
       # XcodeGen would copy it into the app or the widget.
@@ -265,6 +272,12 @@ targets:
       - path: PhoneTests
       - path: SyncTests
       - path: TestSupport
+        excludes:
+          - Fixtures
+      # The same frozen JSON as the watch tests read.
+      - path: TestSupport/Fixtures
+        type: folder
+        buildPhase: resources
       # SKTestSession loads it by URL; test bundle only, as for the watch.
       - path: StoreKit
         buildPhase: resources

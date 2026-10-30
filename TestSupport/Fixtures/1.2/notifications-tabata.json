@@ -1,0 +1,18 @@
+[
+  {"body":"Round 1 of 8","delay":10,"identifier":"interval-boundary-1","title":"Work"},
+  {"body":"Rest 10s","delay":30,"identifier":"interval-boundary-2","title":"Rest"},
+  {"body":"Round 2 of 8","delay":40,"identifier":"interval-boundary-3","title":"Work"},
+  {"body":"Rest 10s","delay":60,"identifier":"interval-boundary-4","title":"Rest"},
+  {"body":"Round 3 of 8","delay":70,"identifier":"interval-boundary-5","title":"Work"},
+  {"body":"Rest 10s","delay":90,"identifier":"interval-boundary-6","title":"Rest"},
+  {"body":"Round 4 of 8","delay":100,"identifier":"interval-boundary-7","title":"Work"},
+  {"body":"Rest 10s","delay":120,"identifier":"interval-boundary-8","title":"Rest"},
+  {"body":"Round 5 of 8","delay":130,"identifier":"interval-boundary-9","title":"Work"},
+  {"body":"Rest 10s","delay":150,"identifier":"interval-boundary-10","title":"Rest"},
+  {"body":"Round 6 of 8","delay":160,"identifier":"interval-boundary-11","title":"Work"},
+  {"body":"Rest 10s","delay":180,"identifier":"interval-boundary-12","title":"Rest"},
+  {"body":"Round 7 of 8","delay":190,"identifier":"interval-boundary-13","title":"Work"},
+  {"body":"Rest 10s","delay":210,"identifier":"interval-boundary-14","title":"Rest"},
+  {"body":"Round 8 of 8","delay":220,"identifier":"interval-boundary-15","title":"Work"},
+  {"body":"8 rounds done.","delay":240,"identifier":"interval-boundary-finish","title":"Workout Complete"}
+]

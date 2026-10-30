@@ -162,17 +162,16 @@ struct RunWorkoutTaggingTests {
         let session = TaggingWorkoutSession()
         session.failingStarts = 1
         let (coordinator, store) = makeCoordinator(session)
-        coordinator.upgradeRetryDelays = [0.01]
+        // The retry sleeps on a clock only the test moves.
+        let time = VirtualTime()
+        coordinator.upgradeSleep = { try await time.sleep(for: .seconds($0)) }
 
         coordinator.begin()
         await settle(coordinator)
-        var attempts = 0
-        while coordinator.tier != .workout, attempts < 40 {
-            try? await Task.sleep(for: .milliseconds(10))
-            attempts += 1
-        }
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .seconds(1))
+        #expect(await waitUntil { coordinator.tier == .workout })
 
-        #expect(coordinator.tier == .workout)
         #expect(session.untaggedStarts == 0)
         #expect(session.tagged.map(\.id) == [store.selected.id, store.selected.id])
     }

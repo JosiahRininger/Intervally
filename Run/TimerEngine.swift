@@ -70,6 +70,13 @@ final class TimerEngine {
 
     var isActive: Bool { status == .running || status == .paused }
 
+    /// Whether the clock is in a phase that `advance()` has not announced yet. A skip while
+    /// paused leaves one, announced by the first advance after resuming.
+    var hasPendingBoundary: Bool {
+        guard isActive, let index = position.phaseIndex else { return false }
+        return index != lastPhaseIndex
+    }
+
     /// The date the current phase ends, for `Text(timerInterval:)` — which keeps ticking on
     /// screen without the app burning CPU, including in Always-On Display.
     var currentPhaseEndDate: Date? {

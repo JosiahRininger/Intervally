@@ -8,42 +8,6 @@ import Foundation
 import WatchKit
 @testable import Intervally
 
-/// Virtual time for `HapticPlayer`. `now` moves only when a test advances it, and a sleep
-/// wakes once the clock passes its deadline, so a burst's timing is exact and a suspension
-/// is a single big jump.
-@MainActor
-final class VirtualTime {
-    private(set) var now = ContinuousClock.now
-    private var sleepers: [(deadline: ContinuousClock.Instant, wake: CheckedContinuation<Void, Never>)] = []
-    /// Every sleep asked for, in order.
-    private(set) var requested: [Duration] = []
-    /// Sleeps that have woken and returned, cancelled or not.
-    private(set) var woken = 0
-
-    var sleeping: Int { sleepers.count }
-
-    /// Throws on cancellation like `Task.sleep`: at once if already cancelled, otherwise
-    /// when it wakes.
-    func sleep(for duration: Duration) async throws {
-        requested.append(duration)
-        try Task.checkCancellation()
-        if duration > .zero {
-            let deadline = now + duration
-            await withCheckedContinuation { sleepers.append((deadline, $0)) }
-        }
-        woken += 1
-        try Task.checkCancellation()
-    }
-
-    /// Moves the clock and wakes every sleep that is due.
-    func advance(by duration: Duration) {
-        now = now + duration
-        let due = sleepers.filter { $0.deadline <= now }
-        sleepers.removeAll { $0.deadline <= now }
-        due.forEach { $0.wake.resume() }
-    }
-}
-
 /// The wrist, as far as a test can feel it.
 @MainActor
 final class TapLog {

@@ -20,6 +20,10 @@ enum RunPlatform {
     /// Nothing by default: the app's `PhoneCuePlayer` plays pause and resume.
     @MainActor
     static func play(cue: TransportCue) {}
+
+    /// Noticed later than this, a change plays nothing (`CuePlan`). The run's timing line
+    /// counts those.
+    static let lateBoundary = CuePlan.lateThreshold
 }
 
 /// The fallback tier on iPhone: the app itself, while it is in front. Starting it holds

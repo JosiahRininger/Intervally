@@ -123,7 +123,9 @@ extension Haptics {
     // Engine. Every rule below is written in terms of them, so tuning one on a device keeps
     // the guarantees.
 
-    /// Worst case between a boundary and the tick that notices it: the ticker runs every 500 ms.
+    /// Worst case between a boundary and the tick that notices it. The ticker wakes a few
+    /// milliseconds after each boundary, but never sleeps longer than 500 ms, so a burst keeps
+    /// to the margin it had when the ticker polled at that rate.
     static let tickLatency: TimeInterval = 0.5
     /// Quiet time kept between the end of a burst and the next cue, so the two stay distinct.
     static let quietGap: TimeInterval = 0.2

@@ -162,3 +162,28 @@ extension IntervalPlan {
         )
     }
 }
+
+// MARK: - Deadlines
+
+extension IntervalPlan {
+    /// The first elapsed time after `elapsed` at which advancing the run has something to
+    /// announce: a countdown second (3, 2, 1) of the phase under way, or that phase's end,
+    /// which is the next phase's start or, in the last phase, the finish. Nil once the workout
+    /// is over. The run's ticker sleeps until then instead of polling.
+    ///
+    /// It has to agree with `TimerEngine.advance()` to the instant. Countdown k is due once
+    /// the phase's remaining time, rounded up, is k or less, which is exactly `end - k`; and
+    /// at exactly `end` the position already names the next phase. A phase of three seconds
+    /// or less has no countdown deadline at or before its start: the second that falls on the
+    /// start comes with the phase change, which is announced on its own, so the ticker's next
+    /// wake plays it, as polling did.
+    func nextEventElapsed(afterElapsed elapsed: TimeInterval) -> TimeInterval? {
+        guard let phase = position(atElapsed: elapsed).phase else { return nil }
+        for second in [3, 2, 1] {
+            let tick = phase.end - TimeInterval(second)
+            if tick > phase.start, tick > elapsed { return tick }
+        }
+        // The last phase ends at `totalDuration`: the finish.
+        return phase.end
+    }
+}

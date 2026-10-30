@@ -1,0 +1,45 @@
+{
+  "finished" : {
+    "clock" : {
+      "finished" : {
+
+      }
+    },
+    "phaseDuration" : 0,
+    "round" : 6,
+    "theme" : "classic"
+  },
+  "paused" : {
+    "clock" : {
+      "paused" : {
+        "phaseLeft" : 14.5,
+        "workoutLeft" : 914.5
+      }
+    },
+    "next" : "rest",
+    "nextDuration" : 90,
+    "nextName" : "Walk",
+    "phase" : "work",
+    "phaseDuration" : 30,
+    "phaseName" : "Sprint",
+    "round" : 1,
+    "theme" : "classic"
+  },
+  "running" : {
+    "clock" : {
+      "running" : {
+        "phaseEnd" : 814881945,
+        "phaseStart" : 814881915,
+        "workoutEnd" : 814882845
+      }
+    },
+    "next" : "rest",
+    "nextDuration" : 90,
+    "nextName" : "Walk",
+    "phase" : "work",
+    "phaseDuration" : 30,
+    "phaseName" : "Sprint",
+    "round" : 1,
+    "theme" : "pastel"
+  }
+}

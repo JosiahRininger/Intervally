@@ -160,7 +160,7 @@ struct RunCoordinatorLifecycleTests {
         #expect(coordinator.isTicking)
 
         coordinator.togglePause()
-        // Nothing advances while paused, so a 2 Hz loop is pure battery cost.
+        // Nothing advances while paused, so ticking would be pure battery cost.
         #expect(coordinator.isTicking == false)
         #expect(workout.pauseCount == 1)
 
@@ -649,14 +649,50 @@ struct RunCoordinatorRaceTests {
 @MainActor
 struct RunCoordinatorUpgradeTests {
 
-    /// Polls until `condition` holds or the attempts run out, since the upgrade is a
-    /// detached retry rather than part of the start sequence.
-    private func eventually(_ coordinator: RunCoordinator, _ condition: () -> Bool) async {
-        for _ in 0..<40 {
-            if condition() { return }
-            try? await Task.sleep(for: .milliseconds(10))
-            await coordinator.backstopSettled()
+    /// The retries sleep on this, so a test moves them on by exactly their delays.
+    let time = VirtualTime()
+
+    private func makeRetrying() -> (RunCoordinator, FakeWorkoutSession, FakeRuntimeSession, SpyScheduler) {
+        let (coordinator, _, workout, runtime, spy, _, _) = makeCoordinator()
+        coordinator.upgradeSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+        return (coordinator, workout, runtime, spy)
+    }
+
+    /// Moves the clock on to each retry in turn, every one of them failing.
+    private func runOutTheRetries(_ coordinator: RunCoordinator, _ workout: FakeWorkoutSession) async {
+        for delay in coordinator.upgradeRetryDelays {
+            let starts = workout.startCount
+            #expect(await waitUntil { time.sleeping == 1 }, "The next retry waits \(delay) s")
+            time.advance(by: .seconds(delay))
+            #expect(await waitUntil { workout.startCount == starts + 1 })
         }
+    }
+
+    /// Lets the retries that woke return and act, so an absence can be asserted.
+    private func settleRetries(_ coordinator: RunCoordinator, woken count: Int) async {
+        #expect(await waitUntil { time.woken >= count })
+        try? await Task.sleep(for: .milliseconds(50))
+        await settle(coordinator)
+    }
+
+    @Test("Each retry waits exactly its delay, 1, 3, 10 then 30 seconds, on the clock it is given")
+    func upgradeRetriesRunOnVirtualTime() async {
+        let (coordinator, workout, _, _) = makeRetrying()
+        workout.startResult = false
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(workout.startCount == 1)
+        for (index, delay) in [1, 3, 10, 30].enumerated() {
+            #expect(await waitUntil { time.sleeping == 1 })
+            #expect(time.requested.last == .seconds(delay))
+            time.advance(by: .seconds(delay) - .milliseconds(1))
+            await settle(coordinator)
+            #expect(workout.startCount == index + 1, "Not a millisecond early")
+            time.advance(by: .milliseconds(1))
+            #expect(await waitUntil { workout.startCount == index + 2 }, "On the dot")
+        }
+        #expect(time.requested == [.seconds(1), .seconds(3), .seconds(10), .seconds(30)])
     }
 
     @Test("Health granted a moment ago: the first run upgrades to a workout session once it takes")
@@ -664,15 +700,17 @@ struct RunCoordinatorUpgradeTests {
         // Observed on the simulator: straight after the Health sheet, starting the session
         // fails as "not authorized" and succeeds a second later. Without a retry the user's
         // very first workout is never recorded.
-        let (coordinator, _, workout, runtime, spy, _, _) = makeCoordinator()
-        coordinator.upgradeRetryDelays = [0.01, 0.01]
+        let (coordinator, workout, runtime, spy) = makeRetrying()
         workout.failingStarts = 1
 
         coordinator.begin()
         await settle(coordinator)
-        await eventually(coordinator) { coordinator.tier == .workout }
+        #expect(coordinator.tier == .extendedRuntime)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .seconds(1))
+        #expect(await waitUntil { coordinator.tier == .workout })
+        await settle(coordinator)
 
-        #expect(coordinator.tier == .workout)
         #expect(workout.startCount == 2)
         // The weaker tier is released, and the notification backstop with it — otherwise
         // every boundary would alert twice.
@@ -680,22 +718,22 @@ struct RunCoordinatorUpgradeTests {
         #expect(spy.calls.last == .cancelAll)
         // The interval already under way gets its Health segment.
         #expect(workout.activities.isEmpty == false)
+        #expect(time.sleeping == 0, "Taken: nothing left to retry")
     }
 
     @Test("Health declined: every retry fails and the run stays on the fallback tier")
     func declinedStaysOnFallback() async {
-        let (coordinator, _, workout, _, spy, _, _) = makeCoordinator()
-        coordinator.upgradeRetryDelays = [0.01, 0.01]
+        let (coordinator, workout, _, spy) = makeRetrying()
         workout.startResult = false
 
         coordinator.begin()
         await settle(coordinator)
-        try? await Task.sleep(for: .milliseconds(100))
-        await settle(coordinator)
+        await runOutTheRetries(coordinator, workout)
 
         #expect(coordinator.tier == .extendedRuntime)
         // The initial attempt plus one per retry, and no more.
-        #expect(workout.startCount == 3)
+        #expect(workout.startCount == 5)
+        #expect(time.sleeping == 0)
         #expect(spy.scheduleCount >= 1)
     }
 
@@ -703,44 +741,51 @@ struct RunCoordinatorUpgradeTests {
     /// session when the user comes back, or it stays silent outside the app to the end.
     @Test("Back in the app after the retries ran out, a fallen-back run tries for a session again")
     func foregroundRetriesTheSession() async {
-        let (coordinator, _, workout, _, spy, _, _) = makeCoordinator()
-        coordinator.upgradeRetryDelays = [0.01]
+        let (coordinator, workout, _, spy) = makeRetrying()
         workout.startResult = false
 
         coordinator.begin()
         await settle(coordinator)
-        try? await Task.sleep(for: .milliseconds(60))
-        await settle(coordinator)
+        await runOutTheRetries(coordinator, workout)
         #expect(coordinator.tier == .extendedRuntime)
         #expect(coordinator.isAcquiringTier == false)
-        #expect(workout.startCount == 2)
+        #expect(workout.startCount == 5)
 
         workout.startResult = true
         coordinator.handleForeground()
-        await eventually(coordinator) { coordinator.tier == .workout }
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .seconds(1))
+        #expect(await waitUntil { coordinator.tier == .workout })
+        await settle(coordinator)
 
-        #expect(coordinator.tier == .workout)
-        #expect(workout.startCount == 3)
+        #expect(workout.startCount == 6)
         #expect(spy.calls.last == .cancelAll, "A session plays the cues itself, so the backstop goes")
     }
 
     @Test("Coming back to the app tries again at once instead of waiting out a long pause")
     func foregroundRestartsAWaitingRetry() async {
-        let (coordinator, _, workout, _, _, _, _) = makeCoordinator()
-        coordinator.upgradeRetryDelays = [0.02, 5]
+        let (coordinator, workout, _, _) = makeRetrying()
         workout.startResult = false
 
         coordinator.begin()
         await settle(coordinator)
-        try? await Task.sleep(for: .milliseconds(80))
-        await settle(coordinator)
-        // The first attempt and the quick retry; the next is five seconds off.
-        #expect(workout.startCount == 2)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .seconds(1))
+        // The first attempt and the one-second retry; the next is three seconds off.
+        #expect(await waitUntil { workout.startCount == 2 && time.sleeping == 1 })
+        #expect(time.requested.last == .seconds(3))
 
         workout.startResult = true
         coordinator.handleForeground()
-        await eventually(coordinator) { coordinator.tier == .workout }
-        #expect(coordinator.tier == .workout, "Restarted from the quick retry, not the five-second one")
+        // A fresh one-second retry, beside the cancelled one still asleep.
+        #expect(await waitUntil { time.sleeping == 2 })
+        time.advance(by: .seconds(1))
+        #expect(await waitUntil { coordinator.tier == .workout })
+        #expect(workout.startCount == 3, "Restarted from the one-second retry, not the three-second one")
+
+        // The cancelled retry wakes when its time comes, and tries nothing.
+        time.advance(by: .seconds(2))
+        await settleRetries(coordinator, woken: 3)
         #expect(workout.startCount == 3)
     }
 
@@ -752,21 +797,280 @@ struct RunCoordinatorUpgradeTests {
 
     @Test("A run that ends before the retry does not get a session attached afterwards")
     func endedRunIsNotUpgraded() async {
-        let (coordinator, _, workout, _, _, _, _) = makeCoordinator()
-        coordinator.upgradeRetryDelays = [0.05]
+        let (coordinator, workout, _, _) = makeRetrying()
         workout.failingStarts = 1
 
         coordinator.begin()
         await settle(coordinator)
         #expect(coordinator.tier == .extendedRuntime)
+        #expect(await waitUntil { time.sleeping == 1 })
 
         coordinator.stopAndExit()
-        try? await Task.sleep(for: .milliseconds(150))
-        await settle(coordinator)
+        time.advance(by: .seconds(1))
+        await settleRetries(coordinator, woken: 1)
 
         #expect(coordinator.tier == .none)
         // Cancelled: no retry ran, so nothing could start a session for the dead run.
         #expect(workout.startCount == 1)
+    }
+}
+
+
+@Suite("Run coordinator — deadline ticker")
+@MainActor
+struct RunCoordinatorTickerTests {
+
+    let time = VirtualTime()
+
+    @Test("The ticker wakes 8 ms past each countdown second and boundary, not up to half a second later")
+    func tickerWakesAtBoundaryNotHalfSecond() async throws {
+        let (coordinator, store, _, _, _, _, haptics) = makeCoordinator()
+        // work 30 | rest 10 | work 30: the rest begins at 30 s.
+        var workout = store.selected
+        workout.prepareSeconds = 0
+        workout.workSeconds = 30
+        workout.restSeconds = 10
+        workout.rounds = 2
+        store.update(workout)
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        // Polling from there would have caught the rest at 30.3 s.
+        await coordinator.pauseOffTheGrid(on: time)
+        let wakes = await coordinator.tick(on: time) { time.elapsed >= 30 }
+
+        let phases = coordinator.engine.plan.phases
+        #expect(haptics.played.map(\.event) == [
+            .phaseBegan(phases[0]), .countdown(secondsRemaining: 3), .countdown(secondsRemaining: 2),
+            .countdown(secondsRemaining: 1), .phaseBegan(phases[1]),
+        ])
+        let rest = try #require(haptics.played.last)
+        #expect(abs(rest.context.lateness - 0.008) < 0.000_001, "Announced at 30.008 s")
+        for second in [27.0, 28, 29, 30] {
+            #expect(wakes.contains { abs($0 - second - 0.008) < 0.000_001 }, "Woke at \(second + 0.008) s")
+        }
+        #expect(time.requested.allSatisfy { $0 <= .milliseconds(500) }, "Never asleep for more than half a second")
+        coordinator.stopAndExit()
+    }
+
+    @Test("The ticker sleeps 8 ms past the moment, never less than 10 ms nor more than half a second")
+    func tickDelayClamps() {
+        #expect(RunCoordinator.tickDelay(0.001) == 0.01)
+        #expect(RunCoordinator.tickDelay(2) == 0.5)
+        #expect(RunCoordinator.tickDelay(-1) == 0.01)
+        #expect(abs(RunCoordinator.tickDelay(0.3) - 0.308) < 1e-12)
+        #expect(RunCoordinator.tickDelay(0.6) == 0.5)
+    }
+
+    @Test("Paused, the ticker neither sleeps nor advances; resumed, it sleeps again")
+    func pausedStopsTicker() async {
+        let (coordinator, _, _, _, _, _, haptics) = makeCoordinator()
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        coordinator.togglePause()
+        #expect(coordinator.isTicking == false)
+        let played = haptics.played.count
+        let asked = time.requested.count
+
+        // Well past the next deadline. The sleep the pause cut short wakes, and stops there.
+        time.advance(by: .seconds(30))
+        #expect(await waitUntil { time.woken == 1 })
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(time.requested.count == asked, "No further sleep")
+        #expect(haptics.played.count == played, "Nothing announced")
+        #expect(coordinator.engine.status == .paused)
+
+        coordinator.togglePause()
+        #expect(coordinator.isTicking)
+        #expect(await waitUntil { time.sleeping == 1 })
+        #expect(time.requested.count == asked + 1)
+        coordinator.stopAndExit()
+    }
+
+    @Test("A ticker whose run has ended without it stops itself rather than waking every 10 ms")
+    func endedRunStopsTheTicker() async {
+        let (coordinator, _, _, _, _, _, haptics) = makeCoordinator()
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        // Finished behind the coordinator's back, so nothing calls `stopTicking()`. The clock
+        // then sits at the run's end, with no deadline left to sleep until.
+        while coordinator.engine.status == .running { coordinator.engine.skipPhase() }
+        #expect(coordinator.engine.status == .finished)
+        let asked = time.requested.count
+        let played = haptics.played.count
+
+        time.advanceToNextWake()
+        #expect(await waitUntil { !coordinator.isTicking }, "The ticker let go of itself")
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(time.requested.count == asked, "No further sleep")
+        #expect(time.sleeping == 0)
+        #expect(haptics.played.count == played, "Nothing announced")
+        coordinator.stopAndExit()
+    }
+
+    @Test("A phase skipped to while paused plays on the first wake after Resume, half a second on as in 1.2")
+    func skipWhilePausedPlaysAfterResume() async throws {
+        let (coordinator, store, _, _, _, _, haptics) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+        #expect(coordinator.engine.hasPendingBoundary)
+        coordinator.togglePause()
+        // Beside the sleep the pause cut short, which wakes at 0.5 s and stops there.
+        #expect(await waitUntil { time.sleeping == 2 })
+        let rest = coordinator.engine.plan.phases[1]
+        #expect(haptics.played.map(\.event) == [.phaseBegan(coordinator.engine.plan.phases[0])],
+                "Nothing played at Resume itself")
+
+        let wakes = await coordinator.tick(on: time) { haptics.played.count == 2 }
+        #expect(wakes.last.map { abs($0 - 0.8) < 0.000_001 } == true, "The first wake after Resume, at 0.8 s")
+        #expect(haptics.played.last?.event == .phaseBegan(rest))
+        #expect(coordinator.engine.hasPendingBoundary == false)
+        coordinator.stopAndExit()
+    }
+}
+
+/// The run's notes, as its diagnostics would get them.
+@MainActor
+private final class SpyDiagnostics {
+    private(set) var lines: [String] = []
+    func note(_ line: String) { lines.append(line) }
+    /// The run's timing lines alone.
+    var timing: [String] { lines.filter { $0.hasPrefix("Run timing:") } }
+}
+
+@Suite("Run coordinator — timing in the diagnostics")
+@MainActor
+struct RunCoordinatorTimingLineTests {
+
+    let time = VirtualTime()
+    private let notes = SpyDiagnostics()
+
+    @Test("A finished run's diagnostics say once how late its boundaries were: each just past its moment")
+    func finishWritesTheTimingLine() async {
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.diagnostics = { [notes] in notes.note($0) }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        await coordinator.pauseOffTheGrid(on: time)
+        _ = await coordinator.tick(on: time) { coordinator.engine.status != .running }
+
+        #expect(coordinator.engine.status == .finished)
+        // The rest, the second work and the finish. The start is on time by construction, and
+        // a countdown tick is no boundary.
+        #expect(notes.timing == [
+            "Run timing: 3 boundaries, median 0.01 s late, max 0.01 s; 0 over 1.0 s (one tap instead of the full pattern)",
+        ])
+        coordinator.stopAndExit()
+        #expect(notes.timing.count == 1, "Done after the finish has nothing more to say")
+    }
+
+    @Test("Ending a run writes its timing too: a skip is on time by definition, a catch-up is late")
+    func stopWritesTheTimingLine() async throws {
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        // prepare 10 | work 60 | rest 30 | work 60
+        var long = store.selected
+        long.prepareSeconds = 10
+        long.workSeconds = 60
+        long.restSeconds = 30
+        long.rounds = 2
+        store.update(long)
+        coordinator.diagnostics = { [notes] in notes.note($0) }
+        // Asleep on a clock nothing moves, so only the test advances this run.
+        coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+
+        coordinator.begin()
+        await settle(coordinator)
+        let anchor = try #require(coordinator.engine.anchor)
+        coordinator.engine.now = { anchor.addingTimeInterval(3) }
+        coordinator.skip()
+        // Back after a while away: the rest began at 70 s and is noticed at 72.5 s.
+        let skipped = try #require(coordinator.engine.anchor)
+        coordinator.engine.now = { skipped.addingTimeInterval(72.5) }
+        coordinator.advance()
+        coordinator.stopAndExit()
+
+        #expect(notes.timing == [
+            "Run timing: 1 boundary, median 2.50 s late, max 2.50 s; 1 over 1.0 s (one tap instead of the full pattern)",
+        ])
+    }
+
+    @Test("A phase skipped to while paused waits half a second after Resume on purpose, and isn't counted late")
+    func skipWhilePausedIsNotLate() async {
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.diagnostics = { [notes] in notes.note($0) }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+        coordinator.togglePause()
+        #expect(await waitUntil { time.sleeping == 2 })
+        _ = await coordinator.tick(on: time) { coordinator.engine.status != .running }
+
+        #expect(coordinator.engine.status == .finished)
+        // The second work and the finish. The rest, announced 0.5 s after Resume, is left out;
+        // counted, it would be a third boundary at 0.50 s. The skip put the clock on a whole
+        // second at Resume, so from there every deadline falls on a half-second wake.
+        #expect(notes.timing == [
+            "Run timing: 2 boundaries, median 0.00 s late, max 0.00 s; 0 over 1.0 s (one tap instead of the full pattern)",
+        ])
+        coordinator.stopAndExit()
+    }
+
+    @Test("A run ended before any change has no timing to give; its other notes go the same way")
+    func noBoundaryNoLine() async {
+        let (coordinator, _, _, _, _, _, _) = makeCoordinator()
+        coordinator.diagnostics = { [notes] in notes.note($0) }
+        coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+
+        coordinator.begin()
+        await settle(coordinator)
+        coordinator.stopAndExit()
+
+        #expect(notes.timing.isEmpty)
+        #expect(notes.lines.contains { $0.hasPrefix("Run: started") })
+        #expect(notes.lines.contains { $0.hasPrefix("Run: keeps running by workout") })
     }
 }
 
@@ -806,7 +1110,7 @@ struct RunCoordinatorHapticsTests {
         #expect(first.context == BoundaryContext(lateness: 0, phaseDuration: 10))
     }
 
-    @Test("A boundary the ticker catches half a second late says so, with the phase's length")
+    @Test("A boundary noticed half a second late says so, with the phase's length")
     func tickLatenessIsReported() async throws {
         let (coordinator, store, _, _, _, _, haptics) = makeCoordinator()
         useLongWorkout(store)
