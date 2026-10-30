@@ -83,13 +83,24 @@ final class FakeWorkoutSession: WorkoutSessioning {
     }
 }
 
-/// Counts the notification backstop's schedules and cancels.
+/// Counts the notification backstop's schedules and cancels, and keeps what each schedule
+/// asked for and which alerts came down.
 actor FakeBackstop: BoundaryScheduling {
     private(set) var schedules = 0
     private(set) var cancels = 0
+    /// The lead each schedule asked for, in order.
+    private(set) var leads: [TimeInterval] = []
+    /// Each alert taken down, in order.
+    private(set) var disarmed: [String] = []
     func requestAuthorization() async -> Bool { true }
-    func schedule(plan: IntervalPlan, anchor: Date) async { schedules += 1 }
+    func schedule(plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval) async {
+        schedules += 1
+        leads.append(minimumLead)
+    }
     func cancelAll() async { cancels += 1 }
+    /// Never: it schedules nothing to run out of.
+    func needsTopUp(now: Date) async -> Bool { false }
+    func disarm(identifier: String) async { disarmed.append(identifier) }
 }
 
 /// What the Live Activity would have been shown, in order.
@@ -551,6 +562,59 @@ struct PhoneRunTests {
         #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
         await run.coordinator.backstopSettled()
         #expect(await backstop.schedules >= 1)
+        run.close()
+    }
+
+    @Test("With Health declined and sounds on, each change's alert comes down just before its cue plays")
+    func healthDeclinedTakesAlertsDown() async throws {
+        session.startsSucceed = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        // The workout session's retries wait on a clock of their own, which nothing moves.
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.leads == [RunCoordinator.disarmingMinimumLead], "Scheduled all the same: the app could be suspended")
+
+        // The 2-second tick before the work takes the work's alert down.
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= 8 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 1)])
+        output.reset()
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= 10 }
+        #expect(output.calls.contains(.tone(.go)), "The cue marks the change instead")
+        run.close()
+    }
+
+    @Test("With the beeps and the voice off, a run on a workout session still marks each change with notifications")
+    func silentRunSchedulesTheBackstop() async {
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        // On the watch a session's taps would mark them, but an iPhone's are felt only in front.
+        #expect(await backstop.schedules == 1)
+        #expect(await backstop.leads == [NotificationScheduler.defaultMinimumLead])
+        run.close()
+    }
+
+    @Test("With only the voice coach on, its words are heard, and a run on a workout session schedules no alerts")
+    func voiceAloneIsHeard() async {
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        pro.isPro = true
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 0)
         run.close()
     }
 

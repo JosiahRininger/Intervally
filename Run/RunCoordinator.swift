@@ -51,10 +51,11 @@ final class RunCoordinator {
     @ObservationIgnored private let presenter: any RunPresenting
     @ObservationIgnored private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "run")
 
-    /// Which mechanism is keeping the run alive. This is not cosmetic: it decides whether
-    /// boundary haptics can fire from the app at all, and therefore whether the
-    /// notification backstop is needed.
-    enum RuntimeTier: String {
+    /// Which mechanism is keeping the run alive. This is not cosmetic: on the watch it decides
+    /// whether boundary haptics can fire from the app at all, and together with whether the
+    /// cues can be heard away from the app (`awayCuesAudible`), it decides what the
+    /// notification backstop does (`backstop(isRunning:tier:cuesAudible:)`).
+    enum RuntimeTier: String, CaseIterable {
         /// A live `HKWorkoutSession`. The app keeps executing indefinitely, survives the
         /// user leaving it, and — uniquely — is allowed to play haptics from the
         /// background. `WKInterfaceDevice.play(_:)` is documented as a no-op when the app
@@ -66,7 +67,9 @@ final class RunCoordinator {
         /// Nothing is holding the app open.
         case none
 
-        /// Whether the app can rely on playing its own haptics at interval boundaries.
+        /// Whether the app can rely on playing its own haptics at interval boundaries. Only the
+        /// watch's taps depend on it: the iPhone's are felt only in front, whatever the tier,
+        /// and its sounds play away from the app under any.
         var deliversHaptics: Bool { self == .workout }
     }
 
@@ -74,6 +77,35 @@ final class RunCoordinator {
     /// couldn't be started again). The notification backstop marks the changes meanwhile,
     /// whatever keeps the run going. See `cuesHealthChanged(healthy:)`.
     private(set) var cuesFailing = false
+
+    /// Whether the run's own cues can be heard, or felt, with the app away, under `tier`. On
+    /// the watch, the default, only a workout session's taps can (`deliversHaptics`). The
+    /// iPhone's sounds keep playing away from the app whatever keeps the run going, so there
+    /// `PhoneRun` answers with whether any sound is on.
+    @ObservationIgnored var awayCuesAudible: @MainActor (RuntimeTier) -> Bool = { $0.deliversHaptics }
+
+    /// Whether the app is in front. Away from it, a top-up of the alerts asks for the time to
+    /// finish (`beginBackgroundWork`). The watch never needs to ask; the iPhone says.
+    @ObservationIgnored var isAppActive: @MainActor () -> Bool = { true }
+
+    /// Asks for the time to finish the work named, away from the app, and returns what to call
+    /// once it's done. On iPhone a background task; elsewhere there's nothing to ask for.
+    @ObservationIgnored var beginBackgroundWork: @MainActor (String) -> @MainActor () -> Void = { _ in {} }
+
+    /// The alerts taken down ahead of their changes since the last schedule or cancel
+    /// (`disarmNextAlertIfDue`), so each comes down once.
+    @ObservationIgnored private var disarmed: Set<String> = []
+
+    /// How close a change has to be before the app takes its alert down. Inside it the ticker
+    /// wakes at least every half second, and at the 2-second countdown tick.
+    static let disarmLead: TimeInterval = 2
+
+    /// The lead a schedule asks for while the app takes the alerts down: a little over
+    /// `disarmLead`, so a schedule never puts back an alert just taken down, or about to be.
+    static let disarmingMinimumLead: TimeInterval = 2.5
+
+    /// The top-up check after the latest change, if any (`topUpBackstopIfLow`).
+    @ObservationIgnored private var topUpTask: Task<Void, Never>?
 
     private(set) var tier: RuntimeTier = .none {
         didSet {
@@ -270,8 +302,10 @@ final class RunCoordinator {
     /// Whether the advance loop is live. Its lifetime has been a repeated source of bugs.
     var isTicking: Bool { ticker != nil }
 
-    /// Awaits the chained notification update, so tests can assert on a settled schedule.
+    /// Awaits the chained notification update, and the top-up check after the latest change,
+    /// so tests can assert on a settled schedule.
     func backstopSettled() async {
+        await topUpTask?.value
         await backstopTask?.value
     }
 
@@ -459,11 +493,45 @@ final class RunCoordinator {
         }
     }
 
-    /// Keeps the notification backstop in sync with the current tier.
+    /// What the notification backstop does for a run.
+    struct Backstop: Equatable, Sendable {
+        /// Whether the run's changes are scheduled as alerts.
+        var isScheduled: Bool
+        /// Whether the app takes each alert down just before its change, and marks the change
+        /// itself (`disarmNextAlertIfDue`). A dead-man's switch: an alert goes off only if the
+        /// app wasn't running to take it down, so no change is marked twice.
+        var disarms: Bool
+    }
+
+    /// Decides the backstop, apart from any run, so every case is testable: the watch's, which
+    /// is 1.2's, among them.
     ///
-    /// Under a workout session the app is executing and plays its own haptics, so
-    /// scheduling notifications as well would double-alert at every boundary and burn the
-    /// pending-request budget for nothing.
+    /// - Parameter cuesAudible: Whether the run's own cues can be heard, or felt, away from the
+    ///   app: what `awayCuesAudible` says for the tier, unless the cues can't sound at all.
+    nonisolated static func backstop(isRunning: Bool, tier: RuntimeTier, cuesAudible: Bool) -> Backstop {
+        // A workout session keeps the app running, so cues that can be heard mark every change,
+        // and alerts as well would mark each twice. Without one the app can be suspended at any
+        // moment, so the alerts are scheduled whatever the cues do, and while the cues can be
+        // heard the app takes each alert down just before its change.
+        let isScheduled = isRunning && (tier != .workout || !cuesAudible)
+        return Backstop(isScheduled: isScheduled, disarms: isScheduled && tier != .workout && cuesAudible)
+    }
+
+    /// The backstop for the run as it stands.
+    private var backstop: Backstop {
+        Self.backstop(
+            isRunning: engine.status == .running, tier: tier,
+            cuesAudible: awayCuesAudible(tier) && !cuesFailing
+        )
+    }
+
+    /// Keeps the notification backstop in step with the run (`backstop`).
+    ///
+    /// On the watch, a workout session plays its own haptics, so scheduling notifications as
+    /// well would double-alert at every boundary and burn the pending-request budget for
+    /// nothing. On iPhone the sounds play away from the app with or without one, so what
+    /// counts is whether there are any: with Health declined each change once had a cue and
+    /// an alert, and with the beeps and the voice off under a session, nothing at all.
     private func refreshBackstop() {
         // While a tier is still being acquired the right answer is unknown: scheduling now
         // (as the foreground transition did when the permission sheet dismissed) burns a
@@ -471,12 +539,19 @@ final class RunCoordinator {
         // opens a double-alert window if a boundary lands in between. The acquisition ends
         // with its own refreshBackstop(), and it is bounded, so deferring is safe.
         guard supportTask == nil else { return }
-        let wanted: (plan: IntervalPlan, anchor: Date)?
-        if engine.status == .running, !tier.deliversHaptics || cuesFailing, let anchor = engine.anchor {
-            wanted = (engine.plan, anchor)
+        let backstop = self.backstop
+        let wanted: (plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval)?
+        if backstop.isScheduled, let anchor = engine.anchor {
+            // While the app takes the alerts down, a change about to be taken down is left
+            // out, so a schedule never puts one back.
+            let lead = backstop.disarms ? Self.disarmingMinimumLead : NotificationScheduler.defaultMinimumLead
+            wanted = (engine.plan, anchor, lead)
         } else {
             wanted = nil
         }
+        // A schedule starts with a cancel, so what was taken down is gone either way, and a
+        // change the new schedule names again comes down afresh.
+        disarmed.removeAll()
 
         // Chain onto the previous update rather than firing an independent task. Two
         // unstructured tasks can enter the scheduler in either order, so a quick
@@ -486,10 +561,56 @@ final class RunCoordinator {
         backstopTask = Task { [notifications] in
             await previous?.value
             if let wanted {
-                await notifications.schedule(plan: wanted.plan, anchor: wanted.anchor)
+                await notifications.schedule(plan: wanted.plan, anchor: wanted.anchor, minimumLead: wanted.minimumLead)
             } else {
                 await notifications.cancelAll()
             }
+        }
+    }
+
+    /// The backstop's dead-man's switch. While the app marks the changes with cues that can be
+    /// heard away from it, it takes each change's alert down once the change is `disarmLead`
+    /// away. Only a running app can, so one suspended or stopped by then leaves the alert to
+    /// go off, and nothing marks a change twice. Paused, nothing ticks, and nothing comes down.
+    private func disarmNextAlertIfDue() {
+        guard engine.status == .running, let index = engine.position.phaseIndex else { return }
+        let plan = engine.plan
+        let next = index + 1
+        let (identifier, moment) = next < plan.phases.count
+            ? (NotificationScheduler.identifier(forPhase: next), plan.phases[next].start)
+            : (NotificationScheduler.finishIdentifier, plan.totalDuration)
+        // The clock first: most wakes are further off, and the backstop reads the settings.
+        guard moment - engine.elapsed <= Self.disarmLead, !disarmed.contains(identifier),
+              backstop.disarms else { return }
+        disarmed.insert(identifier)
+        // After any schedule still adding, which could otherwise put the alert back.
+        let previous = backstopTask
+        backstopTask = Task { [notifications] in
+            await previous?.value
+            await notifications.disarm(identifier: identifier)
+        }
+    }
+
+    /// Schedules the alerts again once they run low: one schedule holds the next 59 changes
+    /// and the finish, and a longer workout's changes went unmarked from there. Asked after
+    /// every change, of the schedule as that change left it. Away from the app, the schedule
+    /// is given the time to finish (`beginBackgroundWork`).
+    private func topUpBackstopIfLow() {
+        let previous = topUpTask
+        topUpTask = Task { [weak self] in
+            await previous?.value
+            // Read once this runs, not when asked: a skip asks, then schedules afresh, and the
+            // answer has to be about that schedule.
+            await self?.backstopTask?.value
+            guard let self, self.engine.status == .running,
+                  await self.notifications.needsTopUp(now: self.engine.now()),
+                  // It may have been paused or ended while the scheduler answered.
+                  self.engine.status == .running else { return }
+            let finished = self.isAppActive() ? nil : self.beginBackgroundWork("Schedule the workout's next alerts")
+            self.refreshBackstop()
+            guard let finished else { return }
+            await self.backstopTask?.value
+            finished()
         }
     }
 
@@ -500,6 +621,10 @@ final class RunCoordinator {
     func cuesHealthChanged(healthy: Bool) {
         guard cuesFailing == healthy else { return }
         cuesFailing = !healthy
+        // Without a workout session the alerts are scheduled either way: this only decides
+        // whether the app takes them down before their changes, from the next change on.
+        // Scheduling again would cancel the same alerts and add them back.
+        guard tier == .workout else { return }
         refreshBackstop()
     }
 
@@ -526,6 +651,7 @@ final class RunCoordinator {
         dispatch(engine.advance(), wallElapsed: wall)
         // Whatever was due at Resume has been announced now.
         boundaryDueAtResume = false
+        disarmNextAlertIfDue()
     }
 
     /// Jumps to the next phase. The boundary haptic and Health segment fire exactly as if
@@ -605,6 +731,7 @@ final class RunCoordinator {
                 // Segment the Health workout at the same boundaries the user feels.
                 if tier == .workout { workout.beginActivity(for: phase) }
                 present()
+                topUpBackstopIfLow()
             case .finished:
                 finish()
             case .countdown:

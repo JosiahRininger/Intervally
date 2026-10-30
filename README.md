@@ -88,6 +88,8 @@ mechanisms and picks the best one available:
 
 Tier 3 is scheduled only when tier 1 isn't running — under a workout session the app plays
 its own haptics, and scheduling notifications as well would double-alert at every boundary.
+One schedule holds the next 59 changes and the finish, so after each change a longer workout
+is scheduled again once fewer than ten of its alerts are still to come.
 
 While the app is running, its taps come from `RunCoordinator`'s ticker. It sleeps until the
 plan's next countdown second or interval change (`IntervalPlan.nextEventElapsed`) and wakes
@@ -233,10 +235,20 @@ engine, the Health workout session and the notification backstop. Only the edges
 
 - **What keeps it going.** iOS 26 runs an `HKWorkoutSession` on iPhone, which keeps the app
   executing with the phone locked and saves the workout, segmented by interval, to Health.
-  With Health declined there is no second tier (`ForegroundRuntime`): the run counts in front
-  and the notification backstop marks each change while the app is away. iOS hands back a
+  With Health declined there is no second tier (`ForegroundRuntime`), but the cues' audio,
+  held from Start to the end, keeps the app running away from it. iOS hands back a
   session that outlived a crash through `UIScene.ConnectionOptions.shouldHandleActiveWorkoutRecovery`
   (`PhoneAppDelegate`), and a run interrupted by a termination is restored from its snapshot.
+- **The backstop** (`RunCoordinator.backstop`). On iPhone what marks a change away from the
+  app is decided by whether the cues can be heard, not by the tier: the watch's rule counted
+  only a workout session's taps, so with Health declined every change had a cue and an
+  alert, and with the beeps and the voice off under a session it had neither. Now the alerts
+  go whenever there is nothing to hear, and without a session they are scheduled as a
+  dead-man's switch: two seconds before each change the app takes that change's alert down
+  and plays its cue. An app suspended by then can't, so its alert goes off instead. A
+  schedule leaves out a change less than 2.5 seconds off, so it never puts back an alert
+  just taken down, and cues that can't sound (a call, the audio stopping) leave the alerts
+  up. A tick held up for more than two seconds still marks that change twice, as 1.2 did.
 - **Cues** (`PhoneCuePlayer`, `CuePlan`, `CueAudio`). Synthesized tones, higher for work and
   lower for rest, a 3-2-1 tick, a finish chime, and with Pro the voice coach ("Work", "Rest",
   "Last round"). The audio session is held, mixed, for the whole run, so the volume buttons

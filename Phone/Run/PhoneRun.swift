@@ -96,6 +96,12 @@ final class PhoneRun {
         cues.roundsInRun = { [weak coordinator] in coordinator?.engine.plan.totalRounds ?? 1 }
         cues.runIsActive = { [weak coordinator] in coordinator?.engine.isActive ?? false }
         cues.phasesInRun = { [weak coordinator] in coordinator?.engine.plan.phases ?? [] }
+        // The cues play away from the app whatever keeps the run going, workout session or
+        // not, so whether they can be heard there is whether any sound is on. With the beeps
+        // and the voice both off, notifications mark the changes while the phone is locked.
+        coordinator.awayCuesAudible = { _ in cues.isAudible }
+        coordinator.isAppActive = { UIApplication.shared.applicationState == .active }
+        coordinator.beginBackgroundWork = { BackgroundWork(name: $0).end }
         resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
         // Cues that can't sound fall back to notifications rather than to silence.
         resolvedOutput.onHealthReport = { [weak coordinator] healthy in
@@ -342,5 +348,23 @@ final class PhoneRun {
     var keepsScreenAwake: Bool {
         isPresented && engine.status == .running
             && (defaults.object(forKey: CueSettings.Key.keepAwake) as? Bool ?? true)
+    }
+}
+
+/// Time from iOS to finish one piece of work away from the app, given back once: when the
+/// work is done, or when the time runs out first, as iOS ends an app still holding it then.
+@MainActor
+private final class BackgroundWork {
+    private var task = UIBackgroundTaskIdentifier.invalid
+
+    init(name: String) {
+        // Held by the handler until it is given back, so running out can always give it back.
+        task = UIApplication.shared.beginBackgroundTask(withName: name) { [self] in end() }
+    }
+
+    func end() {
+        guard task != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(task)
+        task = .invalid
     }
 }

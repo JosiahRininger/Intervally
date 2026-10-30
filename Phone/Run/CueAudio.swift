@@ -348,11 +348,16 @@ final class CueAudio: NSObject, CueOutput {
         _ = ensureRunning()
     }
 
-    private func interrupted(began: Bool) {
+    /// A call, Siri, or audio that can't be mixed took the audio, or gave it back. Not private
+    /// so its tests can stand in for the interruption notification.
+    func interrupted(began: Bool) {
         diagnostics.note("Audio: interrupted, \(began ? "began" : "ended")")
         if began {
-            // The system has let the session go and stopped the engine.
+            // The system has let the session go and stopped the engine. Said at once, so the
+            // run marks its changes with notifications from now, not from the first cue that
+            // fails to play.
             isActive = false
+            report(healthy: false)
         } else if isHeld {
             // Back after a call: the engine picks up again, which works in front and, as a
             // resumption the system offers, often away from it too.

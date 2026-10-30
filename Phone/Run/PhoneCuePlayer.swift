@@ -101,11 +101,18 @@ final class PhoneCuePlayer: BoundaryHaptics {
         }
     }
 
-    /// Whether the cues would be hard to hear at `volume`: with something to hear (beeps,
-    /// which carry the countdown too, or the voice), and the media volume near the bottom.
-    func isQuiet(atVolume volume: Float) -> Bool {
+    /// Whether a run's cues have anything to be heard: the beeps, which carry the countdown
+    /// too, or the voice. Without either a change is only a tap, felt only with the app in
+    /// front.
+    var isAudible: Bool {
         let settings = self.settings
-        return (settings.beeps || settings.voice) && volume < Self.quietVolume
+        return settings.beeps || settings.voice
+    }
+
+    /// Whether the cues would be hard to hear at `volume`: with something to hear, and the
+    /// media volume near the bottom.
+    func isQuiet(atVolume volume: Float) -> Bool {
+        isAudible && volume < Self.quietVolume
     }
 
     /// About two presses of the volume button from silent.

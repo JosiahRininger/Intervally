@@ -190,7 +190,7 @@ IN-APP PURCHASE
 Intervally Pro (com.josiahrininger.intervally.pro), a one-time, non-consumable unlock for both apps, is submitted with this version. On iPhone, tap + (top right of Workouts): the 3 starter presets fill the free limit, so the Intervally Pro screen opens. On the watch, tap the list icon (top left of the setup screen), then New Preset. If the product doesn't load, the screen says "Pro isn't available right now" with Try Again, and every free feature still works.
 
 HEALTHKIT
-Health access is optional on both devices. Each device saves the workouts it runs as the activity chosen for it (High Intensity Interval Training by default), each interval its own segment. The watch reads heart rate during a workout; iPhone History reads workouts, heart rate and active energy. To Health the two apps are one app, so every request asks for the same types. If Health is declined, the timer still works and marks each change with notifications when the app is not in front. No health data leaves the user's devices.
+Health access is optional on both devices. Each device saves the workouts it runs as the activity chosen for it (High Intensity Interval Training by default), each interval its own segment. The watch reads heart rate during a workout; iPhone History reads workouts, heart rate and active energy. To Health the two apps are one app, so every request asks for the same types. If Health is declined, the timer still works: on iPhone its sounds mark each change with the app in the background, and notifications take over if they can't play. On the watch, notifications do. No health data leaves the user's devices.
 
 BACKGROUND MODES
 iPhone app:
