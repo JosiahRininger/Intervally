@@ -282,6 +282,19 @@ final class PhoneRun {
 
     @ObservationIgnored private var sampleRelease: Task<Void, Never>?
 
+    /// Hear the Coach, for a free user on the paywall or in Sounds & Voice. It hands its audio
+    /// back itself once it has played. A Play a Sample tapped before it, or while its phrases
+    /// rendered, would hand the audio back at its own time, partway through the coach: once
+    /// the coach plays, its release is the only one left.
+    func hearCoach() async -> CoachSample {
+        let sample = await cues.previewCoach()
+        if case .played(let phrases, _) = sample, !phrases.isEmpty {
+            sampleRelease?.cancel()
+            sampleRelease = nil
+        }
+        return sample
+    }
+
     /// The run screen's hint to turn the volume up: the cues are on, and too quiet to hear.
     var isVolumeLow: Bool {
         coordinator.engine.isActive && cues.isQuiet(atVolume: mediaVolume)

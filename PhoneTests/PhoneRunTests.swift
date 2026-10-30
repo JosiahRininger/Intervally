@@ -36,6 +36,14 @@ final class FakeCueOutput: CueOutput {
         askedRendered = phrases
         return phrasesRendered
     }
+    /// Every sample Hear the Coach asked to play, in order.
+    private(set) var previewed: [[String]] = []
+    /// What a sample answers; nil plays every phrase for 50 ms, as if each were rendered.
+    var previewAnswer: CoachSample?
+    func preview(_ phrases: [String]) async -> CoachSample {
+        previewed.append(phrases)
+        return previewAnswer ?? .played(phrases, seconds: 0.05)
+    }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
     /// Whether the cues can sound, reported at every hold as the real output does.
@@ -558,6 +566,22 @@ struct PhoneRunTests {
         await run.coordinator.backstopSettled()
         #expect(await backstop.schedules == 0)
         run.close()
+    }
+
+    @Test("Hear the Coach after Play a Sample: the sample's release no longer cuts the coach off")
+    func hearCoachAfterSample() async throws {
+        let (run, _) = makeRun()
+        // Longer than Play a Sample's 3 s hold, so its release would land mid-coach.
+        output.previewAnswer = .played(PhoneCuePlayer.coachSample, seconds: 3.5)
+        run.playSample()
+        let sample = await run.hearCoach()
+        #expect(sample.note == nil)
+
+        try await Task.sleep(for: .seconds(3.5))
+        #expect(!output.calls.contains(.release), "Not over the coach's last word")
+        #expect(await waitUntil { output.calls.contains(.release) })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(output.calls.filter { $0 == .release }.count == 1, "The coach's release alone")
     }
 
     @Test("Start while a run is under way only brings it back to the screen")

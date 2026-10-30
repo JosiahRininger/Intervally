@@ -44,7 +44,7 @@ final class PhoneCuePlayer: BoundaryHaptics {
         holdIfSounding()
         let plan = CuePlan.make(for: event, context: context, settings: settings, totalRounds: roundsInRun())
         perform(plan)
-        if case .finished = event { releaseOnceFinished() }
+        if case .finished = event { releaseOnceFinished(after: releaseAfterFinish) }
     }
 
     /// Takes the audio for a run, if it has anything to be heard: at each event, and for a run
@@ -90,9 +90,10 @@ final class PhoneCuePlayer: BoundaryHaptics {
 
     /// A finished run's audio goes back once the finish has sounded, with no Done needed: a
     /// summary left on screen in a pocket must not hold the audio, and with it the app, open
-    /// for nothing. Unless another run has started meanwhile (Repeat).
-    private func releaseOnceFinished() {
-        let delay = releaseAfterFinish
+    /// for nothing. Unless another run has started meanwhile (Repeat). The coach's sample
+    /// hands it back the same way.
+    private func releaseOnceFinished(after delay: TimeInterval) {
+        finishRelease?.cancel()
         finishRelease = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled, !self.runIsActive() else { return }
@@ -136,6 +137,21 @@ final class PhoneCuePlayer: BoundaryHaptics {
         perform(CuePlan.make(for: .phaseBegan(sample), context: .immediate, settings: settings, totalRounds: 8))
     }
 
+    /// Hear the Coach, on the paywall and in Sounds & Voice: the voice coach for someone
+    /// deciding on Pro, so whatever the settings say. Half a second after its last word the
+    /// audio goes back, as a finished run's does; a sample that played nothing took none.
+    func previewCoach() async -> CoachSample {
+        let sample = await output.preview(Self.coachSample)
+        if case .played(let phrases, let seconds) = sample, !phrases.isEmpty {
+            releaseOnceFinished(after: seconds + 0.5)
+        }
+        return sample
+    }
+
+    /// What the coach says in a run of two rounds, so a run's renders serve the sample and
+    /// the sample's serve a run.
+    static let coachSample = ["Work", "Rest", "Last round", CuePlan.finishPhrase]
+
     private func perform(_ plan: CuePlan) {
         var delay: TimeInterval = 0
         if let tone = plan.tone {
@@ -146,6 +162,27 @@ final class PhoneCuePlayer: BoundaryHaptics {
         }
         if let tap = plan.tap {
             output.tap(tap)
+        }
+    }
+}
+
+/// What Hear the Coach could play.
+enum CoachSample: Equatable, Sendable {
+    /// `phrases`, one after another, for `seconds`. None, when the system voice rendered
+    /// nothing, and so nothing was heard.
+    case played([String], seconds: TimeInterval)
+    /// Nothing: no phrase is rendered yet, and other audio is playing, which rendering one
+    /// would pause.
+    case needsQuiet
+
+    static let title = "Hear the Coach"
+
+    /// The line under the button after a tap, when it needs one: whenever nothing was heard.
+    var note: String? {
+        switch self {
+        case .needsQuiet: "Pause your music to hear the coach."
+        case .played(let phrases, _) where phrases.isEmpty: "The coach couldn't play. Try again."
+        case .played: nil
         }
     }
 }

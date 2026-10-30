@@ -182,6 +182,46 @@ struct WorkoutsModelTests {
         #expect(followUp.closed() == nil, "Only once")
     }
 
+    @Test("Edit a Starter Instead runs as the paywall closes, with no unlock, in place of the add")
+    func followUpInstead() {
+        var followUp = PaywallFollowUp<WorkoutsView.FollowUp>()
+        let classic = WorkoutStore.starterWorkouts[0].id
+        followUp.open(for: .addNew)
+        followUp.instead(.edit(classic))
+        #expect(followUp.closed() == .edit(classic))
+        #expect(followUp.closed() == nil, "Only once")
+    }
+
+    @Test("Edit a Starter Instead opens the starter up next, else the first starter left, else what is up next")
+    func starterToEdit() {
+        let actions = makeActions()
+        let store = actions.store
+        let starters = WorkoutStore.starterWorkouts
+        #expect(actions.starterToEdit.id == starters[0].id, "A fresh install: Classic, up next")
+
+        actions.putOnWatch(store.workouts[1])
+        #expect(actions.starterToEdit.id == starters[1].id, "The starter up next")
+
+        // A preset of their own up next, with a starter still in the library.
+        store.delete(store.workouts[0])
+        let own = store.add(IntervalWorkout(name: "Mine"), select: true)
+        #expect(store.selectedID == own.id)
+        #expect(actions.starterToEdit.id == starters[1].id, "Not their own preset: a starter")
+
+        // Every starter gone: what is up next.
+        store.delete(store.workouts.first { $0.id == starters[1].id }!)
+        store.delete(store.workouts.first { $0.id == starters[2].id }!)
+        #expect(actions.starterToEdit.id == own.id)
+        #expect(store.workouts.count == 1, "Nothing added")
+    }
+
+    @Test("Only the paywall from + offers Edit a Starter Instead, not the one from Duplicate")
+    func editInsteadOnlyFromAdd() {
+        #expect(WorkoutsView.Sheet.paywall.offersEditInstead)
+        #expect(!WorkoutsView.Sheet.duplicatePaywall.offersEditInstead)
+        #expect(!WorkoutsView.Sheet.settings.offersEditInstead)
+    }
+
     @Test("An unlock with no paywall open for anything leaves nothing to run")
     func unlockWithoutPaywall() {
         var followUp = PaywallFollowUp<WorkoutsView.FollowUp>()
