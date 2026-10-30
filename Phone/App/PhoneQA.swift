@@ -30,6 +30,12 @@ import WatchConnectivity
 /// - `-qaWorkout <bpm>,<kcal>` runs this iPhone's runs on a stand-in workout session
 ///   (`QAWorkoutSession`) that reports that heart rate and those calories, with no Health or
 ///   notification prompts, and nothing saved: the simulator measures neither.
+/// - `-qaDefaults fresh|keep`: fresh starts the launch as a new install would, with what the
+///   app keeps cleared before anything reads it (`QADefaults.clear`) and no system prompt on
+///   the way (`suppressesPrompts`). keep, like no flag, starts from what the last launch left.
+/// - `-qaAllowPrompts YES` lets a fresh launch ask for notifications and Health as a new
+///   install would, for checking the prompts themselves.
+/// - `-qaSkipWelcome YES` marks the welcome as seen, so a fresh launch opens on the tabs.
 struct PhoneQAOptions: Equatable {
     var pro: Bool?
     var watch: QAWatchState?
@@ -40,11 +46,30 @@ struct PhoneQAOptions: Equatable {
     var runElapsed: TimeInterval?
     var watchRun: RunMirrorState.Status?
     var workout: QAWorkoutFigures?
+    var defaults: QADefaults?
+    var allowPrompts = false
+    var skipWelcome = false
 
     /// Any QA flag at all: such a launch is being driven or captured, never really used.
     var isActive: Bool {
         pro != nil || watch != nil || welcome || screen != nil || history != nil || theme != nil
-            || runElapsed != nil || watchRun != nil || workout != nil
+            || runElapsed != nil || watchRun != nil || workout != nil || defaults != nil || allowPrompts
+            || skipWelcome
+    }
+
+    /// A fresh launch shows no system alert of its own, so none can cover the screen under
+    /// test: its runs ask for neither notifications nor Health, History's Connect shows no
+    /// sheet, and the Home Screen icon stays as it is, since iOS announces every change in an
+    /// alert. `-qaAllowPrompts` lets them all show.
+    var suppressesPrompts: Bool {
+        defaults == .fresh && !allowPrompts
+    }
+
+    /// Whether this iPhone's runs take the stand-in workout session and backstop
+    /// (`QAWorkoutSession`, `QABackstop`), which ask for nothing and save nothing: for the
+    /// figures `-qaWorkout` shows, or for a launch that must show no prompt.
+    var runsOnStandIns: Bool {
+        workout != nil || suppressesPrompts
     }
 
     static let current = parse(ProcessInfo.processInfo.arguments)
@@ -57,13 +82,15 @@ struct PhoneQAOptions: Equatable {
             let next = arguments[index + 1]
             return next.hasPrefix("-") ? nil : next
         }
+        func isOn(_ flag: String) -> Bool {
+            guard arguments.contains(flag) else { return false }
+            // A bare flag counts, but UserDefaults would read the next flag as its value.
+            return value(after: flag).map { ["yes", "1", "true"].contains($0.lowercased()) } ?? true
+        }
         var options = PhoneQAOptions()
         options.pro = value(after: "-qaPro").flatMap(proOverride)
         options.watch = value(after: "-qaWatch").flatMap(QAWatchState.init(rawValue:))
-        if arguments.contains("-qaWelcome") {
-            // A bare flag counts, but UserDefaults would read the next flag as its value.
-            options.welcome = value(after: "-qaWelcome").map { ["yes", "1", "true"].contains($0.lowercased()) } ?? true
-        }
+        options.welcome = isOn("-qaWelcome")
         options.screen = value(after: "-qaOpen").flatMap(QAScreen.init(rawValue:))
         options.history = value(after: "-qaHistory").flatMap(QAHistory.init(rawValue:))
         options.theme = value(after: "-qaTheme").flatMap(AppTheme.qaOverride)
@@ -71,6 +98,9 @@ struct PhoneQAOptions: Equatable {
         options.watchRun = value(after: "-qaWatchRun").flatMap(RunMirrorState.Status.init(rawValue:))
             .flatMap { $0 == .stopped ? nil : $0 }
         options.workout = value(after: "-qaWorkout").flatMap(QAWorkoutFigures.init)
+        options.defaults = value(after: "-qaDefaults").flatMap(QADefaults.init(rawValue:))
+        options.allowPrompts = isOn("-qaAllowPrompts")
+        options.skipWelcome = isOn("-qaSkipWelcome")
         return options
     }
 
@@ -80,6 +110,40 @@ struct PhoneQAOptions: Equatable {
         case "pro": true
         case "free": false
         default: nil
+        }
+    }
+}
+
+/// What a launch starts from (`-qaDefaults`). The UI tests launch fresh every time, so no test
+/// inherits a preset, a theme or a run another test left behind.
+enum QADefaults: String, Sendable {
+    /// As a new install would: everything the app keeps is cleared first (`clear`).
+    case fresh
+    /// Whatever the last launch left, as with no flag at all.
+    case keep
+
+    /// Clears what the app keeps, before anything reads it: its own defaults, the shared
+    /// suite (the same defaults on iPhone today; a suite of its own is cleared key by key),
+    /// and Application Support, where the run diagnostics live. Caches stay: the voice coach
+    /// would only render its phrases again, which takes time and changes nothing.
+    static func clear(
+        defaults: UserDefaults = .standard,
+        domain: String? = Bundle.main.bundleIdentifier,
+        suite: UserDefaults = SharedDefaults.suite,
+        support: URL? = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    ) {
+        if let domain { defaults.removePersistentDomain(forName: domain) }
+        if suite !== defaults {
+            // Removing a key the suite only reads from elsewhere (the global domain, the
+            // launch arguments) changes nothing, so every key it shows can go.
+            for key in suite.dictionaryRepresentation().keys {
+                suite.removeObject(forKey: key)
+            }
+        }
+        let files = FileManager.default
+        guard let support, let items = try? files.contentsOfDirectory(at: support, includingPropertiesForKeys: nil) else { return }
+        for item in items {
+            try? files.removeItem(at: item)
         }
     }
 }
@@ -154,17 +218,19 @@ struct QAWorkoutFigures: Equatable, Sendable {
 }
 
 /// The workout session for `-qaWorkout`: starts at once, reports fixed figures, and saves
-/// nothing, so the run screen can be checked with its heart rate and calories showing.
+/// nothing, so the run screen can be checked with its heart rate and calories showing, and
+/// its summary with Saved to Health. A fresh launch's runs take it too, with no figures, so
+/// no Health prompt stands in the way; their summary says nothing was saved, which is true.
 @MainActor
 final class QAWorkoutSession: WorkoutSessioning {
-    let figures: QAWorkoutFigures
+    let figures: QAWorkoutFigures?
     var isSupported: Bool { true }
     private(set) var isRunning = false
-    var heartRate: Double? { isRunning ? figures.heartRate : nil }
-    var activeEnergy: Double? { isRunning ? figures.activeEnergy : nil }
+    var heartRate: Double? { isRunning ? figures?.heartRate : nil }
+    var activeEnergy: Double? { isRunning ? figures?.activeEnergy : nil }
     var onUnexpectedEnd: (() -> Void)?
 
-    init(figures: QAWorkoutFigures) {
+    init(figures: QAWorkoutFigures?) {
         self.figures = figures
     }
 
@@ -177,18 +243,32 @@ final class QAWorkoutSession: WorkoutSessioning {
     func beginActivity(for phase: IntervalPhase, at date: Date) {}
     func pause() {}
     func resume() {}
+    /// Saved only for `-qaWorkout`'s screenshots. A fresh launch's run reports a failed save,
+    /// as nothing reached Health, so a UI test can't take Saved to Health for granted.
     func end(at date: Date) async -> Bool {
         isRunning = false
-        return true
+        return figures != nil
     }
     func discard() { isRunning = false }
 }
 
-/// The notification backstop for `-qaWorkout`: asks for nothing and schedules nothing.
+/// The notification backstop for `-qaWorkout` and a fresh launch: asks for nothing and
+/// schedules nothing.
 struct QABackstop: BoundaryScheduling {
     func requestAuthorization() async -> Bool { true }
     func schedule(plan: IntervalPlan, anchor: Date) async {}
     func cancelAll() async {}
+}
+
+/// History from Health for a fresh launch: read as usual, but Connect asks for nothing, so
+/// Health's sheet never covers the screen under test.
+struct QAUnpromptedHistory: HistorySource {
+    let source: any HistorySource
+
+    var isAvailable: Bool { source.isAvailable }
+    func access() async -> HistoryAccess { await source.access() }
+    func requestAccess() async throws {}
+    func workouts() async throws -> [RawWorkout] { try await source.workouts() }
 }
 
 /// A screen `-qaOpen` opens on launch, for screenshots.

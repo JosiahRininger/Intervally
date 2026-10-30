@@ -33,7 +33,27 @@ xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhoneUITests -de
 The watch suite runs 603 tests and the iPhone suite 377, all Swift Testing, on Xcode 26.2.
 The UI tests are XCTest (the audit is XCTest's), and each opens its screen straight from
 launch with the debug build's QA flags. `PhoneUITests/AuditExceptions.swift` lists what the
-audit reports by design, each with its reason; anything else it finds fails.
+audit reports by design, each with its reason; anything else it finds fails. Every UI test
+launches with `-qaDefaults fresh`, as a new install with no system prompts, so nothing one
+test leaves behind reaches the next; one that checks something lasts relaunches with `keep`
+(`LaunchHygieneTests`).
+
+Or every suite in one command, each on a simulator of the script's own (Intervally-QA-iPhone,
+-iPad and -Watch, made when missing, at most two booted, no other simulator touched), with a
+table of results at the end and result bundles in `build/test-results/`. One run goes at a
+time from any checkout, as they share those simulators: a second waits for the first.
+
+```bash
+scripts/test-all.sh                  # the unit and UI suites, then the Release check
+scripts/test-all.sh --unit-only      # the watch and iPhone unit suites
+scripts/test-all.sh --ui-only        # the UI tests on an iPhone and an iPad
+scripts/test-all.sh --release-check  # builds Release and fails if any QA flag is in it
+scripts/test-all.sh --unsigned       # with any of these: no team or certificate needed
+```
+
+GitHub Actions runs the same script, for information only: the unit suites on every pull
+request and push to master, the UI suites when run by hand (`.github/workflows/ci.yml`). No
+check is required, and it uses no secrets.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
 bundle ID `com.josiahrininger.intervally` and the App Store record; the watch app is
@@ -164,8 +184,13 @@ Home Screen icon), `-qaWatch unsupported|unpaired|notInstalled|installed|firstSy
 (a stand-in watch that never reaches a real one), `-qaWelcome YES`, `-qaOpen
 editor|picker|bookends|paywall|settings|watch|pro|health|theme|history|session`,
 `-qaHistory sample|empty|connect|unavailable|failed` (History from a fixture; Health is never
-read or written) and `-qaEdit "rename 0 Sprint; warmup 0 300"` (`PhoneQA.swift`,
-`QAEdit.swift`, `SampleHistory.swift`).
+read or written), `-qaEdit "rename 0 Sprint; warmup 0 300"`, `-qaDefaults fresh|keep` (fresh
+clears the app's defaults and Application Support before anything reads them, and shows no
+system prompt: runs ask for neither notifications nor Health, History's Connect shows no
+sheet, the icon stays put), `-qaAllowPrompts YES` (a fresh launch that asks as a new install
+would) and `-qaSkipWelcome YES` (`PhoneQA.swift`, `QAEdit.swift`, `SampleHistory.swift`).
+`scripts/test-all.sh --release-check` builds Release and fails if any of these flags is in
+it.
 
 Pro is sold in both apps, under one product. App Store Connect doesn't take In-App
 Purchases with an Apple Watch app version, which is why Intervally ships as an iPhone app
@@ -367,6 +392,8 @@ AppStore/                  Metadata.md (the App Store Connect listing, checked b
                            Screenshots/ (iPhone 6.9" and 6.3", Watch, the purchase's review
                            shot, and compose.py, which captions the iPhone captures)
 Design/AppIcon/            the icon's generator; one PNG serves the iPhone and the watch
+scripts/test-all.sh        every suite in one command, and the Release check
+.github/workflows/ci.yml   informational CI: the same script
 ```
 
 ## Design notes

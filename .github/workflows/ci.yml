@@ -1,0 +1,77 @@
+# Informational CI. Nothing here is a required check, needs a secret or deploys anything:
+# macOS minutes are costly on a private repo, and scripts/test-all.sh on the Mac is the real
+# gate. Both jobs run that same script.
+#
+# - Every pull request, and every push to master: the unit suites, watch and iPhone, each
+#   with SyncTests, as sync runs on both devices.
+# - By hand only (Actions > CI > Run workflow): the UI suites as well.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the run before it moot.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    name: Unit tests (watch, iPhone, Sync)
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26 or later
+        run: |
+          xcodebuild -version
+          major=$(xcodebuild -version | awk 'NR == 1 { split($2, version, "."); print version[1] }')
+          if [ "${major:-0}" -lt 26 ]; then
+            echo "::error::Intervally needs Xcode 26 or later, for the iOS 26 and watchOS 26 SDKs. This runner has $(xcodebuild -version | head -1)."
+            exit 1
+          fi
+      - name: XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      # Signed to run locally, with no team: a simulator needs nothing more.
+      - name: Unit suites
+        run: scripts/test-all.sh --unit-only --unsigned
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: build/test-results
+          if-no-files-found: ignore
+
+  ui:
+    name: UI tests (iPhone and iPad)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-26
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode 26 or later
+        run: |
+          xcodebuild -version
+          major=$(xcodebuild -version | awk 'NR == 1 { split($2, version, "."); print version[1] }')
+          if [ "${major:-0}" -lt 26 ]; then
+            echo "::error::Intervally needs Xcode 26 or later, for the iOS 26 and watchOS 26 SDKs. This runner has $(xcodebuild -version | head -1)."
+            exit 1
+          fi
+      - name: XcodeGen
+        run: command -v xcodegen || brew install xcodegen
+      - name: UI suites
+        run: scripts/test-all.sh --ui-only --unsigned
+      - name: Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-results
+          path: build/test-results
+          if-no-files-found: ignore
