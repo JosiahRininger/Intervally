@@ -56,7 +56,8 @@ struct MetadataTests {
         "## Promotional text (170)",
         "## Description (4000)",
         "## Keywords (100)",
-        "## What's New in 1.2 (4000)",
+        "es-MX Keywords (100)",
+        "## What's New in 1.3 (4000)",
         "### Notes for the reviewer (4000)",
         "Display Name (30)",
         "Description (45)",
@@ -179,16 +180,73 @@ struct MetadataTests {
         #expect(description.contains("Workouts run on iPhone, iPad or Apple Watch, whichever you start them on."))
     }
 
-    @Test("The purchase goes in with the iOS version, and its notes start on the iPhone")
-    func purchaseRidesWithTheIOSVersion() throws {
-        #expect(try Self.listing().contains("**In-App Purchases:** add Intervally Pro to the submission."))
-        #expect(try Self.field("### Notes for the reviewer (4000)").text.contains("is submitted with this version"))
+    @Test("Pro is on the store, so the version goes in without it, and its notes start on the iPhone")
+    func purchaseIsOnTheStore() throws {
+        #expect(try Self.listing().contains("**In-App Purchases:** Intervally Pro is approved and on the store"))
+        let version = try Self.field("### Notes for the reviewer (4000)").text
+        #expect(version.contains("is approved and on the store, so it isn't in this submission"))
+        #expect(!version.contains("is submitted with this version"))
         let purchase = try Self.field("### Review notes (4000)").text
         let iPhone = try #require(purchase.range(of: "ON IPHONE (the main way to buy; no Apple Watch needed)"))
         let watch = try #require(purchase.range(of: "ON APPLE WATCH"))
         #expect(iPhone.lowerBound < watch.lowerBound)
         // The watch's paywall points to the iPhone where the App Store can't sell Pro on it.
         #expect(purchase.contains("its Intervally Pro screen says Pro can also be unlocked in Intervally on iPhone"))
+    }
+
+    // MARK: - What 1.3 says
+
+    @Test("Keywords in every locale fit, repeat nothing, and leave out the name's and subtitle's words")
+    func keywordsValidEveryLocale() throws {
+        let indexed = Set(try ["Name (30)", "Subtitle (30)"].flatMap { label in
+            try Self.field(label).text.lowercased().split(whereSeparator: { !$0.isLetter }).map(String.init)
+        })
+        var seen: [String: String] = [:]
+        for label in ["## Keywords (100)", "es-MX Keywords (100)"] {
+            let text = try Self.field(label).text
+            #expect(!text.contains(" ") && !text.contains("\n"), "\(label) has whitespace")
+            for keyword in text.split(separator: ",", omittingEmptySubsequences: false).map(String.init) {
+                #expect(!keyword.isEmpty, "\(label) has an empty keyword")
+                #expect(!indexed.contains(keyword), "\(label) repeats \(keyword) from the name or subtitle")
+                #expect(seen[keyword] == nil, "\(keyword) is in \(seen[keyword] ?? "") and \(label)")
+                seen[keyword] = label
+            }
+        }
+    }
+
+    @Test("What's New is 1.3's own, and nothing pasted has an em dash", arguments: [
+        "## Promotional text (170)", "## Description (4000)", "## What's New in 1.3 (4000)", "### Notes for the reviewer (4000)",
+    ])
+    func noEmDash(label: String) throws {
+        #expect(try !Self.field(label).text.contains("\u{2014}"), "\(label) has an em dash")
+    }
+
+    @Test("What's New doesn't announce 1.2's features again")
+    func whatsNewIsNew() throws {
+        let whatsNew = try Self.field("## What's New in 1.3 (4000)").text.lowercased()
+        for old in ["name every interval", "no apple watch needed", "wheel for minutes", "health records each workout"] {
+            #expect(!whatsNew.contains(old), "What's New repeats 1.2's \(old)")
+        }
+        #expect(whatsNew.contains("lock screen"))
+        #expect(whatsNew.contains("save workout"))
+    }
+
+    @Test("The listing never promises the music won't pause, only that cues play over it")
+    func noNeverPausesClaim() throws {
+        for label in ["## Promotional text (170)", "## Description (4000)", "## What's New in 1.3 (4000)"] {
+            let text = try Self.field(label).text.lowercased()
+            #expect(!text.contains("never pause"), "\(label) promises the music never pauses")
+            #expect(!text.contains("never interrupt"), "\(label) promises the music is never interrupted")
+        }
+        #expect(try Self.field("## Promotional text (170)").text.contains("Cues play over your music"))
+    }
+
+    @Test("The description says workouts stay on an iPad, which has no watch to sync with")
+    func iPadSyncClaimAccurate() throws {
+        let description = try Self.field("## Description (4000)").text
+        #expect(description.contains("Workouts sync between iPhone and Apple Watch"))
+        #expect(description.contains("On iPad, they stay on the iPad."))
+        #expect(!description.contains("between your own devices"))
     }
 
     // MARK: - The In-App Purchase record
