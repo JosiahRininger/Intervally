@@ -46,10 +46,12 @@ final class WorkoutSessionController: NSObject {
     // HKHealthStore is safe to call from any queue; marked so it can be used from the
     // recovery timeout race below without a strict-concurrency complaint.
     @ObservationIgnored private let store = HKHealthStore()
-    @ObservationIgnored private var session: HKWorkoutSession? {
+    // Not private, so a test can hold a real session and builder and check that their
+    // callbacks are acted on.
+    @ObservationIgnored var session: HKWorkoutSession? {
         didSet { sessionIdentity = session.map(ObjectIdentifier.init) }
     }
-    @ObservationIgnored private var builder: HKLiveWorkoutBuilder? {
+    @ObservationIgnored var builder: HKLiveWorkoutBuilder? {
         didSet { builderIdentity = builder.map(ObjectIdentifier.init) }
     }
     /// The session and builder whose delegate callbacks are acted on: the two above. A
@@ -540,21 +542,27 @@ final class WorkoutSessionController: NSObject {
         do {
             try await builder.endCollection(at: date)
             let workout = try await builder.finishWorkout()
-            // finishWorkout has been seen to return no workout and no error on a locked iPhone
-            // (iOS 26.4 and later), which is how most iPhone runs end. Nothing reached Health
-            // then, and the summary must not say it did.
-            if workout == nil {
-                log.error("finishWorkout returned nil; the workout was not saved")
-                diagnostics("Health save: finishWorkout returned nil")
-            } else {
-                log.info("workout saved")
-            }
-            return Self.saveOutcome(workout: workout, error: nil)
+            return saveResult(workout: workout, error: nil)
         } catch {
+            return saveResult(workout: nil, error: error)
+        }
+    }
+
+    /// What a finished save comes to, noting why in the shareable log when it didn't reach
+    /// Health. `finishWorkout` has been seen to return no workout and no error on a locked
+    /// iPhone (iOS 26.4 and later), which is how most iPhone runs end. Nothing reached Health
+    /// then, and the summary must not say it did.
+    func saveResult(workout: AnyObject?, error: (any Error)?) -> Bool {
+        if let error {
             log.error("could not save workout: \(error.localizedDescription, privacy: .public)")
             diagnostics("Health save failed: \(RunDiagnostics.describe(error))")
-            return Self.saveOutcome(workout: nil, error: error)
+        } else if workout == nil {
+            log.error("finishWorkout returned nil; the workout was not saved")
+            diagnostics("Health save: finishWorkout returned nil")
+        } else {
+            log.info("workout saved")
         }
+        return Self.saveOutcome(workout: workout, error: error)
     }
 
     /// Whether a save reached Health: only when a workout came back, with no error. Takes any
@@ -626,12 +634,7 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
             return nil
         }
         guard !commands.isEmpty else { return }
-        Task { @MainActor in
-            for command in commands {
-                self.log.info("command from the iPhone: \(String(describing: command), privacy: .public)")
-                self.onRemoteCommand?(command)
-            }
-        }
+        Task { @MainActor in self.sessionDidReceive(ObjectIdentifier(workoutSession), commands: commands) }
     }
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didDisconnectFromRemoteDeviceWithError error: (any Error)?) {
@@ -698,6 +701,19 @@ extension WorkoutSessionController {
         }
         teardown()
         onUnexpectedEnd?()
+    }
+
+    /// Commands from the iPhone's mirror. One still on its way from an earlier session's mirror,
+    /// such as the End that closed it, must not end or pause the run started after it.
+    func sessionDidReceive(_ id: ObjectIdentifier, commands: [RunMirrorCommand]) {
+        guard id == sessionIdentity else {
+            diagnostics("Session: ignored an earlier session's commands from the iPhone")
+            return
+        }
+        for command in commands {
+            log.info("command from the iPhone: \(String(describing: command), privacy: .public)")
+            onRemoteCommand?(command)
+        }
     }
 
     func builderDidCollect(_ id: ObjectIdentifier, heartRate value: Double?) {

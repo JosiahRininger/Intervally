@@ -121,7 +121,7 @@ no error (`WorkoutSessionController.saveOutcome`): on a locked iPhone it has bee
 return none, and the run is then shown as not saved. HealthKit calls the session's delegate
 on a queue of its own, so a callback can land after its session was let go of, even once a
 newer one is running. The controller acts only on callbacks from the session and builder it
-holds, and notes any other in the diagnostics.
+holds, commands from the iPhone's mirror included, and notes any other in the diagnostics.
 
 `UIBackgroundModes: [audio]` is declared alongside `WKBackgroundModes`, because Apple's
 "Running workout sessions" article requires it: "If your app plays audio or provides haptic
