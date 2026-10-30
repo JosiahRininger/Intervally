@@ -35,6 +35,9 @@ final class WatchRunMirror {
     /// Done closed this session's finished run; the watch's own "finished", arriving after
     /// this side's count got there first, must not bring it back.
     @ObservationIgnored private var closedFinish = false
+    /// Each command as it goes to the watch: a test reads here what the buttons sent, with no
+    /// watch to send it to.
+    @ObservationIgnored var onSend: ((RunMirrorCommand) -> Void)?
 
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var session: HKWorkoutSession?
@@ -92,7 +95,7 @@ final class WatchRunMirror {
         }
         self.engine = engine
         if engine.status == .running { startTicking() } else { stopTicking() }
-        onPresentation?(RunPresentation(engine: engine))
+        onPresentation?(RunPresentation(engine: engine, isMirrored: true))
         if isNew { onShow?() }
     }
 
@@ -108,7 +111,7 @@ final class WatchRunMirror {
         _ = engine.advance()
         if engine.status == .running, engine.plan.totalDuration - engine.elapsed < Self.finishTolerance {
             settleFinished(engine)
-            onPresentation?(RunPresentation(engine: engine))
+            onPresentation?(RunPresentation(engine: engine, isMirrored: true))
         }
         guard engine.status != .finished else { return }
         log.info("the watch's session ended")
@@ -120,6 +123,7 @@ final class WatchRunMirror {
     // MARK: - From the buttons here
 
     func send(_ command: RunMirrorCommand) {
+        onSend?(command)
         guard let session, let data = RunMirrorMessage.command(command).encoded() else { return }
         let handed = UncheckedSession(session: session)
         Task { @MainActor in
@@ -174,7 +178,7 @@ final class WatchRunMirror {
                 guard let self, !Task.isCancelled, let engine = self.engine else { return }
                 let events = engine.advance()
                 if events.contains(where: { if case .countdown = $0 { false } else { true } }) {
-                    self.onPresentation?(RunPresentation(engine: engine))
+                    self.onPresentation?(RunPresentation(engine: engine, isMirrored: true))
                 }
                 if engine.status != .running { self.stopTicking() }
             }

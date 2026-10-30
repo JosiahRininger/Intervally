@@ -13,6 +13,11 @@ struct RunSnapshot: Codable, Equatable, Sendable {
     var anchor: Date
     /// Set only when the run was paused; the elapsed time frozen at that moment.
     var pausedElapsed: TimeInterval?
+    /// Set while a run ended with Save Workout is still saving its Health workout, so a
+    /// relaunch in the middle finishes the save rather than bringing the run back. Only ever
+    /// true, and written only then: every other snapshot is exactly what 1.2 wrote. Its
+    /// `anchor` is then the moment Save was tapped, where the workout ends.
+    var savesOnEnd: Bool?
 }
 
 /// Persists the user's presets and any in-flight run.
@@ -44,10 +49,14 @@ final class WorkoutStore {
     }
 
     /// Reads the persisted run without constructing a full store. Used by the widget,
-    /// which has no business owning presets.
+    /// which has no business owning presets. A run ended with Save Workout, still saving, is
+    /// over: there is nothing to count down.
     nonisolated static func activeRun(in defaults: UserDefaults = SharedDefaults.suite) -> RunSnapshot? {
-        guard let data = defaults.data(forKey: Key.activeRun) else { return nil }
-        return try? JSONDecoder().decode(RunSnapshot.self, from: data)
+        guard let data = defaults.data(forKey: Key.activeRun),
+              let snapshot = try? JSONDecoder().decode(RunSnapshot.self, from: data),
+              snapshot.savesOnEnd != true
+        else { return nil }
+        return snapshot
     }
 
     /// The preset the setup screen is showing, read without a store: the complication's

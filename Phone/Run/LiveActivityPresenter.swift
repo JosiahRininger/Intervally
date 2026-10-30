@@ -34,8 +34,21 @@ extension RunActivityAttributes.ContentState {
             phaseName: run.phase?.label?.name,
             nextName: run.next?.label?.name,
             clock: clock,
-            theme: theme
+            theme: theme,
+            phaseIndex: run.phaseIndex,
+            controls: Controls(run)
         )
+    }
+}
+
+extension RunActivityAttributes.ContentState.Controls {
+    /// The buttons for `run`: Pause or Resume, whichever it can take, and Skip Interval while
+    /// another interval follows. Skipping the last would end the workout, and only the app
+    /// ends one. None once it has finished, and none for the watch's run, which is paused and
+    /// skipped on the watch.
+    init?(_ run: RunPresentation) {
+        guard run.phase != nil, !run.isMirrored else { return nil }
+        self.init(canPause: !run.isPaused, canResume: run.isPaused, canSkip: run.next != nil)
     }
 }
 

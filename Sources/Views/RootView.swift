@@ -161,9 +161,9 @@ struct RootView: View {
         // Consume unconditionally: leaving the request in place while a run is already
         // going means it fires spuriously the next time the app comes forward.
         guard let requested = PendingStart.consume() else { return }
-        // A finished run's summary still on screen is over: the request starts the next one
-        // there, rather than being lost behind it.
-        let showingFinished = navigation.isRunning && coordinator.engine.status == .finished
+        // A finished run's summary still on screen is over, as is one ended with Save
+        // Workout: the request starts the next one there, rather than being lost behind it.
+        let showingFinished = navigation.isRunning && coordinator.showsSummary
         guard !navigation.isRunning || showingFinished else { return }
         if let id = requested, store.workouts.contains(where: { $0.id == id }) {
             store.selectedID = id

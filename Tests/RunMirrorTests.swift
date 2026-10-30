@@ -22,9 +22,10 @@ struct RunMirrorTests {
     func roundTrip() throws {
         let state = RunMirrorState(
             workout: IntervalWorkout(name: "Tabata", workSeconds: 20, restSeconds: 10, rounds: 8),
-            status: .paused, anchor: nil, pausedElapsed: 42.5, health: .saving
+            status: .paused, anchor: nil, pausedElapsed: 42.5, health: .saving, supportsEndAndSave: true
         )
-        for message in [RunMirrorMessage.state(state), .command(.skip(phase: 3)), .command(.pause), .command(.refresh)] {
+        let messages = [RunMirrorMessage.state(state), .command(.skip(phase: 3)), .command(.pause), .command(.refresh), .command(.endAndSave)]
+        for message in messages {
             let data = try #require(message.encoded())
             #expect(RunMirrorMessage.decoded(data) == message)
         }
@@ -90,6 +91,36 @@ struct RunMirrorTests {
         // A late End after the run is gone does nothing.
         session.onRemoteCommand?(.end)
         #expect(coordinator.endedRemotely == 1)
+    }
+
+    @Test("The iPhone's Save Workout ends the watch's run and saves it, and every state says the watch takes it")
+    func remoteEndAndSave() async {
+        let session = FakeWorkoutSession()
+        let (coordinator, _, _, _, _, _, _) = makeCoordinator(workout: session)
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(!session.mirrored.isEmpty)
+        #expect(session.mirrored.allSatisfy { $0.supportsEndAndSave == true })
+
+        session.onRemoteCommand?(.endAndSave)
+        #expect(coordinator.engine.status == .idle)
+        #expect(coordinator.endedRemotely == 1, "Nobody on the watch is there to tap Done")
+        #expect(coordinator.summary?.endedEarly == true)
+        #expect(session.mirrored.last?.status == .stopped)
+        #expect(session.mirrored.last?.supportsEndAndSave == true)
+        await settle(coordinator)
+        #expect(session.endCount == 1)
+        #expect(session.discardCount == 0)
+
+        // Its screen closes: the summary goes, and the save stays.
+        coordinator.end()
+        #expect(coordinator.summary == nil)
+        #expect(session.discardCount == 0)
+
+        // A late one after the run is gone does nothing.
+        session.onRemoteCommand?(.endAndSave)
+        #expect(coordinator.endedRemotely == 1)
+        #expect(session.endCount == 1)
     }
 
     @Test("A finished run tells the iPhone its Health save is under way")

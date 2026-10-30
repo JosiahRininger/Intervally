@@ -233,11 +233,16 @@ struct LiveActivityPresenterTests {
         #expect(host.calls.last == .request("2", workout: "Hill Sprints", Self.shown(run)))
     }
 
-    @Test("A saved run shows what 1.2 showed, running, paused and finished, and the presenter sends it so")
+    @Test("A saved run shows what 1.2 showed, running, paused and finished, with its buttons now, and the presenter sends it so")
     func contentMatchesGoldenFixture() async throws {
         let golden = GoldenFixtureTests.liveActivityStates12
-        let running = try #require(golden["running"])
-        let paused = try #require(golden["paused"])
+        // 1.2 showed no buttons. The first Sprint is the plan's third phase, and has a Walk after it.
+        var running = try #require(golden["running"])
+        running.phaseIndex = 2
+        running.controls = .init(canPause: true, canResume: false, canSkip: true)
+        var paused = try #require(golden["paused"])
+        paused.phaseIndex = 2
+        paused.controls = .init(canPause: false, canResume: true, canSkip: true)
         let finished = try #require(golden["finished"])
         let now = Fixture.anchor12.addingTimeInterval(330.5)
         #expect(LiveActivityPresenter.content(for: Fixture.runningSnapshot12, now: now, theme: .pastel) == running)

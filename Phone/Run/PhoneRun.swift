@@ -72,13 +72,14 @@ final class PhoneRun {
         workout: (any WorkoutSessioning)? = nil,
         notifications: (any BoundaryScheduling)? = nil,
         presenter: (any RunPresenting)? = nil,
+        activityHost: any LiveActivityHosting = ActivityKitHost(),
         defaults: UserDefaults = SharedDefaults.suite
     ) {
         self.store = store
         self.defaults = defaults
         let resolvedOutput = output ?? CueAudio()
         let cues = PhoneCuePlayer(output: resolvedOutput, pro: pro, defaults: defaults)
-        let activity = LiveActivityPresenter { theme.effective(isPro: pro.isPro) }
+        let activity = LiveActivityPresenter(host: activityHost) { theme.effective(isPro: pro.isPro) }
         self.cues = cues
         self.activity = activity
         // A test's stand-in sees what the Live Activity would have been shown.
@@ -172,22 +173,66 @@ final class PhoneRun {
         mirror.send(.skip(phase: phase))
     }
 
+    /// A tap on the Live Activity's Pause, Resume or Skip Interval (`RunActivityIntents`), for
+    /// this iPhone's own run: the watch's run shows no buttons. Taken as the watch takes its
+    /// iPhone mirror's buttons, so one that lands after the run has moved on, an interval run
+    /// out or a pause made in the app, does nothing. Returns once the activity shows what the
+    /// tap did and the run's own follow-up has landed, a tier taken on a resume and the alerts
+    /// scheduled or cancelled: iOS can suspend the app again as soon as the intent returns.
+    /// Away from the app, all of it is given the time to finish (`beginBackgroundWork`).
+    func control(_ command: RunMirrorCommand) async {
+        let finished = coordinator.isAppActive() ? nil : coordinator.beginBackgroundWork("Take a Lock Screen tap")
+        coordinator.handleRemote(command)
+        await activity.settled()
+        await coordinator.changeSettled()
+        finished?()
+    }
+
     /// End, confirmed. A watch run is ended on the watch, and its screen here closes at once,
     /// as for a run here: a watch out of reach must not leave it stuck open. If the watch
     /// carries on, its next change brings it back.
     func end() {
         if isMirroring {
             mirror.send(.end)
-            mirror.close()
-            presenter.present(nil)
-            showsWatchRun = false
-            isPresented = false
+            closeWatchRun()
         } else {
             close()
         }
     }
 
-    /// Done on a finished run.
+    /// Whether End offers Save Workout for the run on screen. This iPhone's own run asks its
+    /// coordinator. The watch's is saved on the watch, so it is offered only when the watch
+    /// says it takes the command (a 1.2 watch never hears one it can't read), once a minute
+    /// in like any other; a mirrored run always has a workout session.
+    var offersSaveOnEnd: Bool {
+        guard isMirroring else { return coordinator.offersSaveOnEnd }
+        return mirror.state?.supportsEndAndSave == true && engine.isActive
+            && engine.elapsed >= RunCoordinator.saveOnEndMinimum
+    }
+
+    /// Save Workout, confirmed. This iPhone's run shows its summary, and nothing more will
+    /// sound, so the audio goes back now. The watch's is saved there, and its screen here
+    /// closes at once, as for End.
+    func endAndSave() {
+        guard isMirroring else {
+            coordinator.endAndSave()
+            cues.release()
+            return
+        }
+        guard mirror.state?.supportsEndAndSave == true else { return }
+        mirror.send(.endAndSave)
+        closeWatchRun()
+    }
+
+    /// A watch run's screen and Lock Screen close, ended from here.
+    private func closeWatchRun() {
+        mirror.close()
+        presenter.present(nil)
+        showsWatchRun = false
+        isPresented = false
+    }
+
+    /// Done on a run's summary: finished, or ended with Save Workout.
     func done() {
         if isMirroring {
             mirror.close()
@@ -307,7 +352,7 @@ final class PhoneRun {
         // been none here.
         if let watchRun = mirror.engine, watchRun.isActive {
             showsWatchRun = true
-            presenter.present(RunPresentation(engine: watchRun))
+            presenter.present(RunPresentation(engine: watchRun, isMirrored: true))
         } else {
             isPresented = false
         }

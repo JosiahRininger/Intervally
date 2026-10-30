@@ -79,10 +79,15 @@ final class FakeWorkoutSession: WorkoutSessioning {
     private(set) var activities: [IntervalPhase.Kind] = []
     private(set) var ended = 0
     private(set) var discarded = 0
+    private(set) var starts = 0
+    /// When set, `start` waits on it, as a session slow to start does.
+    var startGate: Gate?
 
     func requestAuthorization() async -> Bool { true }
     func adoptRecoveredSession() async -> Bool { false }
     func start(at date: Date) async -> Bool {
+        starts += 1
+        await startGate?.wait()
         isRunning = startsSucceed
         return startsSucceed
     }
@@ -114,7 +119,13 @@ actor FakeBackstop: BoundaryScheduling {
         schedules += 1
         leads.append(minimumLead)
     }
-    func cancelAll() async { cancels += 1 }
+    /// When set, a cancel waits on it before it counts, as one still on its way does.
+    private var cancelGate: Gate?
+    func holdCancels(until gate: Gate) { cancelGate = gate }
+    func cancelAll() async {
+        await cancelGate?.wait()
+        cancels += 1
+    }
     /// Never: it schedules nothing to run out of.
     func needsTopUp(now: Date) async -> Bool { false }
     func disarm(identifier: String) async { disarmed.append(identifier) }
@@ -771,6 +782,33 @@ struct PhoneRunTests {
         #expect(session.discarded == 1)
         #expect(presenter.shown.last == .some(nil))
         #expect(store.loadActiveRun() == nil, "Nothing left to restore")
+    }
+
+    @Test("Save Workout keeps the screen on its summary, saves the workout, and hands the audio back at once")
+    func endAndSave() async throws {
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        // Classic's third round runs from 1:40 to 2:25.
+        let anchor = try #require(run.coordinator.engine.anchor)
+        run.coordinator.engine.now = { anchor.addingTimeInterval(110) }
+        #expect(run.offersSaveOnEnd)
+
+        run.endAndSave()
+        #expect(run.isPresented, "The summary takes the screen")
+        #expect(run.summary?.endedEarlyText == "Ended early: 3 of 8 rounds")
+        #expect(output.calls.last == .release, "Nothing more will sound")
+        #expect(presenter.shown.last == .some(nil))
+        #expect(!run.keepsScreenAwake)
+        #expect(await waitUntil { run.summary?.health == .saved })
+        #expect(session.ended == 1)
+        #expect(session.discarded == 0)
+
+        run.done()
+        #expect(!run.isPresented)
+        #expect(session.discarded == 0)
+        #expect(store.loadActiveRun() == nil)
     }
 
     @Test("A run interrupted by a termination comes back on screen, still counting")

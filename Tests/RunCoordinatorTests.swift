@@ -1901,3 +1901,212 @@ struct RunCoordinatorAudibleBackstopTests {
         coordinator.stopAndExit()
     }
 }
+
+@Suite("Run coordinator — Save on End")
+@MainActor
+struct RunCoordinatorSaveOnEndTests {
+    /// Tabata with no Get Ready: rounds of 20 s work and 10 s rest, so the fifth round's work
+    /// runs from 2:00 to 2:20.
+    private func useTabata(_ store: WorkoutStore) {
+        var tabata = store.selected
+        tabata.prepareSeconds = 0
+        tabata.workSeconds = 20
+        tabata.restSeconds = 10
+        tabata.rounds = 8
+        store.update(tabata)
+    }
+
+    /// Starts the run and moves its clock `seconds` on; returns when it started.
+    @discardableResult
+    private func run(_ coordinator: RunCoordinator, to seconds: TimeInterval) async -> Date {
+        let start = Date()
+        coordinator.engine.now = { start }
+        coordinator.begin()
+        await settle(coordinator)
+        coordinator.engine.now = { start.addingTimeInterval(seconds) }
+        coordinator.advance()
+        return start
+    }
+
+    @Test("Save Workout ends the Health workout rather than discarding it, and Done keeps it")
+    func endAndSaveEndsNotDiscards() async {
+        let (coordinator, store, workout, runtime, spy, _, haptics) = makeCoordinator()
+        useTabata(store)
+        await run(coordinator, to: 130)
+        #expect(coordinator.tier == .workout)
+        #expect(coordinator.offersSaveOnEnd)
+
+        coordinator.endAndSave()
+        await settle(coordinator)
+        #expect(coordinator.engine.status == .idle)
+        #expect(coordinator.isTicking == false)
+        #expect(coordinator.tier == .none)
+        #expect(runtime.stopCount >= 1)
+        #expect(haptics.calls.last == .cancel, "A burst still repeating stops with the run")
+        #expect(spy.calls.last == .cancelAll)
+        #expect(workout.endCount == 1)
+        #expect(workout.discardCount == 0)
+        #expect(coordinator.summary?.health == .saved)
+        #expect(coordinator.showsSummary)
+        #expect(store.loadActiveRun() == nil, "Saved: nothing is left for a relaunch to finish")
+
+        coordinator.stopAndExit()
+        await settle(coordinator)
+        #expect(coordinator.summary == nil)
+        #expect(coordinator.showsSummary == false)
+        #expect(workout.discardCount == 0)
+        #expect(workout.endCount == 1, "Ended once, not again at Done")
+    }
+
+    @Test("Its summary has the time run and the rounds reached: Ended early, 5 of 8 rounds")
+    func endAndSaveSummaryHasRoundsReached() async {
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator()
+        workout.endGate = Gate()
+        useTabata(store)
+        await run(coordinator, to: 130)
+
+        coordinator.endAndSave()
+        #expect(coordinator.summary == RunCoordinator.Summary(duration: 130, rounds: 5, health: .saving, plannedRounds: 8))
+        #expect(coordinator.summary?.endedEarlyText == "Ended early: 5 of 8 rounds")
+        #expect(coordinator.summary?.ringFraction == 5.0 / 8, "The ring stops where the run did")
+        workout.endGate?.open()
+        await settle(coordinator)
+        #expect(coordinator.summary?.health == .saved)
+
+        // None before the first round, every one from the cooldown on, and a run that
+        // finished never says it ended early.
+        let plan = IntervalPlan(workout: IntervalWorkout(
+            prepareSeconds: 0, warmupSeconds: 60, workSeconds: 20, restSeconds: 10, rounds: 3, cooldownSeconds: 60
+        ))
+        #expect(RunCoordinator.roundsReached(at: plan.position(atElapsed: 30), totalRounds: 3) == 0)
+        #expect(RunCoordinator.roundsReached(at: plan.position(atElapsed: 60 + 35), totalRounds: 3) == 2)
+        #expect(RunCoordinator.roundsReached(at: plan.position(atElapsed: plan.totalDuration - 10), totalRounds: 3) == 3)
+        #expect(RunCoordinator.Summary(duration: 30, rounds: 1, health: .saved, plannedRounds: 1).endedEarlyText
+            == "Ended early: 1 of 1 round")
+        #expect(RunCoordinator.Summary(duration: 230, rounds: 8, health: .saved).endedEarlyText == nil)
+        #expect(RunCoordinator.Summary(duration: 230, rounds: 8, health: .saved).ringFraction == 1)
+        #expect(RunCoordinator.Summary(duration: 30, rounds: 0, health: .saved, plannedRounds: 8).ringFraction == 0)
+    }
+
+    @Test("Saving, the snapshot says so, and a relaunch then finishes the save instead of bringing the run back")
+    func savesOnEndSurvivesRestore() async throws {
+        let defaults = makeTestDefaults()
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator(defaults: defaults)
+        workout.endGate = Gate()
+        useTabata(store)
+        await run(coordinator, to: 130)
+        coordinator.endAndSave()
+        await settle(coordinator)
+
+        // Written only now, and only as true: every other snapshot is 1.2's.
+        let saved = try #require(defaults.data(forKey: WorkoutStore.Key.activeRun))
+        let fields = try #require(try JSONSerialization.jsonObject(with: saved) as? [String: Any])
+        #expect(fields["savesOnEnd"] as? Bool == true)
+        let pending = try #require(store.loadActiveRun())
+        #expect(pending.savesOnEnd == true)
+        #expect(WorkoutStore.activeRun(in: defaults) == nil, "The complication has no run to count down")
+
+        // Terminated mid-save, with the system still holding the session: the relaunch hands
+        // it back, and the run screen's restore follows.
+        let relaunched = FakeWorkoutSession()
+        relaunched.recoverableSession = true
+        let (again, againStore, _, _, _, _, _) = makeCoordinator(workout: relaunched, defaults: defaults)
+        again.recoverWorkoutSession()
+        #expect(again.restoreIfNeeded() == false, "No run comes back")
+        await settle(again)
+        #expect(again.engine.status == .idle)
+        #expect(relaunched.recoveryAttempts == 1, "Adopted once, not again as an orphan")
+        #expect(relaunched.endCount == 1, "The save is finished")
+        #expect(relaunched.endDates == [pending.anchor], "Ended where Save was tapped, not at the relaunch")
+        #expect(relaunched.discardCount == 0)
+        #expect(relaunched.startCount == 0)
+        #expect(againStore.loadActiveRun() == nil)
+        workout.endGate?.open()
+    }
+
+    @Test("A relaunch mid-save with no session left clears the save rather than retrying it")
+    func savesOnEndWithoutSessionClears() async throws {
+        let defaults = makeTestDefaults()
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator(defaults: defaults)
+        workout.endGate = Gate()
+        useTabata(store)
+        await run(coordinator, to: 130)
+        coordinator.endAndSave()
+        await settle(coordinator)
+        #expect(store.loadActiveRun()?.savesOnEnd == true)
+
+        // Terminated mid-save, and the system kept nothing: the run screen's restore at launch
+        // finds only the snapshot.
+        let relaunched = FakeWorkoutSession()
+        relaunched.recoverableSession = false
+        let (again, againStore, _, _, _, _, _) = makeCoordinator(workout: relaunched, defaults: defaults)
+        #expect(again.restoreIfNeeded() == false, "No run comes back")
+        await settle(again)
+        #expect(again.engine.status == .idle)
+        #expect(relaunched.recoveryAttempts == 1)
+        #expect(relaunched.endCount == 0)
+        #expect(relaunched.discardCount == 0)
+        #expect(relaunched.startCount == 0)
+        #expect(againStore.loadActiveRun() == nil, "Nothing is left for the next launch to retry")
+        workout.endGate?.open()
+    }
+
+    @Test("End offers Save Workout only once a run is a minute in, paused or not")
+    func shortRunOffersDiscardOnly() async {
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        useTabata(store)
+        #expect(coordinator.offersSaveOnEnd == false, "Nothing to end before Start")
+        let start = await run(coordinator, to: 59)
+        #expect(coordinator.tier == .workout)
+        #expect(coordinator.offersSaveOnEnd == false)
+
+        coordinator.engine.now = { start.addingTimeInterval(60) }
+        #expect(coordinator.offersSaveOnEnd)
+        coordinator.togglePause()
+        #expect(coordinator.offersSaveOnEnd)
+        coordinator.stopAndExit()
+        #expect(coordinator.offersSaveOnEnd == false)
+    }
+
+    @Test("Without a workout session there's no Health workout to save, so End asks as it always has")
+    func noHealthTierOffersDiscardOnly() async {
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator()
+        workout.isSupported = false
+        workout.startResult = false
+        useTabata(store)
+        await run(coordinator, to: 130)
+        #expect(coordinator.tier == .extendedRuntime)
+        #expect(coordinator.offersSaveOnEnd == false)
+    }
+
+    @Test("The summary stays until Done or Repeat: its screen showing again starts nothing, and leaving it keeps the save")
+    func summaryStaysUntilDoneOrRepeat() async throws {
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator()
+        useTabata(store)
+        await run(coordinator, to: 130)
+        coordinator.endAndSave()
+        await settle(coordinator)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.engine.status == .idle)
+        #expect(coordinator.summary?.endedEarly == true)
+        #expect(workout.startCount == 1)
+
+        coordinator.restart()
+        await settle(coordinator)
+        #expect(coordinator.engine.status == .running)
+        #expect(coordinator.summary == nil)
+        #expect(workout.startCount == 2)
+
+        // The new run, ended the same way, and its screen closed without Done.
+        let anchor = try #require(coordinator.engine.anchor)
+        coordinator.engine.now = { anchor.addingTimeInterval(130) }
+        coordinator.endAndSave()
+        coordinator.end()
+        await settle(coordinator)
+        #expect(coordinator.summary == nil)
+        #expect(workout.endCount == 2)
+        #expect(workout.discardCount == 0)
+    }
+}

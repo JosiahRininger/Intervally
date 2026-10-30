@@ -20,6 +20,9 @@ struct RunView: View {
     @Binding var isRunning: Bool
 
     @State private var confirmingEnd = false
+    /// Whether the End being confirmed offers Save Workout, decided as End was tapped, so the
+    /// choices don't change under the user's finger.
+    @State private var endOffersSave = false
     /// Full-screen colour at a phase change, fading out. Under the ring.
     @State private var flash: Double = 0
     @State private var flashKind: IntervalPhase.Kind = .work
@@ -30,7 +33,7 @@ struct RunView: View {
         GeometryReader { proxy in
             TimelineView(.animation(minimumInterval: 0.25, paused: engine.status != .running)) { _ in
                 let position = engine.position
-                if position.isFinished {
+                if position.isFinished || coordinator.summary != nil {
                     summary(in: proxy.size, insets: proxy.safeAreaInsets)
                 } else {
                     running(position, in: proxy.size, insets: proxy.safeAreaInsets)
@@ -42,11 +45,15 @@ struct RunView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar { toolbar }
         .confirmationDialog("End workout?", isPresented: $confirmingEnd, titleVisibility: .visible) {
-            Button("End Workout", role: .destructive) {
-                coordinator.stopAndExit()
-                isRunning = false
+            if endOffersSave {
+                // The summary takes the screen, as at the finish.
+                Button("Save Workout") { coordinator.endAndSave() }
+                Button("Discard", role: .destructive) { discard() }
+                Button("Keep Going", role: .cancel) {}
+            } else {
+                Button("End Workout", role: .destructive) { discard() }
+                Button("Cancel", role: .cancel) {}
             }
-            Button("Cancel", role: .cancel) {}
         }
         .onAppear { coordinator.begin() }
         .onDisappear { coordinator.end() }
@@ -223,7 +230,10 @@ struct RunView: View {
         // Each control is centred in its own half of the width, so the glass style's own
         // outer padding cannot push the pair toward the edges.
         return HStack(spacing: 0) {
-            Button { confirmingEnd = true } label: {
+            Button {
+                endOffersSave = coordinator.offersSaveOnEnd
+                confirmingEnd = true
+            } label: {
                 Image(systemName: "xmark")
                     .font(.system(size: side * 0.4, weight: .semibold))
                     .frame(width: side, height: side)
@@ -270,7 +280,7 @@ struct RunView: View {
         return VStack(spacing: dial.gap) {
             ZStack {
                 ProgressRing(
-                    fraction: 1,
+                    fraction: summary?.ringFraction ?? 1,
                     color: isLuminanceReduced ? palette.dimmed(for: .work) : .white,
                     track: .clear,
                     isDimmed: isLuminanceReduced,
@@ -279,7 +289,7 @@ struct RunView: View {
                 .frame(width: diameter, height: diameter)
 
                 VStack(spacing: 0) {
-                    Text("Complete")
+                    completionWord(rounds: rounds, plannedRounds: summary?.plannedRounds)
                         .font(.phaseLabel)
                         .textCase(.uppercase)
                         .kerning(0.6)
@@ -333,6 +343,22 @@ struct RunView: View {
         )
     }
 
+    /// The words over the total: "Complete", or for a run ended with Save Workout how far it
+    /// got, "Ended early: 5 of 8", shortened where that won't fit, as on a 40mm dial. The line
+    /// under the total keeps the Health result, so the rounds go here.
+    @ViewBuilder
+    private func completionWord(rounds: Int, plannedRounds: Int?) -> some View {
+        if let plannedRounds {
+            ViewThatFits(in: .horizontal) {
+                Text("Ended early: \(rounds) of \(plannedRounds)")
+                Text("Ended: \(rounds) of \(plannedRounds)")
+                Text("\(rounds) of \(plannedRounds)")
+            }
+        } else {
+            Text("Complete")
+        }
+    }
+
     /// One line under the total: whether the workout reached Apple Health, or — when the
     /// run had no workout session to save — the rounds.
     ///
@@ -367,7 +393,7 @@ struct RunView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        if engine.status == .finished {
+        if coordinator.showsSummary {
             // Leading, not trailing: Skip lives in the trailing corner during the run, and a
             // second tap on Skip as the last interval ended landed on Repeat and restarted
             // the workout the user had just finished.
@@ -389,6 +415,12 @@ struct RunView: View {
     }
 
     // MARK: - Helpers
+
+    /// End Workout, or Discard beside Save Workout: the run ends unsaved and the screen closes.
+    private func discard() {
+        coordinator.stopAndExit()
+        isRunning = false
+    }
 
     /// `ClosedRange` traps when the lower bound exceeds the upper one; the engine samples
     /// the clock before this view does, so on a boundary the second sample can already be
@@ -417,7 +449,12 @@ struct RunView: View {
 
     private var completionAccessibilitySummary: String {
         let summary = coordinator.summary
-        var parts = ["Workout complete", DurationFormat.spoken(Int(summary?.duration ?? engine.plan.totalDuration)), DurationFormat.rounds(summary?.rounds ?? engine.plan.totalRounds)]
+        let duration = DurationFormat.spoken(Int(summary?.duration ?? engine.plan.totalDuration))
+        var parts = if let endedEarly = summary?.endedEarlyText {
+            [endedEarly, duration]
+        } else {
+            ["Workout complete", duration, DurationFormat.rounds(summary?.rounds ?? engine.plan.totalRounds)]
+        }
         switch summary?.health {
         case .saved: parts.append("Saved to Health")
         case .saving: parts.append("Saving to Health")

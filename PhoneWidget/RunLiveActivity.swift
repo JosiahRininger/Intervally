@@ -15,7 +15,8 @@ struct IntervallyPhoneWidgets: WidgetBundle {
 }
 
 /// The iPhone's run on the Lock Screen, in the Dynamic Island, and in a paired watch's Smart
-/// Stack: the phase in its colour, its countdown, and the round.
+/// Stack: the phase in its colour, its countdown, and the round. On the Lock Screen and in the
+/// expanded island, a run on this iPhone also has Pause or Resume and Skip Interval.
 ///
 /// Between the app's updates the system's own timer text and progress bar keep counting, so
 /// every running view is built from dates, never from a number of seconds.
@@ -48,18 +49,22 @@ struct RunLiveActivity: Widget {
                         .padding(.trailing, 4)
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    VStack(spacing: 6) {
-                        PhaseBar(state: state, isStale: context.isStale)
-                            .tint(style.fill(state.phase))
-                        HStack {
-                            Text(context.attributes.workoutName)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(ActivityText.next(state: state))
-                                .monospacedDigit()
+                    HStack(spacing: 12) {
+                        VStack(spacing: 6) {
+                            PhaseBar(state: state, isStale: context.isStale)
+                                .tint(style.fill(state.phase))
+                            HStack {
+                                Text(context.attributes.workoutName)
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(ActivityText.next(state: state))
+                                    .monospacedDigit()
+                            }
+                            .font(.footnote.weight(.medium))
+                            .foregroundStyle(.secondary)
                         }
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.secondary)
+                        // The island is black whatever the theme.
+                        ControlButtons(state: state, isStale: context.isStale, neutral: .white)
                     }
                     .padding(.horizontal, 4)
                 }
@@ -127,12 +132,19 @@ struct RunActivityView: View {
                         .minimumScaleFactor(0.6)
                         .lineLimit(1)
                 }
-                PhaseBar(state: state, isStale: context.isStale)
-                    .tint(style.fill(state.phase))
-                Text(ActivityText.next(state: state))
-                    .font(.footnote.weight(.medium))
-                    .monospacedDigit()
-                    .foregroundStyle(style.secondary)
+                // Beside the bar and the next interval rather than below them: the Lock Screen
+                // gives an activity 160 points, and a row of its own took the card to its edge.
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        PhaseBar(state: state, isStale: context.isStale)
+                            .tint(style.fill(state.phase))
+                        Text(ActivityText.next(state: state))
+                            .font(.footnote.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(style.secondary)
+                    }
+                    ControlButtons(state: state, isStale: context.isStale, neutral: style.primary)
+                }
             }
             .foregroundStyle(style.primary)
             .padding(16)
@@ -204,6 +216,58 @@ private struct PhaseBar: View {
         case .finished:
             ProgressView(value: 1)
         }
+    }
+}
+
+/// Pause or Resume, and Skip Interval while another interval follows, as long as the activity
+/// is up to date; none for the watch's run or a finished one. Each runs its intent in the app,
+/// which acts on a tap only if the run still stands as the button showed it.
+private struct ControlButtons: View {
+    let state: RunActivityAttributes.ContentState
+    let isStale: Bool
+    /// Skip's glyph, and its circle faintly: the colour of the text around it.
+    let neutral: Color
+
+    var body: some View {
+        if let controls = state.visibleControls(isStale: isStale) {
+            // The run screen's Pause: the phase's colour, with the label colour every phase
+            // tint takes.
+            let palette = Palette.of(state.theme)
+            let fill = palette.fill(for: state.phase ?? .work)
+            HStack(spacing: 10) {
+                if controls.canPause {
+                    Button(intent: PauseRunIntent()) {
+                        Label("Pause", systemImage: "pause.fill")
+                            .controlFace(fill: fill, ink: palette.onTint)
+                    }
+                } else if controls.canResume {
+                    Button(intent: ResumeRunIntent()) {
+                        Label("Resume", systemImage: "play.fill")
+                            .controlFace(fill: fill, ink: palette.onTint)
+                    }
+                }
+                if controls.canSkip, let phaseIndex = state.phaseIndex {
+                    Button(intent: SkipIntervalIntent(phaseIndex: phaseIndex)) {
+                        Label("Skip Interval", systemImage: "forward.end.fill")
+                            .controlFace(fill: neutral.opacity(0.16), ink: neutral)
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}
+
+private extension View {
+    /// A Live Activity button's face: the glyph alone, its title kept for VoiceOver, in a
+    /// circle 44 points across, the least a tap needs. Fixed, like the circle: a glyph that
+    /// grew with the text size would outgrow it.
+    func controlFace(fill: Color, ink: Color) -> some View {
+        labelStyle(.iconOnly)
+            .font(.system(size: 17, weight: .bold))
+            .foregroundStyle(ink)
+            .frame(width: 44, height: 44)
+            .background(fill, in: Circle())
     }
 }
 

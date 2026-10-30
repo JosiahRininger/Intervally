@@ -30,9 +30,12 @@ struct WatchRunMirrorTests {
 
     private func state(
         _ status: RunMirrorState.Status, anchor: Date? = nil, pausedElapsed: TimeInterval? = nil,
-        health: RunMirrorState.Health? = nil
+        health: RunMirrorState.Health? = nil, supportsEndAndSave: Bool? = nil
     ) -> RunMirrorState {
-        RunMirrorState(workout: tabata, status: status, anchor: anchor, pausedElapsed: pausedElapsed, health: health)
+        RunMirrorState(
+            workout: tabata, status: status, anchor: anchor, pausedElapsed: pausedElapsed, health: health,
+            supportsEndAndSave: supportsEndAndSave
+        )
     }
 
     @Test("A running watch run counts from the watch's own anchor, and takes the screen once")
@@ -103,6 +106,56 @@ struct WatchRunMirrorTests {
         // The watch carried on: its next change shows it again.
         run.mirror.apply(state(.paused, pausedElapsed: 12))
         #expect(run.isPresented)
+    }
+
+    @Test("Save Workout goes only to a watch that takes it, a minute into its run, and closes the screen as End does")
+    func endAndSaveSentOnlyToSupportingWatch() {
+        let (run, _) = makeRun()
+        var sent: [RunMirrorCommand] = []
+        run.mirror.onSend = { sent.append($0) }
+
+        // A 1.2 watch says nothing of it: End offers only Discard, and nothing it can't read
+        // is sent.
+        run.mirror.apply(state(.running, anchor: Date().addingTimeInterval(-90)))
+        #expect(run.offersSaveOnEnd == false)
+        run.endAndSave()
+        #expect(sent.isEmpty)
+        #expect(run.isMirroring, "The run stays on screen")
+
+        // A watch that takes it, under a minute in: not yet.
+        run.mirror.apply(state(.running, anchor: Date().addingTimeInterval(-30), supportsEndAndSave: true))
+        #expect(run.offersSaveOnEnd == false)
+
+        run.mirror.apply(state(.running, anchor: Date().addingTimeInterval(-90), supportsEndAndSave: true))
+        #expect(run.offersSaveOnEnd)
+        run.endAndSave()
+        #expect(sent == [.endAndSave])
+        #expect(run.isPresented == false)
+        #expect(run.mirror.engine == nil)
+        #expect(presenter.shown.last == .some(nil))
+    }
+
+    @Test("A 1.2 watch's state reads without the flag, so its run isn't offered Save Workout")
+    func oldStateDecodesWithoutFlag() throws {
+        let frozen = try #require(Fixture.entries(Fixture.data("runmirror-messages.json"))["state-running"])
+        guard case .state(var old) = try #require(RunMirrorMessage.decoded(frozen)) else {
+            Issue.record("1.2's running state isn't a state")
+            return
+        }
+        #expect(old.supportsEndAndSave == nil)
+
+        // Its run, a minute and a half in.
+        old.anchor = Date().addingTimeInterval(-90)
+        let (run, _) = makeRun()
+        run.mirror.apply(old)
+        #expect(run.isMirroring)
+        #expect(run.offersSaveOnEnd == false)
+
+        // The same state from a watch that takes it reads back as sent.
+        var new = old
+        new.supportsEndAndSave = true
+        let data = try #require(RunMirrorMessage.state(new).encoded())
+        #expect(RunMirrorMessage.decoded(data) == .state(new))
     }
 
     @Test("The session ending just short of the end is the finish, not a stop")

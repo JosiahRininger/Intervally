@@ -75,6 +75,9 @@ struct PhoneRunView: View {
     @Environment(\.dynamicTypeSize) private var typeSize
 
     @State private var confirmingEnd = false
+    /// Whether the End being confirmed offers Save Workout, decided as End was tapped, so the
+    /// choices don't change under the user's finger.
+    @State private var endOffersSave = false
     @State private var flash: Double = 0
     @State private var flashKind: IntervalPhase.Kind = .work
     @State private var countedFinish = false
@@ -87,7 +90,8 @@ struct PhoneRunView: View {
     var body: some View {
         GeometryReader { proxy in
             TimelineView(.animation(minimumInterval: 0.1, paused: engine.status != .running)) { _ in
-                if engine.status == .finished, let summary = run.summary {
+                // Finished, or ended with Save Workout.
+                if let summary = run.summary, !engine.isActive {
                     RunSummaryView(
                         summary: summary, workoutName: engine.plan.workout.name, onWatch: run.isMirroring
                     ) {
@@ -95,7 +99,7 @@ struct PhoneRunView: View {
                     } repeatRun: {
                         // A tap landing while Done closes the screen must not start a run
                         // with nothing showing it.
-                        guard run.isPresented, engine.status == .finished, !run.isMirroring else { return }
+                        guard run.isPresented, run.summary != nil, !engine.isActive, !run.isMirroring else { return }
                         countedFinish = false
                         run.coordinator.restart()
                     }
@@ -115,11 +119,21 @@ struct PhoneRunView: View {
         // An alert, not a confirmation dialog: on iOS 26 the dialog hangs off the button and
         // drops its Keep Going, which left no visible way back.
         .alert("End workout?", isPresented: $confirmingEnd) {
-            Button("Keep Going", role: .cancel) {}
-            Button("End Workout", role: .destructive) { run.end() }
-                .accessibilityIdentifier("run.endConfirm")
+            if endOffersSave {
+                Button("Save Workout") { run.endAndSave() }
+                    .accessibilityIdentifier("run.endSave")
+                Button("Discard", role: .destructive) { run.end() }
+                    .accessibilityIdentifier("run.endConfirm")
+                Button("Keep Going", role: .cancel) {}
+                    .accessibilityIdentifier("run.endCancel")
+            } else {
+                Button("Keep Going", role: .cancel) {}
+                    .accessibilityIdentifier("run.endCancel")
+                Button("End Workout", role: .destructive) { run.end() }
+                    .accessibilityIdentifier("run.endConfirm")
+            }
         } message: {
-            Text(run.isMirroring ? "It ends on your Apple Watch too, and won't be saved." : "This workout won't be saved.")
+            Text(endMessage)
         }
         // A watch run is already going: only this iPhone's own run starts here.
         .onAppear { if !run.isMirroring { run.coordinator.begin() } }
@@ -394,6 +408,7 @@ struct PhoneRunView: View {
     private func controls(kind: IntervalPhase.Kind, paused: Bool) -> some View {
         HStack {
             Button {
+                endOffersSave = run.offersSaveOnEnd
                 confirmingEnd = true
             } label: {
                 // Fixed, like the circle it sits in: at the largest text sizes a scaled glyph
@@ -459,14 +474,25 @@ struct PhoneRunView: View {
         return parts.joined(separator: ", ")
     }
 
+    /// What End's question says beside its choices.
+    private var endMessage: String {
+        switch (run.isMirroring, endOffersSave) {
+        case (false, false): "This workout won't be saved."
+        case (true, false): "It ends on your Apple Watch too, and won't be saved."
+        case (false, true): "Save the workout so far to Health, or discard it."
+        case (true, true): "It ends on your Apple Watch too. Save the workout so far to Health, or discard it."
+        }
+    }
+
     // MARK: - Done
 
     /// Back to the workouts. A good moment to ask for a rating, once someone has finished a
-    /// few: the system decides whether to show anything.
+    /// few: the system decides whether to show anything. Not after a workout ended early.
     private func done() {
-        guard run.isPresented, engine.status == .finished else { return }
+        guard run.isPresented, run.summary != nil, !engine.isActive else { return }
+        let finished = engine.status == .finished
         run.done()
-        reviews.ask(.finishedWorkout(count: run.finishedRuns), using: requestReview)
+        if finished { reviews.ask(.finishedWorkout(count: run.finishedRuns), using: requestReview) }
     }
 }
 
@@ -486,10 +512,10 @@ struct RunSummaryView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
             ZStack {
-                ProgressRing(fraction: 1, color: palette.work, track: palette.track(for: .work), strokeRatio: 0.075, animated: false)
+                ProgressRing(fraction: summary.ringFraction, color: palette.work, track: palette.track(for: .work), strokeRatio: 0.075, animated: false)
                     .frame(width: 220, height: 220)
                 VStack(spacing: 6) {
-                    Text("Complete")
+                    Text(summary.endedEarly ? "Ended" : "Complete")
                         .font(.system(.headline, design: .rounded).weight(.bold))
                         .textCase(.uppercase)
                         .kerning(1.2)
@@ -500,14 +526,14 @@ struct RunSummaryView: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("Workout complete, \(DurationFormat.spoken(Int(summary.duration)))")
+            .accessibilityLabel("\(summary.endedEarly ? "Workout ended early" : "Workout complete"), \(DurationFormat.spoken(Int(summary.duration)))")
             .accessibilityIdentifier("summary.complete")
 
             Text(workoutName)
                 .font(.system(.title2, design: .rounded).weight(.bold))
                 .multilineTextAlignment(.center)
                 .padding(.top, 28)
-            Text(DurationFormat.rounds(summary.rounds) + " done")
+            Text(summary.endedEarlyText ?? DurationFormat.rounds(summary.rounds) + " done")
                 .font(.headline)
                 .foregroundStyle(.secondary)
                 .padding(.top, 4)
