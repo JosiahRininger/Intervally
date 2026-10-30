@@ -222,7 +222,7 @@ struct PhoneSettingsView: View {
     }
 
     private var watchRow: some View {
-        let status = WatchStatusContent(peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt)
+        let status = WatchStatusContent(sync: sync)
         return row(systemImage: status.systemImage, title: "Apple Watch", subtitle: status.title)
     }
 

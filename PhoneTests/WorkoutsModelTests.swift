@@ -102,6 +102,25 @@ struct WorkoutsModelTests {
         #expect(again.name == "Tabata 3", "A copy of a copy counts on rather than stacking suffixes")
     }
 
+    @Test("A copy of a name at the cap keeps its number, cut to fit, so it never reads as the original")
+    func duplicateOfLongNameKeepsItsNumber() throws {
+        pro.isPro = true
+        let actions = makeActions()
+        let long = String(repeating: "Sprint ", count: 6) + "Hill"
+        actions.store.rename(actions.store.workouts[0].id, to: long)
+        let original = actions.store.workouts[0]
+        #expect(original.name.count == IntervalWorkout.maxNameLength, "Saved cut to the cap")
+
+        guard case .edit(let copy) = actions.duplicate(original) else {
+            Issue.record("Expected a copy")
+            return
+        }
+        #expect(copy.name.count <= IntervalWorkout.maxNameLength)
+        #expect(copy.name.hasSuffix(" 2"))
+        #expect(copy.name != original.name)
+        #expect(actions.store.workouts.last?.name == copy.name, "Saved as named")
+    }
+
     @Test("Duplicate at the free limit opens the paywall and copies nothing")
     func duplicateAtTheLimit() {
         let actions = makeActions()

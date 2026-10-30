@@ -175,10 +175,11 @@ struct ThemeSyncTests {
         transport: FakeTransport? = nil
     ) -> (WatchSync, ThemeStore) {
         let theme = theme ?? ThemeStore(defaults: defaults)
+        // Sync's own defaults too: what activation answered is kept there.
         let sync = WatchSync(
             store: store ?? WorkoutStore(defaults: defaults), theme: theme,
             transport: transport ?? self.transport, sleep: WatchSyncTests.neverSends,
-            now: { Date(timeIntervalSince1970: 5_000) }
+            now: { Date(timeIntervalSince1970: 5_000) }, defaults: defaults
         )
         return (sync, theme)
     }

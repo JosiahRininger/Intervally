@@ -145,9 +145,36 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         + Array(stride(from: 30, through: 300, by: 30))
         + Array(stride(from: 360, through: 1800, by: 60))
 
-    /// A copy with every field clamped into its supported range.
+    /// Long enough for "Saturday Hill Sprints with the Club". Without a cap a name could be
+    /// any length, and sync sends every preset's name, deleted ones too, in one document
+    /// (`PayloadBudgetTests`). Counted in characters as they are seen, so an emoji is one.
+    static let maxNameLength = 40
+
+    /// A name as it is saved: trimmed, `fallback` when nothing is left, then cut to
+    /// `maxNameLength` characters and trimmed again, so a cut never leaves a space at the
+    /// end. Every create, rename and duplicate on both devices names presets through it, and
+    /// `clamped` holds every save to it.
+    static func committedName(_ name: String, fallback: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let chosen = trimmed.isEmpty ? fallback : trimmed
+        return String(chosen.prefix(maxNameLength)).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// What a name field showing `field` saves over the `stored` name, or nil when it saves
+    /// nothing: the field left as it was, or typed back to the same name. A name kept longer
+    /// than the cap from 1.2 is cut when someone renames it, not because its editor was
+    /// opened and closed, which would sync a change nobody made.
+    static func savedName(typed field: String, stored: String) -> String? {
+        guard field != stored else { return nil }
+        let committed = committedName(field, fallback: stored)
+        return committed == stored ? nil : committed
+    }
+
+    /// A copy with every field clamped into its supported range, and the name held to its
+    /// cap. A name left empty is the default's, as a preset decoded without one gets.
     var clamped: IntervalWorkout {
         var copy = self
+        copy.name = Self.committedName(name, fallback: Self.default.name)
         copy.prepareSeconds = Self.prepareRange.clamping(prepareSeconds)
         copy.warmupSeconds = Self.warmupRange.clamping(warmupSeconds)
         copy.workSeconds = Self.workRange.clamping(workSeconds)

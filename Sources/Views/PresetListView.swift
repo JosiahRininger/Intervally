@@ -213,6 +213,13 @@ struct RenamePresetView: View {
             TextField("Name", text: $name)
                 .textInputAutocapitalization(.words)
                 .submitLabel(.done)
+                // Dictation hands over a whole sentence at once: the field shows it cut to the
+                // cap, as it will be saved, before Save is tapped.
+                .onChange(of: name) { _, new in
+                    if new.count > IntervalWorkout.maxNameLength {
+                        name = String(new.prefix(IntervalWorkout.maxNameLength))
+                    }
+                }
                 .onSubmit(commit)
                 .scenePadding(.horizontal)
                 .accentTitle()
@@ -240,7 +247,7 @@ struct RenamePresetView: View {
 
     private func commit() {
         guard !trimmed.isEmpty else { return }
-        onCommit(trimmed)
+        onCommit(IntervalWorkout.committedName(name, fallback: workout.name))
         dismiss()
     }
 }

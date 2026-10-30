@@ -5,6 +5,7 @@
 
 import Foundation
 import Testing
+import UIKit
 @testable import IntervallyPhone
 
 /// What the watch status card says for each state the watch can be in.
@@ -61,5 +62,58 @@ struct WatchStatusContentTests {
         let content = WatchStatusContent(peer: .appNotInstalled, lastSentAt: earlier, lastReceivedAt: later)
         #expect(content.lastSynced == nil)
         #expect(content.syncedLine() == nil)
+    }
+
+    // MARK: Suspended
+
+    @Test("Suspended sync says workouts aren't syncing, where the watch is ready or being looked for", arguments: [
+        PeerState.ready, .activating,
+    ])
+    func suspendedShowsNotSyncing(_ peer: PeerState) {
+        let content = WatchStatusContent(peer: peer, lastSentAt: earlier, lastReceivedAt: later, syncSuspended: true)
+        #expect(content.title == "Workouts aren't syncing")
+        #expect(content.detail == "Your workouts are saved on this iPhone, but they can't be sent to your watch right now.")
+        #expect(UIImage(systemName: content.systemImage) != nil, "\(content.systemImage)")
+        #expect(content.title != WatchStatusContent(peer: peer, lastSentAt: earlier, lastReceivedAt: later).title)
+    }
+
+    @Test("Suspended sync offers no Send Now and shows no last sync, which would read as sync working")
+    func suspendedHidesSendNow() {
+        let content = WatchStatusContent(peer: .ready, lastSentAt: earlier, lastReceivedAt: later, syncSuspended: true)
+        #expect(content.offersSendNow == false)
+        #expect(content.lastSynced == nil)
+        #expect(content.syncedLine(now: later) == nil)
+        // Not suspended, the same watch offers both.
+        let syncing = WatchStatusContent(peer: .ready, lastSentAt: earlier, lastReceivedAt: later, syncSuspended: false)
+        #expect(syncing.offersSendNow)
+        #expect(syncing.lastSynced == later)
+    }
+
+    @Test("Without a watch to sync with, suspended sync changes nothing: the watch needs seeing to first", arguments: [
+        PeerState.unsupported, .notPaired, .appNotInstalled,
+    ])
+    func suspendedLeavesOtherStates(_ peer: PeerState) {
+        let suspended = WatchStatusContent(peer: peer, lastSentAt: earlier, lastReceivedAt: later, syncSuspended: true)
+        #expect(suspended == WatchStatusContent(peer: peer, lastSentAt: earlier, lastReceivedAt: later))
+    }
+
+    @Test("The card reads the store's suspension through sync, the way every screen builds it")
+    @MainActor
+    func suspensionReachesTheCard() {
+        let defaults = makeTestDefaults()
+        let transport = FakeTransport()
+        let readable = WatchSync(store: WorkoutStore(defaults: defaults), transport: transport)
+        #expect(readable.isSuspended == false)
+        #expect(WatchStatusContent(sync: readable).title == "You're set")
+        #expect(WatchStatusContent(sync: readable).offersSendNow)
+
+        defaults.set(Data("not a document".utf8), forKey: WorkoutStore.Key.document)
+        let sync = WatchSync(store: WorkoutStore(defaults: defaults), transport: transport)
+        #expect(sync.isSuspended)
+        #expect(sync.peer == .ready)
+        let content = WatchStatusContent(sync: sync)
+        #expect(content.title == "Workouts aren't syncing")
+        #expect(content.offersSendNow == false)
+        #expect(content.lastSynced == nil)
     }
 }

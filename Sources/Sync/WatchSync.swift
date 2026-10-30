@@ -55,6 +55,11 @@ final class WatchSync: NSObject {
     /// Whether `activate()` started the session.
     @ObservationIgnored private(set) var isActive = false
 
+    /// Sync is stopped over stored presets that didn't decode (`WorkoutStore.isSyncSuspended`):
+    /// nothing is sent or merged until a launch reads them. For the status card, which must
+    /// not say all is well meanwhile.
+    var isSuspended: Bool { store.isSyncSuspended }
+
     @ObservationIgnored private let store: WorkoutStore
     /// Nil syncs the presets alone.
     @ObservationIgnored private let theme: ThemeStore?
@@ -62,7 +67,8 @@ final class WatchSync: NSObject {
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
-    /// Where the last start request acted on is remembered.
+    /// Where the last start request acted on, and the last context answered at activation,
+    /// are remembered.
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var pendingPush: Task<Void, Never>?
 
@@ -102,6 +108,11 @@ final class WatchSync: NSObject {
         guard !isActive, transport.snapshot.isSupported else { return }
         isActive = true
         log.info("activating")
+        // Said once, and as a fault: no edit reaches the other device from here on, and the
+        // sends and merges turned away below say no more about it.
+        if isSuspended {
+            log.fault("sync suspended: the stored presets didn't decode, so nothing is sent or merged until a launch reads them")
+        }
         transport.activate(delegate: self) { [weak self] in self?.sessionStateDidChange() }
     }
 
@@ -139,28 +150,31 @@ final class WatchSync: NSObject {
     /// Sends this device's document, unless nobody can take it or the other device already
     /// holds it: every send may wake the other device. `force` sends anyway, to a counterpart
     /// that may have lost what it held, such as a reinstalled app; `sentAt` keeps even an
-    /// identical document from being coalesced away.
-    func push(force: Bool = false) {
+    /// identical document from being coalesced away. True when it was sent.
+    @discardableResult
+    func push(force: Bool = false) -> Bool {
         pendingPush?.cancel()
         pendingPush = nil
-        guard PeerState(transport.snapshot) == .ready else { return }
-        guard !store.isSyncSuspended else {
-            log.error("not sending: the stored presets didn't decode, so sync is suspended")
-            return
+        guard PeerState(transport.snapshot) == .ready else { return false }
+        guard !isSuspended else {
+            log.debug("not sending: sync is suspended")
+            return false
         }
         let document = store.document
         let chosen = theme?.register
         if !force, otherDeviceHolds(document), otherDeviceHolds(chosen) {
             log.debug("not sending: the other device has this already")
-            return
+            return false
         }
         do {
             let sentAt = now()
             try transport.updateApplicationContext(SyncWire.context(for: document, theme: chosen, sentAt: sentAt))
             lastSentAt = sentAt
             log.info("sent \(document.workouts.count) presets\(force ? " (forced)" : "", privacy: .public)")
+            return true
         } catch {
             log.error("send failed: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 
@@ -188,7 +202,7 @@ final class WatchSync: NSObject {
     func requestStart(of presetID: UUID) -> Bool {
         pendingPush?.cancel()
         pendingPush = nil
-        guard PeerState(transport.snapshot) == .ready, !store.isSyncSuspended else { return false }
+        guard PeerState(transport.snapshot) == .ready, !isSuspended else { return false }
         let request = SyncWire.StartRequest(id: UUID(), presetID: presetID, requestedAt: now())
         do {
             let sentAt = now()
@@ -252,8 +266,8 @@ final class WatchSync: NSObject {
     /// can't be merged over. Nil when nothing was merged.
     @discardableResult
     private func merge(_ remote: SyncDocument) -> WorkoutStore.MergeResult? {
-        guard !store.isSyncSuspended else {
-            log.error("not merging: the stored presets didn't decode, so sync is suspended")
+        guard !isSuspended else {
+            log.debug("not merging: sync is suspended")
             return nil
         }
         let result = store.merge(remote)
@@ -274,13 +288,52 @@ final class WatchSync: NSObject {
         let received = transport.receivedApplicationContext
         lastSentAt = lastSentAt ?? SyncWire.sentAt(from: transport.applicationContext)
         lastReceivedAt = lastReceivedAt ?? SyncWire.sentAt(from: received)
-        // The last context that arrived, which this launch may not have seen. It may be old,
-        // so whether to answer is left to push(), which skips what the other device holds.
-        if let pending = SyncWire.document(from: received) { merge(pending) }
+        // The last context that arrived, which this launch may not have seen. It may be old:
+        // a device that takes what it is sent and has nothing to add sends nothing back.
+        let pending = SyncWire.document(from: received)
+        if let pending { merge(pending) }
         if let pendingTheme = SyncWire.theme(from: received) { _ = mergeTheme(pendingTheme) }
         // Start on Watch launches the app; the request it came with may be waiting here.
         receiveStart(SyncWire.startRequest(from: received))
-        push()
+        pushAtActivation(answering: pending, sentAt: SyncWire.sentAt(from: received))
+    }
+
+    /// Where the other device's last context answered at activation is remembered, by its
+    /// digest (`SyncDocument.digest`) and when it was sent (`activationReplyMarker`).
+    nonisolated static let activationReplyKey = "sync.activationReply.v1"
+
+    /// One context, told apart from any other. Every fresh install sends the same starters,
+    /// so the digest alone would match a reinstalled device's context to an answer given to
+    /// the first install, and that device would wait for the next edit. Its send time sets
+    /// it apart; a context from a version that doesn't say when it was sent goes by digest.
+    nonisolated static func activationReplyMarker(digest: String, sentAt: Date?) -> String {
+        guard let sentAt else { return digest }
+        return "\(digest)@\(sentAt.timeIntervalSinceReferenceDate)"
+    }
+
+    /// Activation's send. An ordinary push skips a document this device has sent before, but
+    /// the other device may never have taken it: it was reinstalled, or the context arrived
+    /// while it couldn't, and it would wait for the next edit here. So when its last context
+    /// lacks writes this device holds, the whole document goes again, forced, and that
+    /// context is remembered. The same context still behind at the next launch, as from a
+    /// device that took the answer and had nothing to add, isn't answered again: the two
+    /// would wake each other at every launch. Compared by stamps alone, so a version that
+    /// drops a field it doesn't know is never behind for that.
+    private func pushAtActivation(answering pending: SyncDocument?, sentAt: Date?) {
+        guard let pending else {
+            push()
+            return
+        }
+        let theirs = pending.digest
+        let marker = Self.activationReplyMarker(digest: theirs, sentAt: sentAt)
+        guard theirs != store.document.digest, defaults.string(forKey: Self.activationReplyKey) != marker else {
+            push()
+            return
+        }
+        // Remembered only once sent: an answer that couldn't go is tried again at the next launch.
+        guard push(force: true) else { return }
+        defaults.set(marker, forKey: Self.activationReplyKey)
+        log.info("answered the other device's last presets, which lacked some of these")
     }
 
     /// The other device's app was installed or removed, or (iPhone) the watch was paired or
