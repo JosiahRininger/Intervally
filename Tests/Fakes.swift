@@ -62,6 +62,8 @@ final class FakeWorkoutSession: WorkoutSessioning {
     private(set) var pauseCount = 0
     private(set) var resumeCount = 0
     private(set) var endCount = 0
+    /// The end date of each `end(at:)`, in order.
+    private(set) var endDates: [Date] = []
     private(set) var discardCount = 0
     private(set) var authorizationRequests = 0
 
@@ -103,6 +105,7 @@ final class FakeWorkoutSession: WorkoutSessioning {
     @discardableResult
     func end(at date: Date) async -> Bool {
         endCount += 1
+        endDates.append(date)
         isRunning = false
         await endGate?.wait()
         return endResult

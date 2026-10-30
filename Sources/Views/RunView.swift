@@ -280,7 +280,7 @@ struct RunView: View {
         return VStack(spacing: dial.gap) {
             ZStack {
                 ProgressRing(
-                    fraction: 1,
+                    fraction: summary?.ringFraction ?? 1,
                     color: isLuminanceReduced ? palette.dimmed(for: .work) : .white,
                     track: .clear,
                     isDimmed: isLuminanceReduced,
@@ -289,7 +289,7 @@ struct RunView: View {
                 .frame(width: diameter, height: diameter)
 
                 VStack(spacing: 0) {
-                    completionWord(endedEarly: summary?.endedEarly == true)
+                    completionWord(rounds: rounds, plannedRounds: summary?.plannedRounds)
                         .font(.phaseLabel)
                         .textCase(.uppercase)
                         .kerning(0.6)
@@ -305,10 +305,7 @@ struct RunView: View {
                         .minimumScaleFactor(0.45)
                         .lineLimit(1)
                         .padding(.top, 2)
-                    summaryFooter(
-                        rounds: rounds, plannedRounds: summary?.plannedRounds,
-                        health: summary?.health ?? .notRecorded, foreground: fg
-                    )
+                    summaryFooter(rounds: rounds, health: summary?.health ?? .notRecorded, foreground: fg)
                         .frame(maxWidth: dial.chord(atOffset: 0.4 * interior))
                         .padding(.top, 4)
                 }
@@ -346,14 +343,16 @@ struct RunView: View {
         )
     }
 
-    /// The word over the total: "Complete", or "Ended early" for a run ended with Save
-    /// Workout, as "Ended" where that won't fit, as on a 40mm dial.
+    /// The words over the total: "Complete", or for a run ended with Save Workout how far it
+    /// got, "Ended early: 5 of 8", shortened where that won't fit, as on a 40mm dial. The line
+    /// under the total keeps the Health result, so the rounds go here.
     @ViewBuilder
-    private func completionWord(endedEarly: Bool) -> some View {
-        if endedEarly {
+    private func completionWord(rounds: Int, plannedRounds: Int?) -> some View {
+        if let plannedRounds {
             ViewThatFits(in: .horizontal) {
-                Text("Ended early")
-                Text("Ended")
+                Text("Ended early: \(rounds) of \(plannedRounds)")
+                Text("Ended: \(rounds) of \(plannedRounds)")
+                Text("\(rounds) of \(plannedRounds)")
             }
         } else {
             Text("Complete")
@@ -361,19 +360,17 @@ struct RunView: View {
     }
 
     /// One line under the total: whether the workout reached Apple Health, or — when the
-    /// run had no workout session to save — the rounds, "5 of 8" for one ended early.
+    /// run had no workout session to save — the rounds.
     ///
     /// One deterministic line per state, with no animation. The previous version let a
     /// ViewThatFits choose between two layouts while the screen was still animating in, and
     /// "Saved" showed truncated for a moment before it settled.
-    private func summaryFooter(
-        rounds: Int, plannedRounds: Int?, health: RunCoordinator.HealthSave, foreground fg: Color
-    ) -> some View {
+    private func summaryFooter(rounds: Int, health: RunCoordinator.HealthSave, foreground fg: Color) -> some View {
         let heart = Text(Image(systemName: "heart.fill")).foregroundStyle(.red)
         return Group {
             switch health {
             case .notRecorded:
-                Text(plannedRounds.map { "\(rounds) of \($0)" } ?? DurationFormat.rounds(rounds))
+                Text(DurationFormat.rounds(rounds))
             case .saving:
                 Text("\(heart) Saving")
             case .saved:

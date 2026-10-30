@@ -15,7 +15,8 @@ struct RunSnapshot: Codable, Equatable, Sendable {
     var pausedElapsed: TimeInterval?
     /// Set while a run ended with Save Workout is still saving its Health workout, so a
     /// relaunch in the middle finishes the save rather than bringing the run back. Only ever
-    /// true, and written only then: every other snapshot is exactly what 1.2 wrote.
+    /// true, and written only then: every other snapshot is exactly what 1.2 wrote. Its
+    /// `anchor` is then the moment Save was tapped, where the workout ends.
     var savesOnEnd: Bool?
 }
 

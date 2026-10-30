@@ -512,7 +512,7 @@ struct RunSummaryView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 24)
             ZStack {
-                ProgressRing(fraction: 1, color: palette.work, track: palette.track(for: .work), strokeRatio: 0.075, animated: false)
+                ProgressRing(fraction: summary.ringFraction, color: palette.work, track: palette.track(for: .work), strokeRatio: 0.075, animated: false)
                     .frame(width: 220, height: 220)
                 VStack(spacing: 6) {
                     Text(summary.endedEarly ? "Ended" : "Complete")

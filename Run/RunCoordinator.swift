@@ -154,6 +154,13 @@ final class RunCoordinator {
         var endedEarlyText: String? {
             roundsReachedText.map { "Ended early: \($0)" }
         }
+
+        /// How full the summary's ring is drawn: all the way for a finished run, and only as
+        /// far as the rounds reached for one ended early, so the ring doesn't claim a finish.
+        var ringFraction: Double {
+            guard let plannedRounds, plannedRounds > 0 else { return 1 }
+            return min(1, Double(rounds) / Double(plannedRounds))
+        }
     }
 
     /// What became of the run's Health workout, for the summary screen.
@@ -885,7 +892,7 @@ final class RunCoordinator {
         Task {
             // A completed workout is saved to Health automatically, which is what a
             // workout app is expected to do once it has taken a session.
-            let saved = await workout.end()
+            let saved = await workout.end(at: endedAt)
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
             // What the session noted as it ended and saved came after the flush above.
             flushDiagnostics()
@@ -931,14 +938,17 @@ final class RunCoordinator {
             health: wasWorkoutTier ? .saving : .notRecorded,
             plannedRounds: plan.totalRounds
         )
-        let snapshot = RunSnapshot(workout: plan.workout, anchor: Date(), pausedElapsed: elapsed, savesOnEnd: true)
+        // Its anchor is the moment Save was tapped, so a save finished after a relaunch ends
+        // the workout there too, not at the relaunch.
+        let endedAt = Date()
+        let snapshot = RunSnapshot(workout: plan.workout, anchor: endedAt, pausedElapsed: elapsed, savesOnEnd: true)
         pendingSave = snapshot
         persistSnapshot()
         refreshBackstop()
         // As at the finish: the session ends next, and nothing keeps the app running after.
         flushDiagnostics()
         Task {
-            let saved = await workout.end()
+            let saved = await workout.end(at: endedAt)
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
             saveSettled(snapshot)
             flushDiagnostics()
@@ -1044,7 +1054,9 @@ final class RunCoordinator {
         Task {
             if await workout.adoptRecoveredSession(for: snapshot.workout) {
                 log.info("finishing the save of a run ended with Save Workout")
-                await workout.end()
+                // Ended where Save was tapped: the time since, until this relaunch, was
+                // never part of the workout.
+                await workout.end(at: snapshot.anchor)
             }
             saveSettled(snapshot)
             flushDiagnostics()

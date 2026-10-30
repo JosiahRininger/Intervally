@@ -72,9 +72,14 @@ final class RunJourneyTests: XCTestCase {
     }
 
     /// A minute and more into a run on a workout session, End offers Save Workout beside Discard
-    /// and Keep Going. Saved, the summary says how far the run got, and Done goes back.
+    /// and Keep Going. Saved, the summary says how far the run got, and Done goes back. The run
+    /// is paused first, so a slow simulator can't carry it into the fourth round before Save,
+    /// and a paused run is the one saved.
     func testEndOffersSaveDiscardKeepGoing() throws {
         let app = launchInThirdRound()
+        let pause = app.buttons["run.pauseResume"]
+        pause.tap()
+        XCTAssertTrue(pause.wait(until: "label == %@", "Resume"), "Pause didn't offer Resume")
         app.buttons["run.end"].tap()
         let save = app.alerts.buttons["run.endSave"].firstMatch
         XCTAssertTrue(save.waitForExistence(timeout: 5), "End didn't offer Save Workout")
