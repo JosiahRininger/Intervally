@@ -94,14 +94,19 @@ plan's next countdown second or interval change (`IntervalPlan.nextEventElapsed`
 8 ms past it, never more than half a second at a time, so a tap lands with the change on
 screen rather than up to half a second after it. A change that a skip left waiting while
 paused plays half a second after Resume, clear of Resume's own tap. Each run notes in its
-diagnostics how late its changes were announced.
+diagnostics how late its changes were announced. The notes are written two seconds after
+they're made, off the main thread, and at once when a run finishes or ends, its Health save
+is over, the iPhone lets go of the audio, or the app goes to the background; with no run
+going, the watch notes a wrist raise at most once a minute.
 
 A `RunSnapshot` is persisted to the shared App Group on every state change, so relaunching
 after termination resumes the run exactly where it had got to, and the Smart Stack
 complication can render a live countdown without the app being awake. If the system kept a
 workout session alive across that termination it is *adopted* rather than replaced — starting
 a second session orphans the first, and everything recorded before the crash never reaches
-Health.
+Health. A run relaunched while paused on a phase it skipped to still plays that change on
+Resume. `TimerEngineFuzzTests` runs 2,000 generated plans through ticks, suspensions,
+pauses, skips and relaunches, and checks every step.
 
 Each interval is its own `HKWorkoutActivity`, so the saved workout carries real per-interval
 splits instead of one undifferentiated block. The warmup and cooldown are activities too,
@@ -277,7 +282,14 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
   ways. It reaches an app that isn't running and replaces anything older still undelivered.
   The receiver merges, never replaces, and replies only when the merge holds something the
   sender lacks, so the two settle within two exchanges. A burst of edits, such as the crown
-  turning through values, goes as one send.
+  turning through values, goes as one send. At activation, if the other device's last
+  context still lacks writes this one holds (by ids and stamps, `SyncDocument.digest`), the
+  whole document goes again, once for that context: a send it never took, after a reinstall
+  say, doesn't wait for the next edit.
+- **Size.** Every preset goes in the document whole, deleted ones too (the empty-list repair
+  brings one back), so every field is bounded: the numbers by their ranges, the name at 40
+  characters (`IntervalWorkout.maxNameLength`). `PayloadBudgetTests` holds 99 presets and
+  200 deleted ones under 48 KB.
 - **The watch in the background.** A WatchConnectivity wake is held until the context has
   merged, and handed back after at most 15 s (`ConnectivityWakes`). The complication reloads
   only when the next workout changed.
@@ -289,7 +301,8 @@ counterpart, as on iPad or a Family Setup watch, sync simply idles.
   value from a later version is kept and passed on, and shows as Classic.
 - **Never synced:** a run in progress (it carries its own copy of the workout), Pro (StoreKit
   answers on each device), the other settings and Health data. A stored document that won't
-  decode suspends sync rather than being overwritten.
+  decode suspends sync rather than being overwritten, and the iPhone's watch status says
+  workouts aren't syncing instead of "You're set".
 
 ## Themes
 
@@ -372,6 +385,7 @@ PhoneTests/                Swift Testing, iPhone app
 SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
 TestSupport/               helpers for both bundles: the App Store listing's parser;
                            VirtualTime, a clock only the test moves, with a run's ticker on it;
+                           SeededGenerator, which makes a fuzz test's failing case replayable;
                            and Fixtures/, what 1.2 stored, sent and decided, frozen so later
                            versions are held to it (Fixture.swift has the rules)
 AppStore/                  Metadata.md (the App Store Connect listing, checked by tests) and

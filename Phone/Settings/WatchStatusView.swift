@@ -13,7 +13,7 @@ struct WatchStatusView: View {
     @State private var sends = 0
 
     var body: some View {
-        let content = WatchStatusContent(peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt)
+        let content = WatchStatusContent(sync: sync)
 
         ScrollView {
             VStack(spacing: 24) {

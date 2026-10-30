@@ -268,6 +268,61 @@ struct TimerEngineDeadlineTests {
         #expect(engine.position.phase?.kind == .rest)
         #expect(engine.position.phase?.round == 1)
     }
+
+    @Test("A run relaunched while paused on a phase it skipped to announces that phase on Resume, once")
+    func pausedSkipThenRestoreEmitsPhaseBeganOnResume() {
+        // prepare 5 | work 20 (5-25) | rest 10 (25-35) | work 20 (35-55) ...
+        let (engine, clock) = makeEngine(prepare: 5, work: 20, rest: 10, rounds: 3)
+        engine.start()
+        clock.advance(7)
+        engine.advance()
+        engine.pause()
+        engine.skipPhase()
+        #expect(engine.hasPendingBoundary, "The rest waits for Resume")
+
+        // The app is ended and launched again, from the snapshot the skip saved.
+        let relaunched = TimerEngine(workout: engine.plan.workout)
+        relaunched.now = { clock.current }
+        relaunched.restore(anchor: clock.current, workout: engine.plan.workout, paused: engine.elapsed)
+        #expect(relaunched.status == .paused)
+        #expect(relaunched.elapsed == 25)
+        #expect(relaunched.hasPendingBoundary, "The rest still waits for Resume")
+
+        relaunched.resume()
+        clock.advance(0.5)
+        let rest = relaunched.plan.phases[2]
+        #expect(rest.kind == .rest)
+        #expect(relaunched.advance() == [.phaseBegan(rest)])
+        clock.advance(0.5)
+        #expect(relaunched.advance().isEmpty, "Announced once")
+    }
+
+    @Test("A paused time read back a hair either side of a change still has the change announced on Resume")
+    func pausedSkipRestoreAllowsForStorage() {
+        // work 20 (0-20) | rest 10 (20-30) | work 20 (30-50)
+        let workout = IntervalWorkout(prepareSeconds: 0, workSeconds: 20, restSeconds: 10, rounds: 2)
+        for paused in [20 - 1e-12, 20, 20 + 1e-12] {
+            let (engine, clock) = makeEngine()
+            engine.restore(anchor: clock.current, workout: workout, paused: paused)
+            engine.resume()
+            clock.advance(0.5)
+            #expect(engine.advance() == [.phaseBegan(engine.plan.phases[1])], "Paused at \(paused) s")
+        }
+    }
+
+    @Test("A run relaunched while paused mid-phase, or on its very first instant, doesn't announce its phase again")
+    func pausedRestoreKeepsAnnouncedPhase() {
+        let workout = IntervalWorkout(prepareSeconds: 5, workSeconds: 20, restSeconds: 10, rounds: 3)
+        // Mid-rest; and the lead-in's first instant, which Start announced.
+        for paused in [30.0, 0] {
+            let (engine, clock) = makeEngine()
+            engine.restore(anchor: clock.current, workout: workout, paused: paused)
+            #expect(engine.hasPendingBoundary == false, "Paused at \(paused) s")
+            engine.resume()
+            clock.advance(0.5)
+            #expect(engine.advance().isEmpty, "Paused at \(paused) s")
+        }
+    }
 }
 
 @Suite("Regressions found in review")

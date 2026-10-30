@@ -71,7 +71,8 @@ final class TimerEngine {
     var isActive: Bool { status == .running || status == .paused }
 
     /// Whether the clock is in a phase that `advance()` has not announced yet. A skip while
-    /// paused leaves one, announced by the first advance after resuming.
+    /// paused leaves one, announced by the first advance after resuming, and so does a
+    /// relaunch of a run left that way (`restore`).
     var hasPendingBoundary: Bool {
         guard isActive, let index = position.phaseIndex else { return false }
         return index != lastPhaseIndex
@@ -227,6 +228,16 @@ final class TimerEngine {
     }
 
     /// Restores a run that was interrupted, from a persisted anchor.
+    ///
+    /// The phase under way counts as announced, so a relaunch doesn't replay it, except for a
+    /// run paused on the very first instant of a phase after the first. A skip while paused
+    /// leaves a run there, with the phase's change still to come on the first advance after
+    /// Resume (`hasPendingBoundary`); counted as announced, the change lost its cue, and on the
+    /// watch its tap and its Health segment. The snapshot keeps only the paused time, so that
+    /// instant is all there is to go on, and nothing else pauses a run there: a pause comes a
+    /// moment after the tick that announced a change. A run paused in the moment before a
+    /// change was announced, within the ticker's few milliseconds or half a second after a
+    /// Resume, still comes back with that change counted as announced.
     func restore(anchor: Date, workout: IntervalWorkout, paused elapsedWhenPaused: TimeInterval?) {
         plan = IntervalPlan(workout: workout)
         lastCountdownSecond = nil
@@ -240,7 +251,16 @@ final class TimerEngine {
             self.elapsedWhenPaused = 0
             status = .running
         }
-        lastPhaseIndex = position.phaseIndex
+        let position = self.position
+        // A nanosecond's leeway for the paused time's trip through storage.
+        if status == .paused, let index = position.phaseIndex, index > 0,
+           let phase = position.phase, abs(elapsed - phase.start) < 1e-9 {
+            // Left there by a skip while paused: the change is announced on Resume, as it
+            // would have been without the relaunch.
+            lastPhaseIndex = index - 1
+        } else {
+            lastPhaseIndex = position.phaseIndex
+        }
         if position.isFinished { status = .finished }
     }
 }

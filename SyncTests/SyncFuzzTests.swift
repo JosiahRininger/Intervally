@@ -25,7 +25,7 @@ struct SyncFuzzTests {
 
     @Test("Merging is commutative, associative and idempotent over every field, and keeps the newest of each")
     func allFieldsCommutativeAssociativeIdempotent() throws {
-        var rng = FuzzRandom(seed: 0x5EED_0024)
+        var rng = SeededGenerator(seed: 0x5EED_0024)
         let trials = 5_000
         var failures: [String: Int] = [:]
         var firstFailure: Int?
@@ -104,7 +104,7 @@ struct SyncFuzzTests {
     /// this build must keep the rest exactly as it last wrote it.
     @Test("This build and an older version settle on what the older one knows, and this build keeps the rest", arguments: OlderVersion.allCases)
     func olderVersionSettles(_ version: OlderVersion) throws {
-        var rng = FuzzRandom(seed: 0x5EED_0012 &+ UInt64(OlderVersion.allCases.firstIndex(of: version)!))
+        var rng = SeededGenerator(seed: 0x5EED_0012 &+ UInt64(OlderVersion.allCases.firstIndex(of: version)!))
         let trials = 1_000
         var failures: [String: Int] = [:]
         var firstFailure: Int?
@@ -203,31 +203,9 @@ struct SyncFuzzTests {
 
 // MARK: - Generators
 
-/// SplitMix64: the same sequence for the same seed, so a failing trial replays exactly.
-private struct FuzzRandom: RandomNumberGenerator {
-    private var state: UInt64
-
-    init(seed: UInt64) {
-        state = seed
-    }
-
-    mutating func next() -> UInt64 {
-        state &+= 0x9E37_79B9_7F4A_7C15
-        var z = state
-        z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
-        z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
-        return z ^ (z >> 31)
-    }
-
-    mutating func uuid() -> UUID {
-        let bytes = (next(), next())
-        return withUnsafeBytes(of: bytes) { UUID(uuid: $0.load(as: uuid_t.self)) }
-    }
-}
-
 /// `count` different stamps, oldest first, from a pool small enough that millis often tie
 /// and only the device tells two writes apart. The origin, the starters' stamp, is one.
-private func distinctStamps(_ count: Int, using rng: inout FuzzRandom) -> [SyncStamp] {
+private func distinctStamps(_ count: Int, using rng: inout SeededGenerator) -> [SyncStamp] {
     let pool = [SyncStamp.origin] + (1...3).flatMap { millis in
         ["phone", "watch"].map { SyncStamp(millis: Int64(millis), device: $0) }
     }
@@ -251,7 +229,7 @@ private struct PresetHistory {
     /// The optional fields the newest contents changed.
     var changedLast: Set<OptionalWorkoutField> = []
 
-    static func random(using rng: inout FuzzRandom) -> PresetHistory {
+    static func random(using rng: inout SeededGenerator) -> PresetHistory {
         let id = rng.uuid()
         var contents = distinctStamps(Int.random(in: 1...3, using: &rng), using: &rng).map { stamp in
             (stamp: stamp, workout: randomCore(id: id, using: &rng), deleted: Int.random(in: 0..<4, using: &rng) == 0)
@@ -278,7 +256,7 @@ private struct PresetHistory {
 
     /// Every field but the optional ones, each from a few values (in range, as a save clamps
     /// them) so that copies often agree on some and differ on others.
-    static func randomCore(id: UUID, using rng: inout FuzzRandom) -> IntervalWorkout {
+    static func randomCore(id: UUID, using rng: inout SeededGenerator) -> IntervalWorkout {
         IntervalWorkout(
             id: id,
             name: ["Hills", "Tabata", "Hill Sprints", "", "Löwe 🦁"].randomElement(using: &rng)!,
@@ -293,7 +271,7 @@ private struct PresetHistory {
 
     /// The preset as one device holds it: one of its contents and one of its places, perhaps
     /// without some optional fields.
-    func randomCopy(using rng: inout FuzzRandom) -> PresetRecord {
+    func randomCopy(using rng: inout SeededGenerator) -> PresetRecord {
         let index = Int.random(in: 0..<contents.count, using: &rng)
         var workout = contents[index].workout
         for field in OptionalWorkoutField.allCases where Int.random(in: 0..<4, using: &rng) == 0 {

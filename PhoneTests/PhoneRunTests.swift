@@ -872,6 +872,41 @@ struct CueEngineAudioTests {
         #expect(reports.count == 3)
         audio.handBackAudio()
     }
+
+    @Test("Letting the audio go writes the diagnostics there and then, as the app may be suspended next")
+    @MainActor
+    func handBackWritesTheDiagnostics() throws {
+        let writes = DiagnosticsWrites()
+        // A schedule that never comes round: only a write made on the spot reaches the disk.
+        let log = RunDiagnostics(
+            url: FileManager.default.temporaryDirectory.appendingPathComponent("diag-\(UUID().uuidString).json"),
+            write: writes.write,
+            schedule: { _, _ in }
+        )
+        let audio = CueAudio(diagnostics: log)
+        audio.holdForRun()
+        // As the cues counted while the phone was locked are noted as the run lets go.
+        log.note("Cues away from the app: 12 played, 0 didn't")
+        #expect(writes.count == 0)
+
+        audio.handBackAudio()
+        #expect(writes.count == 1, "Written as the audio went, not two seconds on")
+        let entries = try JSONDecoder().decode([RunDiagnostics.Entry].self, from: try #require(writes.last))
+        #expect(entries.contains { $0.text == "Cues away from the app: 12 played, 0 didn't" })
+    }
+}
+
+/// Counts the writes a diagnostics log makes, whichever thread makes them.
+private final class DiagnosticsWrites: @unchecked Sendable {
+    private let lock = NSLock()
+    private var written: [Data] = []
+
+    var count: Int { lock.withLock { written.count } }
+    var last: Data? { lock.withLock { written.last } }
+
+    var write: RunDiagnostics.Write {
+        { [self] data, _ in lock.withLock { written.append(data) } }
+    }
 }
 
 @Suite("Motion")

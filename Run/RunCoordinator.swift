@@ -85,6 +85,18 @@ final class RunCoordinator {
     /// can read what a run noted.
     @ObservationIgnored var diagnostics: @MainActor (String) -> Void = { RunDiagnostics.shared.note($0) }
 
+    /// Writes the notes out now rather than two seconds on (`RunDiagnostics.flush()`): at the
+    /// finish and at End, and again once the workout's Health save is over, after which the
+    /// app may not run again for a while. Injectable alongside `diagnostics`.
+    @ObservationIgnored var flushDiagnostics: @MainActor () -> Void = { RunDiagnostics.shared.flush() }
+
+    /// When `handleForeground` last noted the app coming to the front, on the run's clock.
+    @ObservationIgnored private var lastForegroundNote: Date?
+
+    /// How often the app coming to the front is noted with no run under way. The watch comes
+    /// forward at every wrist raise, and a note each time said no more than one a minute.
+    static let idleForegroundNoteInterval: TimeInterval = 60
+
     /// How late this run's boundaries were announced, for the line its diagnostics get once
     /// it finishes or is ended.
     @ObservationIgnored private var timing = BoundaryTimingTally(lateThreshold: RunPlatform.lateBoundary)
@@ -376,8 +388,10 @@ final class RunCoordinator {
             tier = .workout
             // The phase already under way was announced by `engine.start()` (or by a
             // restore), before there was a session to segment — so open its activity here
-            // rather than waiting for the next boundary.
-            if let phase = engine.position.phase { workout.beginActivity(for: phase) }
+            // rather than waiting for the next boundary. One skipped to while paused is still
+            // to be announced, and its announcement opens it: opened here as well, it would
+            // be in Health twice.
+            if let phase = engine.position.phase, !engine.hasPendingBoundary { workout.beginActivity(for: phase) }
             // The user may have paused while the session was still being created, in which
             // case that pause never reached the session.
             if engine.status == .paused { workout.pause() }
@@ -433,7 +447,10 @@ final class RunCoordinator {
                 // lost session and knock the tier down again.
                 self.runtime.stop()
                 self.tier = .workout
-                if let phase = self.engine.position.phase { self.workout.beginActivity(for: phase) }
+                // As in `startBackgroundSupport`: a phase still to be announced opens its own.
+                if let phase = self.engine.position.phase, !self.engine.hasPendingBoundary {
+                    self.workout.beginActivity(for: phase)
+                }
                 if self.engine.status == .paused { self.workout.pause() }
                 // The app now plays its own haptics, so the notification backstop goes.
                 self.refreshBackstop()
@@ -680,11 +697,16 @@ final class RunCoordinator {
         // Through the serialised chain, not a bare cancelAll: an unchained cancel could land
         // after a quick Repeat had already scheduled the next run's alerts, and wipe them.
         refreshBackstop()
+        // The run's notes, its timing line among them, reach the disk now: the session ends
+        // next, and the watch may suspend the app before the write two seconds on comes round.
+        flushDiagnostics()
         Task {
             // A completed workout is saved to Health automatically, which is what a
             // workout app is expected to do once it has taken a session.
             let saved = await workout.end()
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
+            // What the session noted as it ended and saved came after the flush above.
+            flushDiagnostics()
         }
     }
 
@@ -718,9 +740,14 @@ final class RunCoordinator {
         tier = .none
         persistSnapshot()
         refreshBackstop()
+        // As at the finish: nothing keeps the app running from here.
+        flushDiagnostics()
         // A completed workout is worth saving; one the user abandoned is not.
         if wasFinished {
-            Task { await workout.end() }
+            Task {
+                await workout.end()
+                flushDiagnostics()
+            }
         } else {
             workout.discard()
         }
@@ -774,7 +801,7 @@ final class RunCoordinator {
     /// catching up — elapsed time comes from the clock — but events since the last tick
     /// still have to be dispatched and the notification schedule re-aligned.
     func handleForeground() {
-        diagnostics("App: in front. Run \(engine.status), keeps running by \(tier.rawValue)")
+        noteForeground()
         advance()
         // Being foreground-active is the only state in which a session may be started, so
         // this is the moment to re-take a tier the system took away. Idempotent: the attach
@@ -790,6 +817,19 @@ final class RunCoordinator {
             scheduleWorkoutUpgrade()
         }
         refreshBackstop()
+    }
+
+    /// Notes the app coming to the front: every time during a run, where it says what keeps
+    /// the run going, and otherwise only once the last such note is a minute old.
+    private func noteForeground() {
+        let now = engine.now()
+        // A clock set back since counts as a minute gone, rather than silencing the notes.
+        if !engine.isActive, let last = lastForegroundNote,
+           (0...Self.idleForegroundNoteInterval).contains(now.timeIntervalSince(last)) {
+            return
+        }
+        lastForegroundNote = now
+        diagnostics("App: in front. Run \(engine.status), keeps running by \(tier.rawValue)")
     }
 
     private func requestPermissionsIfNeeded() async {

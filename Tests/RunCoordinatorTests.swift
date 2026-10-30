@@ -593,6 +593,39 @@ struct RunCoordinatorRaceTests {
         #expect(workout.endCount == 0)
     }
 
+    @Test("A session that starts while a skipped-to phase waits for Resume leaves that phase's activity to its announcement")
+    func sessionDuringPausedSkipOpensActivityOnce() async {
+        let time = VirtualTime()
+        let gate = Gate()
+        let (coordinator, store, workout, _, _, _, haptics) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        workout.startGate = gate
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(workout.startCount == 1, "Started, but still waiting on HealthKit")
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+        gate.open()
+        await settle(coordinator)
+        #expect(coordinator.tier == .workout)
+        #expect(workout.activities.isEmpty, "Left to the rest's announcement")
+
+        coordinator.togglePause()
+        _ = await coordinator.tick(on: time) { haptics.played.count == 2 }
+        #expect(haptics.played.last?.event == .phaseBegan(coordinator.engine.plan.phases[1]))
+        #expect(workout.activities.map(\.kind) == [.rest], "Opened once")
+        coordinator.stopAndExit()
+    }
+
     @Test("A restored paused run does not tick")
     func restoredPausedRunDoesNotTick() async {
         let defaults = makeTestDefaults()
@@ -789,6 +822,43 @@ struct RunCoordinatorUpgradeTests {
         #expect(workout.startCount == 3)
     }
 
+    @Test("An upgrade that lands while a skipped-to phase waits for Resume leaves that phase's activity to its announcement")
+    func upgradeDuringPausedSkipOpensActivityOnce() async {
+        // The run's clock and ticker on one clock, the retries on another, so the retry can
+        // come first.
+        let ticks = VirtualTime()
+        let (coordinator, store, workout, _, _, _, haptics) = makeCoordinator()
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.upgradeSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+        coordinator.runOnVirtualTime(ticks)
+        workout.failingStarts = 1
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .extendedRuntime)
+        ticks.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .seconds(1))
+        #expect(await waitUntil { coordinator.tier == .workout })
+        await settle(coordinator)
+        #expect(workout.activities.isEmpty, "Left to the rest's announcement")
+
+        coordinator.togglePause()
+        _ = await coordinator.tick(on: ticks) { haptics.played.count == 2 }
+        #expect(haptics.played.last?.event == .phaseBegan(coordinator.engine.plan.phases[1]))
+        #expect(workout.activities.map(\.kind) == [.rest], "Opened once")
+        coordinator.stopAndExit()
+    }
+
     @Test("The retries reach half a minute, past the iPhone's one-time workout prompt")
     func retriesOutlastThePrompt() {
         let (coordinator, _, _, _, _, _, _) = makeCoordinator()
@@ -947,6 +1017,49 @@ struct RunCoordinatorTickerTests {
         #expect(haptics.played.last?.event == .phaseBegan(rest))
         #expect(coordinator.engine.hasPendingBoundary == false)
         coordinator.stopAndExit()
+    }
+
+    @Test("A phase skipped to while paused still plays after a relaunch, on the first wake after Resume, and opens its activity once")
+    func skipWhilePausedPlaysAfterARelaunch() async {
+        let defaults = makeTestDefaults()
+        let (coordinator, store, _, _, _, _, _) = makeCoordinator(defaults: defaults)
+        // work 5 | rest 5 | work 5
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        time.advance(by: .milliseconds(300))
+        coordinator.togglePause()
+        coordinator.skip()
+
+        // The app is ended and launched again; the system kept its workout session.
+        let (relaunched, _, workout, _, _, _, haptics) = makeCoordinator(defaults: defaults)
+        workout.recoverableSession = true
+        relaunched.runOnVirtualTime(time)
+        #expect(relaunched.restoreIfNeeded())
+        #expect(relaunched.engine.status == .paused)
+        #expect(relaunched.engine.hasPendingBoundary, "The rest still waits for Resume")
+
+        relaunched.togglePause()
+        await settle(relaunched)
+        #expect(relaunched.tier == .workout)
+        #expect(workout.activities.isEmpty, "Left to the rest's announcement")
+        #expect(haptics.played.isEmpty, "Nothing played at Resume itself")
+
+        // Beside the sleep the first run's pause cut short, which wakes at 0.5 s and stops.
+        let wakes = await relaunched.tick(on: time) { haptics.played.count == 1 }
+        let rest = relaunched.engine.plan.phases[1]
+        #expect(wakes.last.map { abs($0 - 0.8) < 0.000_001 } == true, "The first wake after Resume, at 0.8 s")
+        #expect(haptics.played.map(\.event) == [.phaseBegan(rest)])
+        #expect(workout.activities.map(\.kind) == [.rest], "Opened once, by the announcement")
+        relaunched.stopAndExit()
     }
 }
 
@@ -1362,69 +1475,6 @@ struct RunCoordinatorProGatingTests {
         #expect(coordinator.restoreIfNeeded())
         #expect(coordinator.engine.plan.workout.warmupSeconds == 120)
         #expect(coordinator.engine.position.phase?.kind == .warmup)
-    }
-}
-
-@Suite("Run diagnostics")
-struct RunDiagnosticsTests {
-    private func tempURL() -> URL {
-        FileManager.default.temporaryDirectory.appendingPathComponent("diag-\(UUID().uuidString).json")
-    }
-
-    @Test("Entries survive a relaunch, newest last, and stop at the capacity")
-    func keepsAndCaps() {
-        let url = tempURL()
-        let log = RunDiagnostics(url: url)
-        for index in 0..<(RunDiagnostics.capacity + 5) { log.note("entry \(index)") }
-        let reopened = RunDiagnostics(url: url)
-        #expect(reopened.all.count == RunDiagnostics.capacity)
-        #expect(reopened.all.last?.text == "entry \(RunDiagnostics.capacity + 4)")
-        #expect(reopened.all.first?.text == "entry 5")
-        reopened.clear()
-        #expect(RunDiagnostics(url: url).all.isEmpty)
-    }
-
-    @Test("Errors read with their domain and code")
-    func describesErrors() {
-        let error = NSError(domain: "com.apple.healthkit", code: 4, userInfo: [NSLocalizedDescriptionKey: "Not authorized"])
-        #expect(RunDiagnostics.describe(error) == "com.apple.healthkit 4: Not authorized")
-    }
-
-    @Test("The same line again, straight after, is counted on one entry, so a flood can't push the rest out")
-    func collapsesRepeats() throws {
-        let url = tempURL()
-        let log = RunDiagnostics(url: url)
-        let start = Date(timeIntervalSince1970: 1_000_000)
-        log.note("Run: started Tabata", at: start)
-        for second in 1...(RunDiagnostics.capacity + 50) {
-            log.note("Audio: engine didn't start", at: start.addingTimeInterval(Double(second)))
-        }
-        log.note("Audio: cues can sound again", at: start.addingTimeInterval(1_000))
-        let entries = RunDiagnostics(url: url).all
-        #expect(entries.map(\.text) == ["Run: started Tabata", "Audio: engine didn't start", "Audio: cues can sound again"])
-        #expect(entries[1].repeats == RunDiagnostics.capacity + 49)
-        #expect(entries[1].lastDate == start.addingTimeInterval(Double(RunDiagnostics.capacity + 50)))
-        #expect(log.text.contains("\(RunDiagnostics.capacity + 50) times, until"))
-        log.clear()
-    }
-
-    @Test("A log saved before repeats were counted still opens")
-    func readsOldEntries() throws {
-        let url = tempURL()
-        try Data(#"[{"date":0,"text":"Run: started Tabata"}]"#.utf8).write(to: url)
-        let entries = RunDiagnostics(url: url).all
-        #expect(entries.map(\.text) == ["Run: started Tabata"])
-        #expect(entries.first?.repeats == 0)
-        try? FileManager.default.removeItem(at: url)
-    }
-
-    @Test("Shared text is one line per entry")
-    func text() {
-        let log = RunDiagnostics(url: nil)
-        log.note("one")
-        log.note("two")
-        #expect(log.text.split(separator: "\n").count == 2)
-        #expect(log.text.hasSuffix("two"))
     }
 }
 
