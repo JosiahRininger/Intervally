@@ -259,6 +259,24 @@ struct NotificationWindowTests {
         #expect(await scheduler.needsTopUp(now: changes[58].fireDate) == false)
     }
 
+    @Test("A disarmed change no longer counts as still to come, so the top-up comes one change sooner")
+    func disarmedChangeBringsTopUpSooner() async {
+        let anchor = Plans.anchor
+        let center = FakeNotificationCenter(now: anchor)
+        let scheduler = NotificationScheduler(center: center, now: { center.now })
+        await scheduler.schedule(plan: Plans.longest, anchor: anchor)
+        let changes = center.pending.filter { $0.identifier != Plans.finish }
+        #expect(await scheduler.needsTopUp(now: changes[48].fireDate) == false)
+
+        // One of the last ten comes down: nine alerts are left to come, not ten.
+        await scheduler.disarm(identifier: changes[55].identifier)
+        #expect(await scheduler.needsTopUp(now: changes[48].fireDate))
+        #expect(await scheduler.needsTopUp(now: changes[47].fireDate) == false)
+        // A name that isn't the run's changes nothing.
+        await scheduler.disarm(identifier: "training-reminder-2026-10-30")
+        #expect(await scheduler.needsTopUp(now: changes[47].fireDate) == false)
+    }
+
     @Test("A workout that fits in one schedule never asks to be topped up")
     func fittingPlanNeverNeedsTopUp() async {
         let anchor = Plans.anchor
@@ -294,19 +312,27 @@ struct NotificationSchedulingTests {
         #expect(center.added.map(\.fireDate) == [10, 40, 55, 85].map { anchor.addingTimeInterval($0) })
     }
 
-    @Test("The first delay is worked out after the cancel before it, not before")
+    @Test("What is left out is decided after the cancel before it, not before")
     func intervalComputedAfterTheCancel() async {
-        // Something is pending, so the cancel takes its time over it.
-        let center = FakeNotificationCenter(now: anchor)
+        // Two seconds before the first work interval, something is pending, so the cancel
+        // takes its time over it.
+        let center = FakeNotificationCenter(now: anchor.addingTimeInterval(8))
         let scheduler = makeScheduler(center)
         await scheduler.schedule(plan: plan, anchor: anchor)
+        let earlier = center.added.count
         let look = center.holdListing(center.listings + 1)
         let scheduling = Task { await scheduler.schedule(plan: plan, anchor: anchor) }
         await look.reached()
-        center.advance(by: 3)
+        // By the time the cancel hears back, the work interval is a quarter second off,
+        // inside the lead. Decided before the cancel, it was two seconds off and went back up,
+        // which is how a reschedule would bring back an alert taken down just before its
+        // change.
+        center.advance(by: 1.75)
         look.release()
         await scheduling.value
-        #expect(center.added.suffix(4).map(\.interval) == [7, 37, 52, 82])
+        let added = center.added.dropFirst(earlier)
+        #expect(added.map(\.identifier) == [Plans.rest1, Plans.work2, Plans.finish])
+        #expect(added.map(\.interval) == [30.25, 45.25, 75.25])
     }
 
     @Test("An alert more than a second past by its add is left out")
