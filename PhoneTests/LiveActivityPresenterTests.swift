@@ -121,6 +121,59 @@ struct LiveActivityPresenterTests {
         #expect(orphaned.activities.isEmpty)
     }
 
+    @Test("At launch, a run coming back never keeps an ended card, even the newest one")
+    func reconcileSkipsEndedActivities() async throws {
+        // The newest card is a finished run's, lingering: kept, every update would go to a
+        // card that can't change, and the restored run would show nowhere.
+        let host = FakeLiveActivityHost(activities: [
+            HostedActivity(id: "live", state: .active),
+            HostedActivity(id: "lingering", state: .ended),
+        ])
+        let presenter = LiveActivityPresenter(host: host) { .classic }
+        let restored = try Self.paused(340)
+
+        presenter.reconcile(hasRun: true)
+        presenter.present(restored)
+        await presenter.settled()
+        #expect(host.calls == [
+            .end("lingering", nil, .immediate),
+            .update("live", Self.shown(restored)),
+        ])
+
+        // With only ended cards left, every one ends and the run starts its own.
+        let ended = FakeLiveActivityHost(activities: [
+            HostedActivity(id: "finished", state: .ended),
+            HostedActivity(id: "dismissed", state: .dismissed),
+        ])
+        let relaunched = LiveActivityPresenter(host: ended) { .classic }
+        relaunched.reconcile(hasRun: true)
+        relaunched.present(restored)
+        await relaunched.settled()
+        #expect(ended.calls == [
+            .end("finished", nil, .immediate),
+            .end("dismissed", nil, .immediate),
+            .request("1", workout: "Hill Sprints", Self.shown(restored)),
+        ])
+    }
+
+    @Test("A request the system refuses starts nothing, and the next change asks again")
+    func refusedRequestRetries() async throws {
+        let host = FakeLiveActivityHost(refusesRequest: { $0 == 1 })
+        let presenter = LiveActivityPresenter(host: host) { .classic }
+        let first = try Self.running(330.5), second = try Self.running(345.5)
+
+        presenter.present(first)
+        await presenter.settled()
+        #expect(host.calls.isEmpty)
+        #expect(host.activities.isEmpty)
+
+        // A fresh request with the newer run, not an update to an activity that never began.
+        presenter.present(second)
+        await presenter.settled()
+        #expect(host.calls == [.request("1", workout: "Hill Sprints", Self.shown(second))])
+        #expect(host.activities == [HostedActivity(id: "1", state: .active)])
+    }
+
     @Test("A finished run's activity ends showing the finish and stays 15 minutes, until the next run")
     func finishLingers15Minutes() async throws {
         let host = FakeLiveActivityHost()

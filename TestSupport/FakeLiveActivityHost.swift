@@ -12,8 +12,9 @@ import Foundation
 
 /// Stands in for ActivityKit, so `LiveActivityPresenter` runs as it does on a device: an
 /// activity it requests is listed until it ends, one ended to linger stays listed as ended,
-/// and one ended at once is gone. Each update can take time, the trip to the system, and
-/// every call is recorded in the order it landed.
+/// and one ended at once is gone. Each update can take time, the trip to the system, a
+/// request can be refused, as the system refuses one from the background or past its limit,
+/// and every call that landed is recorded in the order it landed.
 final class FakeLiveActivityHost: LiveActivityHosting, @unchecked Sendable {
 
     /// What a call carried, as the Lock Screen would show it: `ActivityContent` isn't
@@ -33,23 +34,31 @@ final class FakeLiveActivityHost: LiveActivityHosting, @unchecked Sendable {
     let areActivitiesEnabled: Bool
     /// How long each update takes to land, by its number (every update counts, from 1).
     private let updateDuration: @Sendable (Int) -> Duration
+    /// Whether a request is refused, by its number (every request counts, from 1).
+    private let refusesRequest: @Sendable (Int) -> Bool
 
     private let lock = NSLock()
     private var current: [HostedActivity]
     private var log: [Call] = []
     private var requestCount = 0
+    private var startedCount = 0
     private var updateCount = 0
 
+    /// What ActivityKit throws when it won't start one.
+    struct Refused: Error {}
+
     /// - Parameter activities: Left by an earlier launch, before the test begins. Activities
-    ///   it requests are numbered from 1: "1", "2" and so on.
+    ///   it starts are numbered from 1: "1", "2" and so on, a refused request taking none.
     init(
         activities: [HostedActivity] = [],
         enabled: Bool = true,
-        updateDuration: @escaping @Sendable (Int) -> Duration = { _ in .zero }
+        updateDuration: @escaping @Sendable (Int) -> Duration = { _ in .zero },
+        refusesRequest: @escaping @Sendable (Int) -> Bool = { _ in false }
     ) {
         current = activities
         areActivitiesEnabled = enabled
         self.updateDuration = updateDuration
+        self.refusesRequest = refusesRequest
     }
 
     /// Every call, in the order each landed.
@@ -60,9 +69,11 @@ final class FakeLiveActivityHost: LiveActivityHosting, @unchecked Sendable {
     var activities: [HostedActivity] { lock.withLock { current } }
 
     func request(attributes: RunActivityAttributes, content: Content) throws -> HostedActivity {
-        lock.withLock {
+        try lock.withLock {
             requestCount += 1
-            let activity = HostedActivity(id: "\(requestCount)", state: .active)
+            if refusesRequest(requestCount) { throw Refused() }
+            startedCount += 1
+            let activity = HostedActivity(id: "\(startedCount)", state: .active)
             current.append(activity)
             log.append(.request(activity.id, workout: attributes.workoutName, Shown(content)))
             return activity
