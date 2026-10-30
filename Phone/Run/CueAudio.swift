@@ -129,15 +129,20 @@ final class CueAudio: NSObject, CueOutput {
     /// Whether another app's audio is playing, which rendering a phrase would pause.
     /// Injectable so tests can stand in for music.
     private let isOtherAudioPlaying: () -> Bool
+    /// Renders a phrase in place of the system voice, when set. Injectable so tests can see
+    /// what was rendered, and in what order, without the simulator's voice.
+    private let renderPhrase: ((String) async -> [Float]?)?
 
     init(
         voiceCache: VoiceCache = VoiceCache(),
         diagnostics: RunDiagnostics = .shared,
-        isOtherAudioPlaying: @escaping () -> Bool = { AVAudioSession.sharedInstance().isOtherAudioPlaying }
+        isOtherAudioPlaying: @escaping () -> Bool = { AVAudioSession.sharedInstance().isOtherAudioPlaying },
+        renderPhrase: ((String) async -> [Float]?)? = nil
     ) {
         self.voiceCache = voiceCache
         self.diagnostics = diagnostics
         self.isOtherAudioPlaying = isOtherAudioPlaying
+        self.renderPhrase = renderPhrase
         super.init()
         setCategory()
         buildEngine()
@@ -451,7 +456,7 @@ final class CueAudio: NSObject, CueOutput {
         // Kept in `phrases` as it lands; whoever waits reads it from there.
         let task = Task { [weak self] in
             await previous?.value
-            guard let self, let samples = await self.render(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
+            guard let self, let samples = await self.rendered(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
             self.phrases[phrase] = buffer
             self.voiceCache.store(samples, for: phrase, voice: self.voiceID)
         }
@@ -465,6 +470,11 @@ final class CueAudio: NSObject, CueOutput {
     /// Which voice renders, for the disk cache: a new system voice renders afresh. Not private
     /// so its tests can fill the cache.
     var voiceID: String { voice?.identifier ?? "default" }
+
+    private func rendered(_ phrase: String) async -> [Float]? {
+        if let renderPhrase { return await renderPhrase(phrase) }
+        return await render(phrase)
+    }
 
     /// `phrase` rendered by the system voice, at the cues' rate, without it ever touching
     /// the app's audio session.

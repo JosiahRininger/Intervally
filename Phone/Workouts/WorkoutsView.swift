@@ -73,6 +73,10 @@ struct WorkoutsView: View {
         case duplicatePaywall
         case settings
         var id: Self { self }
+
+        /// Edit a Starter Instead, on the paywall from + alone: Duplicate was on the way to a
+        /// copy of its own preset.
+        var offersEditInstead: Bool { self == .paywall }
     }
 
     /// What a paywall opened from here was on the way to.
@@ -314,17 +318,15 @@ struct WorkoutsView: View {
         }
     }
 
-    /// Edit a Starter Instead, on the paywall from + alone: Duplicate was on the way to a copy
-    /// of its own preset.
     private func editInsteadAction(on sheet: Sheet) -> (() -> Void)? {
-        guard sheet == .paywall else { return nil }
+        guard sheet.offersEditInstead else { return nil }
         return editInstead
     }
 
     /// Edit a Starter Instead, on the paywall from + at the free limit: the paywall closes and
-    /// the preset up next opens in its editor, a starter for someone new. Nothing is added.
+    /// a starter opens in its editor (`PresetActions.starterToEdit`). Nothing is added.
     private func editInstead() {
-        followUp.instead(.edit(store.selected.id))
+        followUp.instead(.edit(actions.starterToEdit.id))
         sheet = nil
     }
 

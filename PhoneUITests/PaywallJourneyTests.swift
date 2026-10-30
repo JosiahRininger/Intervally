@@ -32,12 +32,15 @@ final class PaywallJourneyTests: XCTestCase {
         XCTAssertFalse(pro.buttons["sounds.hearCoach"].exists, "Hear the Coach shown with Pro")
     }
 
-    /// The editor opens on the preset up next, a starter, and no preset is added: the free
-    /// limit stays where it was.
+    /// The editor opens on the starter up next, and no preset is added: the free limit stays
+    /// where it was. Only + offers it: a paywall on the way to a copy doesn't.
     func testEditInsteadOpensEditor() throws {
         let app = PhoneApp.launch()
         let add = app.buttons["workouts.new"]
         XCTAssertTrue(add.waitForExistence(timeout: 10))
+        let presets = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH 'workouts.preset.'"))
+        let before = presets.count
+        XCTAssertEqual(before, 3, "The starters fill the free tier")
         add.tap()
 
         let instead = app.buttons["paywall.editInstead"]
@@ -47,8 +50,24 @@ final class PaywallJourneyTests: XCTestCase {
 
         let name = app.textFields["editor.name"]
         XCTAssertTrue(name.wait(until: "value == %@", "Classic", timeout: 10), "The up next starter's editor didn't open")
+
+        // Duplicate at the free limit opens the paywall too, without the way to edit instead.
+        let more = app.buttons["editor.more"].firstMatch
+        XCTAssertTrue(more.waitForExistence(timeout: 5))
+        more.tap()
+        let duplicate = app.buttons["editor.duplicate"]
+        XCTAssertTrue(duplicate.waitForExistence(timeout: 5))
+        duplicate.tap()
+        XCTAssertTrue(app.staticTexts["Intervally Pro"].firstMatch.waitForExistence(timeout: 5), "The paywall didn't open")
+        XCTAssertFalse(app.buttons["paywall.editInstead"].exists, "Edit a Starter Instead on the paywall from Duplicate")
+        let close = app.buttons["Close"].firstMatch
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        close.tap()
+
+        XCTAssertTrue(app.navigationBars.buttons["BackButton"].wait(until: "isHittable == true"))
         app.navigationBars.buttons["BackButton"].tap()
         XCTAssertTrue(app.buttons["workouts.new"].wait(until: "isHittable == true"), "The library didn't come back")
+        XCTAssertEqual(presets.count, before, "A preset was added past the free limit")
         XCTAssertFalse(app.reveal(app.buttons["workouts.preset.New Workout"], swipes: 2), "A preset was added past the free limit")
     }
 }

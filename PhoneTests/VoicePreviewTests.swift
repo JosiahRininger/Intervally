@@ -69,6 +69,70 @@ struct VoicePreviewTests {
         }
     }
 
+    @Test("With nothing else playing and nothing rendered, the sample renders each phrase in order, plays them all, and keeps them for runs")
+    func rendersWhenQuiet() async {
+        let cache = makeCache()
+        defer { remove(cache) }
+        var asked: [String] = []
+        let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { phrase in
+            asked.append(phrase)
+            return [Float](repeating: 0.1, count: 480)
+        })
+
+        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        audio.handBackAudio()
+
+        #expect(asked == PhoneCuePlayer.coachSample)
+        guard case .played(let phrases, let seconds) = sample else {
+            Issue.record("Nothing played: \(sample)")
+            return
+        }
+        #expect(phrases == PhoneCuePlayer.coachSample)
+        let expected = 4 * 480 / Double(ToneSynth.sampleRate) + 3 * 0.6
+        #expect(abs(seconds - expected) < 0.01, "\(seconds) s")
+        #expect(sample.note == nil)
+        for phrase in PhoneCuePlayer.coachSample {
+            #expect(cache.samples(for: phrase, voice: audio.voiceID) != nil, "\"\(phrase)\" wasn't kept for runs")
+        }
+    }
+
+    @Test("With nothing else playing and every phrase rendered, the sample plays them all and renders none")
+    func cachedWhenQuiet() async {
+        let cache = makeCache()
+        defer { remove(cache) }
+        var asked: [String] = []
+        let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { phrase in
+            asked.append(phrase)
+            return nil
+        })
+        for phrase in PhoneCuePlayer.coachSample {
+            cache.store([Float](repeating: 0.1, count: 480), for: phrase, voice: audio.voiceID)
+        }
+
+        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        audio.handBackAudio()
+
+        #expect(asked.isEmpty, "Rendered again: \(asked)")
+        guard case .played(let phrases, _) = sample else {
+            Issue.record("Nothing played: \(sample)")
+            return
+        }
+        #expect(phrases == PhoneCuePlayer.coachSample)
+    }
+
+    @Test("A system voice that renders nothing leaves a line to say so, not silence")
+    func nothingRenderedSaysSo() async {
+        let cache = makeCache()
+        defer { remove(cache) }
+        let audio = CueAudio(voiceCache: cache, diagnostics: log, isOtherAudioPlaying: { false }, renderPhrase: { _ in nil })
+
+        let sample = await audio.preview(PhoneCuePlayer.coachSample)
+        audio.handBackAudio()
+
+        #expect(sample == .played([], seconds: 0))
+        #expect(sample.note == "The coach couldn't play. Try again.")
+    }
+
     @Test("The sample hands the audio back once it has played, unless a run has started; one that played nothing took none")
     func previewReleasesAudio() async throws {
         let output = FakeCueOutput()

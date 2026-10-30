@@ -169,7 +169,7 @@ final class PhoneCuePlayer: BoundaryHaptics {
 /// What Hear the Coach could play.
 enum CoachSample: Equatable, Sendable {
     /// `phrases`, one after another, for `seconds`. None, when the system voice rendered
-    /// nothing.
+    /// nothing, and so nothing was heard.
     case played([String], seconds: TimeInterval)
     /// Nothing: no phrase is rendered yet, and other audio is playing, which rendering one
     /// would pause.
@@ -177,8 +177,12 @@ enum CoachSample: Equatable, Sendable {
 
     static let title = "Hear the Coach"
 
-    /// The line under the button after a tap, when it needs one.
+    /// The line under the button after a tap, when it needs one: whenever nothing was heard.
     var note: String? {
-        self == .needsQuiet ? "Pause your music to hear the coach." : nil
+        switch self {
+        case .needsQuiet: "Pause your music to hear the coach."
+        case .played(let phrases, _) where phrases.isEmpty: "The coach couldn't play. Try again."
+        case .played: nil
+        }
     }
 }

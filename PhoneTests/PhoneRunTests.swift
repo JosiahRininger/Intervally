@@ -1096,6 +1096,22 @@ struct MotionTests {
         #expect(RunScreenLayout.hint(volumeLow: false, tipSeen: false, mirroring: false, kind: .work) == nil)
     }
 
+    @Test("Hear the Coach after Play a Sample: the sample's release no longer cuts the coach off")
+    func hearCoachAfterSample() async throws {
+        let (run, _) = makeRun()
+        // Longer than Play a Sample's 3 s hold, so its release would land mid-coach.
+        output.previewAnswer = .played(PhoneCuePlayer.coachSample, seconds: 3.5)
+        run.playSample()
+        let sample = await run.hearCoach()
+        #expect(sample.note == nil)
+
+        try await Task.sleep(for: .seconds(3.5))
+        #expect(!output.calls.contains(.release), "Not over the coach's last word")
+        #expect(await waitUntil { output.calls.contains(.release) })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(output.calls.filter { $0 == .release }.count == 1, "The coach's release alone")
+    }
+
     @Test("The Health line is one line that changes: saving, saved, couldn't, or nothing")
     func healthLine() {
         #expect(HealthSaveLine(.notRecorded, onWatch: false) == nil)

@@ -36,6 +36,8 @@ struct PhonePaywallView: View {
     @State private var unlocks = 0
     /// What the last Hear the Coach needs said under it.
     @State private var coachNote: String?
+    /// Whether a Hear the Coach is still getting its phrases ready.
+    @State private var isHearingCoach = false
 
     private var content: PaywallContent {
         PaywallContent.make(
@@ -59,6 +61,7 @@ struct PhonePaywallView: View {
                 isRestoring: isRestoring,
                 canRestore: !isRestoring && !isBuying,
                 coachNote: coachNote,
+                isHearingCoach: isHearingCoach,
                 buy: buy,
                 restore: restore,
                 retry: retry,
@@ -135,9 +138,13 @@ struct PhonePaywallView: View {
         return hearCoach
     }
 
+    /// One sample at a time: the first, with nothing rendered yet, takes a moment to start.
     private func hearCoach() {
+        guard !isHearingCoach else { return }
+        isHearingCoach = true
         Task {
             let sample = await run.hearCoach()
+            isHearingCoach = false
             coachNote = sample.note
             if let note = sample.note { AccessibilityNotification.Announcement(note).post() }
         }
@@ -152,6 +159,8 @@ struct PhonePaywallPage: View {
     var canRestore = true
     /// The line under Hear the Coach after a tap, when it needs one.
     var coachNote: String? = nil
+    /// Hear the Coach waits for its sample, which can take a moment the first time.
+    var isHearingCoach = false
     var buy: () -> Void = {}
     var restore: () -> Void = {}
     var retry: () -> Void = {}
@@ -339,6 +348,7 @@ struct PhonePaywallPage: View {
     private func coachButton(_ action: @escaping () -> Void) -> some View {
         VStack(spacing: 8) {
             secondaryButton(CoachSample.title, systemImage: "waveform", identifier: "paywall.hearCoach", action: action)
+                .disabled(isHearingCoach)
             if let coachNote {
                 Text(coachNote)
                     .font(.subheadline.weight(.medium))

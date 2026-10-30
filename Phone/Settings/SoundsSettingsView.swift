@@ -36,6 +36,8 @@ struct SoundsSettingsView: View {
     @AppStorage(CueSettings.Key.keepAwake, store: SharedDefaults.suite) private var keepAwake = true
     /// What the last Hear the Coach needs said under it.
     @State private var coachNote: String?
+    /// Whether a Hear the Coach is still getting its phrases ready.
+    @State private var isHearingCoach = false
 
     var body: some View {
         List {
@@ -64,6 +66,7 @@ struct SoundsSettingsView: View {
                     Button(action: hearCoach) {
                         Label(CoachSample.title, systemImage: "waveform")
                     }
+                    .disabled(isHearingCoach)
                     .accessibilityIdentifier("sounds.hearCoach")
                 }
             } footer: {
@@ -117,9 +120,13 @@ struct SoundsSettingsView: View {
         }
     }
 
+    /// One sample at a time: the first, with nothing rendered yet, takes a moment to start.
     private func hearCoach() {
+        guard !isHearingCoach else { return }
+        isHearingCoach = true
         Task {
             let sample = await run.hearCoach()
+            isHearingCoach = false
             coachNote = sample.note
             if let note = sample.note { AccessibilityNotification.Announcement(note).post() }
         }
