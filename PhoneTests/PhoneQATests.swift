@@ -198,6 +198,78 @@ struct PhoneQATests {
         #expect(session.isRunning)
         #expect(session.heartRate == nil)
         #expect(session.activeEnergy == nil)
+        // Nothing reached Health, so the summary must not say Saved to Health.
+        #expect(await session.end(at: Date()) == false)
+        #expect(session.isRunning == false)
+    }
+
+    @Test("-qaWorkout's stand-in ends saved, for the summary's screenshot")
+    func standInWithFigures() async throws {
+        let session = QAWorkoutSession(figures: try #require(QAWorkoutFigures("152,37")))
+        #expect(await session.start(at: Date()))
+        #expect(await session.end(at: Date()))
+    }
+
+    /// The services a set of flags launches with, on a test's own defaults and History.
+    private func services(_ arguments: [String], health: FakeHistorySource) -> PhoneServices {
+        let defaults = makeTestDefaults()
+        return PhoneServices.forQA(
+            PhoneQAOptions.parse(arguments),
+            store: WorkoutStore(defaults: defaults),
+            pro: ProStore(defaults: defaults),
+            theme: ThemeStore(defaults: defaults),
+            health: health
+        )
+    }
+
+    @Test("A fresh launch is wired to ask for nothing: stand-ins for the run, an unprompted History, the icon left alone")
+    func freshServices() async throws {
+        let health = FakeHistorySource(access: .shouldRequest)
+        let fresh = services(["-qaDefaults", "fresh"], health: health)
+        let session = try #require(fresh.run.coordinator.workout as? QAWorkoutSession)
+        #expect(session.figures == nil, "No figures, so its runs say nothing was saved")
+        #expect(fresh.run.coordinator.notifications is QABackstop)
+        #expect(fresh.iconFollowsTheme == false)
+        #expect(fresh.qa.suppressesPrompts)
+
+        await fresh.history.connect()
+        #expect(await health.accessRequests == 0, "Connect put Health's sheet up")
+        #expect(await health.accessChecks == 1, "History still reads Health")
+    }
+
+    @Test("Keep, no flag, or -qaAllowPrompts: the real session and backstop, and Connect asks Health", arguments: [
+        ["-qaDefaults", "keep"],
+        [],
+        ["-qaDefaults", "fresh", "-qaAllowPrompts", "YES"],
+    ])
+    func promptingServices(arguments: [String]) async {
+        let health = FakeHistorySource(access: .shouldRequest)
+        let launch = services(arguments, health: health)
+        #expect(launch.run.coordinator.workout is WorkoutSessionController)
+        #expect(launch.run.coordinator.notifications is NotificationScheduler)
+        #expect(launch.iconFollowsTheme)
+
+        await launch.history.connect()
+        #expect(await health.accessRequests == 1)
+    }
+
+    @Test("-qaWorkout runs on its figures, and leaves the icon following the theme")
+    func workoutServices() throws {
+        let launch = services(["-qaWorkout", "152,37"], health: FakeHistorySource())
+        let session = try #require(launch.run.coordinator.workout as? QAWorkoutSession)
+        #expect(session.figures == QAWorkoutFigures("152,37"))
+        #expect(launch.run.coordinator.notifications is QABackstop)
+        #expect(launch.iconFollowsTheme)
+    }
+
+    @Test("A History fixture stands in for Health whatever else is asked")
+    func fixtureServices() async {
+        let health = FakeHistorySource()
+        let launch = services(["-qaDefaults", "fresh", "-qaHistory", "sample"], health: health)
+        await launch.history.appear()
+        #expect(launch.history.state == .loaded)
+        #expect(await health.accessChecks == 0)
+        #expect(await health.reads == 0)
     }
 
     @Test("A fresh launch's History reads Health, but Connect never asks it")

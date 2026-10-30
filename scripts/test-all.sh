@@ -10,7 +10,8 @@
 # The simulators are the script's own, found by name and made when missing:
 # Intervally-QA-iPhone, Intervally-QA-iPad and Intervally-QA-Watch, with their UDIDs kept in
 # .qa-sims. It never touches another simulator, never shuts them all down, and keeps at most
-# two of its own booted, as the Mac is shared. Tests run one at a time on one destination
+# two of its own booted, as the Mac is shared. Only one run goes at a time, from any checkout:
+# a second waits for the first. Tests run one at a time on one destination
 # (-parallel-testing-enabled NO). Each suite's log and result bundle go to
 # build/test-results/<time>/, a table at the end says how each went, and the exit status is
 # 1 if any failed.
@@ -18,7 +19,6 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 SIMS_FILE=.qa-sims
-RESULTS=build/test-results/$(date +%Y%m%d-%H%M%S)
 DERIVED=build/DerivedData
 
 usage() {
@@ -160,6 +160,35 @@ boot() {
   BOOTED="$BOOTED $udid"
 }
 
+# One run at a time, from any worktree or session: the simulators are found by name, so a
+# second run would test on the first's, and could shut one down under it. A lock is a
+# directory, made or not in one step, holding its run's PID; one left by a run that was
+# killed outright is taken over.
+LOCK=${TMPDIR:-/tmp}/intervally-test-all.lock
+LOCKED=0
+lock() {
+  local holder said=0
+  until mkdir "$LOCK" 2> /dev/null; do
+    holder=$(cat "$LOCK/pid" 2> /dev/null || true)
+    if [ -n "$holder" ] && ! kill -0 "$holder" 2> /dev/null; then
+      rm -rf "$LOCK"
+      continue
+    fi
+    # No PID a minute on: its run died between making the lock and writing it.
+    if [ -z "$holder" ] && [ -n "$(find "$LOCK" -maxdepth 0 -mmin +1 2> /dev/null)" ]; then
+      rm -rf "$LOCK"
+      continue
+    fi
+    if [ $said -eq 0 ]; then
+      echo "Waiting for another test-all.sh run (PID ${holder:-unknown}) to finish. Its lock: $LOCK" >&2
+      said=1
+    fi
+    sleep 5
+  done
+  echo $$ > "$LOCK/pid"
+  LOCKED=1
+}
+
 cleanup() {
   local udid
   # Run in the background, xcodebuild ignores Control-C: left alone it would hold the Mac
@@ -171,6 +200,7 @@ cleanup() {
   for udid in $BOOTED; do
     xcrun simctl shutdown "$udid" > /dev/null 2>&1 || true
   done
+  if [ $LOCKED -eq 1 ]; then rm -rf "$LOCK"; fi
 }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
@@ -426,6 +456,9 @@ release_check() {
 
 # MARK: - Run
 
+lock
+# Named once the lock is held, so a run that waited never shares the one before's folder.
+RESULTS=build/test-results/$(date +%Y%m%d-%H%M%S)
 mkdir -p "$RESULTS"
 echo "▸ xcodegen generate"
 xcodegen generate --quiet

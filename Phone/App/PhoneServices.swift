@@ -71,23 +71,7 @@ final class PhoneServices {
         // keep as they are made.
         if qa.defaults == .fresh { QADefaults.clear() }
         if qa.skipWelcome { SharedDefaults.suite.set(true, forKey: Welcome.seenKey) }
-        let store = WorkoutStore()
-        let theme = ThemeStore()
-        // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
-        let sync = qa.watch.map { WatchSync(store: store, theme: theme, transport: QAWatchTransport(state: $0, store: store)) }
-        // A fixture in place of Health, so nothing is read from it or written to it. Without
-        // one, a launch that shows no prompts still reads Health, but never shows its sheet.
-        let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
-            ?? (qa.suppressesPrompts ? HistoryModel(source: QAUnpromptedHistory(source: HealthHistory())) : nil)
-        // A stand-in workout session and backstop, so a run asks for nothing and saves
-        // nothing: with figures to show, or none for a launch that shows no prompts, where
-        // the first Start would otherwise put the notification alert and Health's sheet up.
-        let pro = ProStore()
-        let run = qa.runsOnStandIns
-            ? PhoneRun(store: store, pro: pro, theme: theme, workout: QAWorkoutSession(figures: qa.workout), notifications: QABackstop())
-            : nil
-        let services = PhoneServices(store: store, pro: pro, theme: theme, sync: sync, history: history, run: run)
-        services.qa = qa
+        let services = forQA(qa)
         services.reviews.isSuppressed = qa.isActive
         current = services
         services.applyQAEdits()
@@ -95,8 +79,8 @@ final class PhoneServices {
         if let pinned = qa.theme { services.theme.pinForQA(pinned) }
         if let elapsed = qa.runElapsed, qa.watchRun == nil {
             // Restored by `start()`, exactly as a run interrupted by a termination would be.
-            let workout = store.selected.effective(isPro: services.pro.isPro)
-            store.saveActiveRun(RunSnapshot(workout: workout, anchor: Date().addingTimeInterval(-elapsed), pausedElapsed: nil))
+            let workout = services.store.selected.effective(isPro: services.pro.isPro)
+            services.store.saveActiveRun(RunSnapshot(workout: workout, anchor: Date().addingTimeInterval(-elapsed), pausedElapsed: nil))
         }
         #else
         let services = PhoneServices()
@@ -104,14 +88,10 @@ final class PhoneServices {
         live = services
         services.start()
         #if DEBUG
-        // Off before the first view asks for an icon. iOS puts up its own alert for every
-        // change, and a fresh launch's Classic would change back a Pastel icon an earlier
-        // launch left.
-        if qa.suppressesPrompts { services.icon.isEnabled = false }
         if let status = qa.watchRun {
             // What the watch would send: the iPhone's mirror can't be fed by a simulator.
             let elapsed = qa.runElapsed ?? 40
-            let workout = store.selected.effective(isPro: services.pro.isPro)
+            let workout = services.store.selected.effective(isPro: services.pro.isPro)
             services.run.mirror.apply(RunMirrorState(
                 workout: workout, status: status,
                 anchor: status == .running ? Date().addingTimeInterval(-elapsed) : nil,
@@ -123,6 +103,46 @@ final class PhoneServices {
         return services
     }
 
+    #if DEBUG
+    /// The services a QA launch runs on, made but not started: what each flag puts in place
+    /// of the real thing. Apart from `launch()` so the tests can check what a set of flags
+    /// wires up; `health` is Health's History, a test's stand-in there.
+    static func forQA(
+        _ qa: PhoneQAOptions,
+        store: WorkoutStore = WorkoutStore(),
+        pro: ProStore = ProStore(),
+        theme: ThemeStore = ThemeStore(),
+        health: any HistorySource = HealthHistory()
+    ) -> PhoneServices {
+        // A stand-in watch never reaches the real one, so a QA launch can't send it anything.
+        let sync = qa.watch.map { WatchSync(store: store, theme: theme, transport: QAWatchTransport(state: $0, store: store)) }
+        // A fixture in place of Health, so nothing is read from it or written to it. Without
+        // one, a launch that shows no prompts still reads Health, but never shows its sheet.
+        let history = qa.history.map { HistoryModel(source: SampleHistory(mode: $0)) }
+            ?? HistoryModel(source: qa.suppressesPrompts ? QAUnpromptedHistory(source: health) : health)
+        // A stand-in workout session and backstop, so a run asks for nothing and saves
+        // nothing: with figures to show, or none for a launch that shows no prompts, where
+        // the first Start would otherwise put the notification alert and Health's sheet up.
+        let run = qa.runsOnStandIns
+            ? PhoneRun(store: store, pro: pro, theme: theme, workout: QAWorkoutSession(figures: qa.workout), notifications: QABackstop())
+            : nil
+        let services = PhoneServices(store: store, pro: pro, theme: theme, sync: sync, history: history, run: run)
+        services.qa = qa
+        return services
+    }
+    #endif
+
+    /// Whether `start()` lets the Home Screen icon follow the theme. iOS puts up its own alert
+    /// for every change, so a QA launch that shows no prompts leaves the icon as it is: its
+    /// Classic would otherwise change back a Pastel icon an earlier launch left.
+    var iconFollowsTheme: Bool {
+        #if DEBUG
+        !qa.suppressesPrompts
+        #else
+        true
+        #endif
+    }
+
     /// Starts what runs for the app's whole life. Apple asks for the transaction listener at
     /// launch: a transaction that finished while the app was away (an Ask to Buy approval, a
     /// refund, a purchase made on the watch) is delivered once, right then. Sync starts as
@@ -131,7 +151,7 @@ final class PhoneServices {
     /// the test session's transactions and sync would send test presets to the watch.
     func start(isUnitTestHost: Bool = UnitTestHost.isActive) {
         guard !isUnitTestHost else { return }
-        icon.isEnabled = true
+        icon.isEnabled = iconFollowsTheme
         // First of all: HealthKit may have launched the app in the background to hand over
         // a watch run, and gives it seconds to take it.
         run.mirror.start()

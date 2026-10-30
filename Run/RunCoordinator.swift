@@ -42,7 +42,7 @@ final class RunCoordinator {
     let engine: TimerEngine
     @ObservationIgnored let runtime: any RuntimeSessioning
     @ObservationIgnored let workout: any WorkoutSessioning
-    @ObservationIgnored private let notifications: any BoundaryScheduling
+    @ObservationIgnored let notifications: any BoundaryScheduling
     @ObservationIgnored private let store: WorkoutStore
     @ObservationIgnored private let pro: any ProGating
     @ObservationIgnored private let haptics: any BoundaryHaptics

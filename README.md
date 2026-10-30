@@ -40,7 +40,8 @@ test leaves behind reaches the next; one that checks something lasts relaunches 
 
 Or every suite in one command, each on a simulator of the script's own (Intervally-QA-iPhone,
 -iPad and -Watch, made when missing, at most two booted, no other simulator touched), with a
-table of results at the end and result bundles in `build/test-results/`:
+table of results at the end and result bundles in `build/test-results/`. One run goes at a
+time from any checkout, as they share those simulators: a second waits for the first.
 
 ```bash
 scripts/test-all.sh                  # the unit and UI suites, then the Release check

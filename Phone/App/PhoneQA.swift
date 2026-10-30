@@ -218,8 +218,9 @@ struct QAWorkoutFigures: Equatable, Sendable {
 }
 
 /// The workout session for `-qaWorkout`: starts at once, reports fixed figures, and saves
-/// nothing, so the run screen can be checked with its heart rate and calories showing. A
-/// fresh launch's runs take it too, with no figures, so no Health prompt stands in the way.
+/// nothing, so the run screen can be checked with its heart rate and calories showing, and
+/// its summary with Saved to Health. A fresh launch's runs take it too, with no figures, so
+/// no Health prompt stands in the way; their summary says nothing was saved, which is true.
 @MainActor
 final class QAWorkoutSession: WorkoutSessioning {
     let figures: QAWorkoutFigures?
@@ -242,9 +243,11 @@ final class QAWorkoutSession: WorkoutSessioning {
     func beginActivity(for phase: IntervalPhase, at date: Date) {}
     func pause() {}
     func resume() {}
+    /// Saved only for `-qaWorkout`'s screenshots. A fresh launch's run reports a failed save,
+    /// as nothing reached Health, so a UI test can't take Saved to Health for granted.
     func end(at date: Date) async -> Bool {
         isRunning = false
-        return true
+        return figures != nil
     }
     func discard() { isRunning = false }
 }
