@@ -1811,6 +1811,42 @@ struct RunCoordinatorAudibleBackstopTests {
         coordinator.stopAndExit()
     }
 
+    @Test("An alert due to come down while a schedule is still adding it comes down once that schedule is in")
+    func disarmWaitsForTheScheduleInFlight() async {
+        let center = FakeNotificationCenter(now: Date(timeIntervalSinceReferenceDate: 750_000))
+        let store = WorkoutStore(defaults: makeTestDefaults())
+        useShortWorkout(store)
+        let coordinator = makeScheduledRun(center, store: store)
+        coordinator.awayCuesAudible = { _ in true }
+        let rest = NotificationScheduler.identifier(forPhase: 1)
+
+        await beginScheduled(coordinator)
+        #expect(center.added.count == 3)
+        // 2.6 s before the rest, back in front: a schedule afresh, which still names the rest,
+        // and whose add of it is held on its way to the server.
+        let inFlight = center.holdAdd(4, landed: false)
+        center.advance(by: 2.4)
+        coordinator.handleForeground()
+        await inFlight.reached()
+        #expect(center.added.last?.identifier == rest)
+
+        // At the 2-second tick the rest's alert is due to come down. A disarm that didn't wait
+        // for the schedule would find nothing pending, and the add would then put it up.
+        center.advance(by: 0.608)
+        coordinator.advance()
+        let removals = center.removed.count
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(center.removed.count == removals, "Nothing comes down while the schedule adds")
+
+        inFlight.release()
+        await settle(coordinator)
+        #expect(center.removed.last == [rest])
+        #expect(center.pending.map(\.identifier) == [
+            NotificationScheduler.identifier(forPhase: 2), NotificationScheduler.finishIdentifier,
+        ])
+        coordinator.stopAndExit()
+    }
+
     @Test("A long workout's alerts are topped up as they run low, so every change has one, to the finish", arguments: [true, false])
     func topUpAfterPhaseBeganWhenWindowLow(inFront: Bool) async throws {
         let center = FakeNotificationCenter(now: Date(timeIntervalSinceReferenceDate: 800_000))

@@ -628,6 +628,14 @@ final class RunCoordinator {
         refreshBackstop()
     }
 
+    /// What `awayCuesAudible` says has changed, as when the iPhone's volume goes down to silent
+    /// or back up. Without a workout session it's read afresh as each change comes, so there's
+    /// nothing to do. Under one it decides whether the alerts are scheduled at all.
+    func awayCuesAudibilityChanged() {
+        guard tier == .workout else { return }
+        refreshBackstop()
+    }
+
     /// Called when the run screen goes away.
     func end() {
         // Walking away from a finished run ends it, rather than leaving `.finished` behind

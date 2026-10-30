@@ -27,6 +27,15 @@ final class FakeCueOutput: CueOutput {
     /// Every phrase asked to be rendered ahead, in order.
     private(set) var prepared: [String] = []
     func prepare(_ phrases: [String]) { prepared += phrases }
+    /// Whether every phrase asked about is rendered, as when each was rendered on an earlier
+    /// run; false stands for music playing since the workout was made, which kept them from it.
+    var phrasesRendered = true
+    /// The phrases last asked about.
+    private(set) var askedRendered: [String] = []
+    func hasRendered(_ phrases: [String]) -> Bool {
+        askedRendered = phrases
+        return phrasesRendered
+    }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
     /// Whether the cues can sound, reported at every hold as the real output does.
@@ -605,8 +614,8 @@ struct PhoneRunTests {
         run.close()
     }
 
-    @Test("With only the voice coach on, its words are heard, and a run on a workout session schedules no alerts")
-    func voiceAloneIsHeard() async {
+    @Test("With only the voice coach on and the run's phrases rendered, its words are heard, and a run on a workout session schedules no alerts")
+    func voiceAloneIsHeardOnceRendered() async {
         defaults.set(false, forKey: CueSettings.Key.beeps)
         pro.isPro = true
         let (run, store) = makeRun()
@@ -615,6 +624,95 @@ struct PhoneRunTests {
         #expect(await waitUntil { run.coordinator.tier == .workout })
         await run.coordinator.backstopSettled()
         #expect(await backstop.schedules == 0)
+        let plan = run.coordinator.engine.plan
+        #expect(output.askedRendered == PhoneCuePlayer.phrases(for: plan.phases, totalRounds: plan.totalRounds), "Every phrase this run says")
+        run.close()
+    }
+
+    /// Music playing since the workout was made kept its phrases from being rendered, and
+    /// away from the app they are skipped while it plays: the alerts mark the changes.
+    @Test("With Health declined and only the voice coach on, phrases not yet rendered leave the alerts up")
+    func voiceAloneUnrenderedKeepsTheAlerts() async throws {
+        session.startsSucceed = false
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        pro.isPro = true
+        output.phrasesRendered = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.leads == [NotificationScheduler.defaultMinimumLead], "Nothing will be heard, so nothing comes down")
+
+        let phases = run.coordinator.engine.plan.phases
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[1].start }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed.isEmpty, "The first change keeps its alert")
+
+        // Rendered once the app was back in front with the music stopped: asked afresh at
+        // each change, so the next one is the voice's.
+        output.phrasesRendered = true
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[2].start - 1.5 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 2)])
+        run.close()
+    }
+
+    @Test("With Health declined, a run muted to silent leaves the alerts up, as its beeps can't be heard")
+    func mutedRunKeepsTheAlerts() async throws {
+        session.startsSucceed = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        output.report(volume: 0)
+
+        let phases = run.coordinator.engine.plan.phases
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[1].start }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed.isEmpty)
+
+        // Turned back up: the next change is the beeps'.
+        output.report(volume: 0.5)
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[2].start - 1.5 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 2)])
+        run.close()
+    }
+
+    @Test("On a workout session, muting to silent schedules the alerts, and turning back up takes them away")
+    func mutingOnAWorkoutSessionSchedulesTheAlerts() async {
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 0)
+
+        output.report(volume: 0)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 1)
+        // Down again from silent is no change, and schedules nothing more.
+        output.report(volume: 0)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 1)
+
+        let cancels = await backstop.cancels
+        output.report(volume: 0.4)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.cancels == cancels + 1)
+        #expect(await backstop.schedules == 1)
         run.close()
     }
 

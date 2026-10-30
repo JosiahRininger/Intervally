@@ -97,12 +97,22 @@ final class PhoneRun {
         cues.runIsActive = { [weak coordinator] in coordinator?.engine.isActive ?? false }
         cues.phasesInRun = { [weak coordinator] in coordinator?.engine.plan.phases ?? [] }
         // The cues play away from the app whatever keeps the run going, workout session or
-        // not, so whether they can be heard there is whether any sound is on. With the beeps
-        // and the voice both off, notifications mark the changes while the phone is locked.
-        coordinator.awayCuesAudible = { _ in cues.isAudible }
+        // not, so whether they mark the changes there is whether they will be heard. When they
+        // won't (no sound on, the volume down to silent, the voice alone with phrases not yet
+        // rendered), notifications mark the changes while the phone is locked.
+        coordinator.awayCuesAudible = { [weak self] _ in
+            guard let self else { return false }
+            return self.cues.isHeardAway(atVolume: self.mediaVolume)
+        }
         coordinator.isAppActive = { UIApplication.shared.applicationState == .active }
         coordinator.beginBackgroundWork = { BackgroundWork(name: $0).end }
-        resolvedOutput.onVolumeChange = { [weak self] volume in self?.mediaVolume = volume }
+        resolvedOutput.onVolumeChange = { [weak self] volume in
+            guard let self else { return }
+            let wasSilent = self.mediaVolume == 0
+            self.mediaVolume = volume
+            // To or from silent changes whether the cues will be heard.
+            if (volume == 0) != wasSilent { self.coordinator.awayCuesAudibilityChanged() }
+        }
         // Cues that can't sound fall back to notifications rather than to silence.
         resolvedOutput.onHealthReport = { [weak coordinator] healthy in
             coordinator?.cuesHealthChanged(healthy: healthy)

@@ -40,4 +40,23 @@ struct CueAudioTests {
         audio.interrupted(began: true)
         #expect(reports.count == 3, "Handed back: nobody to tell")
     }
+
+    @Test("A phrase counts as rendered from memory or the disk, and only once every one asked about is")
+    func hasRenderedReadsTheCache() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let cache = VoiceCache(directory: directory)
+        let audio = CueAudio(voiceCache: cache, diagnostics: log)
+
+        #expect(audio.hasRendered([]))
+        #expect(!audio.hasRendered(["Work"]), "Never rendered on this iPhone")
+
+        cache.store([Float](repeating: 0.1, count: 480), for: "Work", voice: audio.voiceID)
+        #expect(audio.hasRendered(["Work"]))
+        #expect(!audio.hasRendered(["Work", "Last round"]), "One still to render is enough to be skipped")
+
+        // Read into memory at the first ask, so the cue doesn't wait on the disk.
+        try FileManager.default.removeItem(at: directory)
+        #expect(audio.hasRendered(["Work"]))
+    }
 }
