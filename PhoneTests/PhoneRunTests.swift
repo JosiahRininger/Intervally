@@ -27,6 +27,15 @@ final class FakeCueOutput: CueOutput {
     /// Every phrase asked to be rendered ahead, in order.
     private(set) var prepared: [String] = []
     func prepare(_ phrases: [String]) { prepared += phrases }
+    /// Whether every phrase asked about is rendered, as when each was rendered on an earlier
+    /// run; false stands for music playing since the workout was made, which kept them from it.
+    var phrasesRendered = true
+    /// The phrases last asked about.
+    private(set) var askedRendered: [String] = []
+    func hasRendered(_ phrases: [String]) -> Bool {
+        askedRendered = phrases
+        return phrasesRendered
+    }
     /// How often a run asked to hold the audio; apart from `calls`, as every event asks.
     private(set) var holds = 0
     /// Whether the cues can sound, reported at every hold as the real output does.
@@ -83,13 +92,24 @@ final class FakeWorkoutSession: WorkoutSessioning {
     }
 }
 
-/// Counts the notification backstop's schedules and cancels.
+/// Counts the notification backstop's schedules and cancels, and keeps what each schedule
+/// asked for and which alerts came down.
 actor FakeBackstop: BoundaryScheduling {
     private(set) var schedules = 0
     private(set) var cancels = 0
+    /// The lead each schedule asked for, in order.
+    private(set) var leads: [TimeInterval] = []
+    /// Each alert taken down, in order.
+    private(set) var disarmed: [String] = []
     func requestAuthorization() async -> Bool { true }
-    func schedule(plan: IntervalPlan, anchor: Date) async { schedules += 1 }
+    func schedule(plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval) async {
+        schedules += 1
+        leads.append(minimumLead)
+    }
     func cancelAll() async { cancels += 1 }
+    /// Never: it schedules nothing to run out of.
+    func needsTopUp(now: Date) async -> Bool { false }
+    func disarm(identifier: String) async { disarmed.append(identifier) }
 }
 
 /// What the Live Activity would have been shown, in order.
@@ -551,6 +571,148 @@ struct PhoneRunTests {
         #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
         await run.coordinator.backstopSettled()
         #expect(await backstop.schedules >= 1)
+        run.close()
+    }
+
+    @Test("With Health declined and sounds on, each change's alert comes down just before its cue plays")
+    func healthDeclinedTakesAlertsDown() async throws {
+        session.startsSucceed = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        // The workout session's retries wait on a clock of their own, which nothing moves.
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.leads == [RunCoordinator.disarmingMinimumLead], "Scheduled all the same: the app could be suspended")
+
+        // The 2-second tick before the work takes the work's alert down.
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= 8 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 1)])
+        output.reset()
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= 10 }
+        #expect(output.calls.contains(.tone(.go)), "The cue marks the change instead")
+        run.close()
+    }
+
+    @Test("With the beeps and the voice off, a run on a workout session still marks each change with notifications")
+    func silentRunSchedulesTheBackstop() async {
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        // On the watch a session's taps would mark them, but an iPhone's are felt only in front.
+        #expect(await backstop.schedules == 1)
+        #expect(await backstop.leads == [NotificationScheduler.defaultMinimumLead])
+        run.close()
+    }
+
+    @Test("With only the voice coach on and the run's phrases rendered, its words are heard, and a run on a workout session schedules no alerts")
+    func voiceAloneIsHeardOnceRendered() async {
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        pro.isPro = true
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 0)
+        let plan = run.coordinator.engine.plan
+        #expect(output.askedRendered == PhoneCuePlayer.phrases(for: plan.phases, totalRounds: plan.totalRounds), "Every phrase this run says")
+        run.close()
+    }
+
+    /// Music playing since the workout was made kept its phrases from being rendered, and
+    /// away from the app they are skipped while it plays: the alerts mark the changes.
+    @Test("With Health declined and only the voice coach on, phrases not yet rendered leave the alerts up")
+    func voiceAloneUnrenderedKeepsTheAlerts() async throws {
+        session.startsSucceed = false
+        defaults.set(false, forKey: CueSettings.Key.beeps)
+        pro.isPro = true
+        output.phrasesRendered = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.leads == [NotificationScheduler.defaultMinimumLead], "Nothing will be heard, so nothing comes down")
+
+        let phases = run.coordinator.engine.plan.phases
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[1].start }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed.isEmpty, "The first change keeps its alert")
+
+        // Rendered once the app was back in front with the music stopped: asked afresh at
+        // each change, so the next one is the voice's.
+        output.phrasesRendered = true
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[2].start - 1.5 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 2)])
+        run.close()
+    }
+
+    @Test("With Health declined, a run muted to silent leaves the alerts up, as its beeps can't be heard")
+    func mutedRunKeepsTheAlerts() async throws {
+        session.startsSucceed = false
+        let (run, store) = makeRun()
+        let time = VirtualTime()
+        run.coordinator.runOnVirtualTime(time)
+        let retries = VirtualTime()
+        run.coordinator.upgradeSleep = { try await retries.sleep(for: .seconds($0)) }
+        let tabata = try #require(store.workouts.first { $0.name == "Tabata" })
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .extendedRuntime })
+        await run.coordinator.backstopSettled()
+        output.report(volume: 0)
+
+        let phases = run.coordinator.engine.plan.phases
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[1].start }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed.isEmpty)
+
+        // Turned back up: the next change is the beeps'.
+        output.report(volume: 0.5)
+        _ = await run.coordinator.tick(on: time) { time.elapsed >= phases[2].start - 1.5 }
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.disarmed == [NotificationScheduler.identifier(forPhase: 2)])
+        run.close()
+    }
+
+    @Test("On a workout session, muting to silent schedules the alerts, and turning back up takes them away")
+    func mutingOnAWorkoutSessionSchedulesTheAlerts() async {
+        let (run, store) = makeRun()
+        run.start(store.workouts[0])
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 0)
+
+        output.report(volume: 0)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 1)
+        // Down again from silent is no change, and schedules nothing more.
+        output.report(volume: 0)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.schedules == 1)
+
+        let cancels = await backstop.cancels
+        output.report(volume: 0.4)
+        await run.coordinator.backstopSettled()
+        #expect(await backstop.cancels == cancels + 1)
+        #expect(await backstop.schedules == 1)
         run.close()
     }
 

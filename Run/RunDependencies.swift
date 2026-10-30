@@ -74,8 +74,26 @@ protocol RuntimeSessioning: AnyObject {
 
 protocol BoundaryScheduling: Sendable {
     func requestAuthorization() async -> Bool
-    func schedule(plan: IntervalPlan, anchor: Date) async
+    /// Replaces any schedule with alerts for `plan`'s changes from now on, leaving out any
+    /// less than `minimumLead` seconds away.
+    func schedule(plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval) async
     func cancelAll() async
+    /// Whether the alerts are running out before the workout does, so the run should
+    /// schedule them again (`NotificationScheduler.needsTopUp(now:)`).
+    func needsTopUp(now: Date) async -> Bool
+    /// Takes down the one alert still to come named `identifier`: the app is about to mark
+    /// its change itself.
+    func disarm(identifier: String) async
+}
+
+// No defaults for `needsTopUp` or `disarm`: where there's an `await`, Swift prefers an `async`
+// overload, so a caller awaiting the scheduler itself would get the default rather than the
+// actor's own synchronous `needsTopUp`.
+extension BoundaryScheduling {
+    /// A schedule with 1.2's lead, half a second.
+    func schedule(plan: IntervalPlan, anchor: Date) async {
+        await schedule(plan: plan, anchor: anchor, minimumLead: NotificationScheduler.defaultMinimumLead)
+    }
 }
 
 /// What `NotificationScheduler` asks of `UNUserNotificationCenter`. The scheduler's bugs have
@@ -133,11 +151,7 @@ extension WorkoutSessionController: WorkoutSessioning {
 extension ExtendedRuntimeController: RuntimeSessioning {}
 #endif
 
-extension NotificationScheduler: BoundaryScheduling {
-    func schedule(plan: IntervalPlan, anchor: Date) async {
-        await schedule(plan: plan, anchor: anchor, minimumLead: Self.defaultMinimumLead)
-    }
-}
+extension NotificationScheduler: BoundaryScheduling {}
 
 /// The app's one notification center, which 1.2 already called from the scheduler's actor,
 /// off the main thread. UserNotifications doesn't mark it Sendable, so this does.
