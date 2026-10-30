@@ -97,6 +97,8 @@ struct EditorTile: View {
         .accessibilityLabel(content.title)
         .accessibilityValue(content.accessibilityValue)
         .accessibilityHint(content.accessibilityHint)
+        // By the field, not the title: a renamed phase still has the same tile.
+        .accessibilityIdentifier("editor.\(field)")
     }
 }
 
@@ -169,6 +171,7 @@ struct ValuePickerSheet: View {
                     }
                     .pickerStyle(.wheel)
                     .labelsHidden()
+                    .accessibilityIdentifier("picker.rounds")
                 } else {
                     HStack(spacing: 0) {
                         Picker("Minutes", selection: $minutes) {
@@ -178,6 +181,7 @@ struct ValuePickerSheet: View {
                         }
                         .pickerStyle(.wheel)
                         .labelsHidden()
+                        .accessibilityIdentifier("picker.minutes")
                         Picker("Seconds", selection: $seconds) {
                             ForEach(DurationWheels.secondSteps, id: \.self) { value in
                                 row(String(format: "%02d sec", value), spoken: "\(value) seconds").tag(value)
@@ -185,6 +189,7 @@ struct ValuePickerSheet: View {
                         }
                         .pickerStyle(.wheel)
                         .labelsHidden()
+                        .accessibilityIdentifier("picker.seconds")
                     }
                 }
             }
@@ -223,6 +228,7 @@ struct ValuePickerSheet: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(role: .confirm) { dismiss() }
+                        .accessibilityIdentifier("picker.done")
                 }
             }
             .navigationDestination(isPresented: $editingLabel) {

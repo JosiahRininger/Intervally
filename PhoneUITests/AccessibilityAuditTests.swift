@@ -216,8 +216,11 @@ enum PhoneApp {
     /// off. `PhoneQAOptions` reads a flag's first occurrence, so these are never repeated in
     /// `flags`. `-qaSkipWelcome` takes a YES it doesn't need: UserDefaults reads launch
     /// arguments in pairs, and a bare flag would take the next one as its value, leaving the
-    /// tip's flag without its YES.
-    static func launch(_ flags: [String] = [], pro: Bool = false, defaults: Defaults = .fresh) -> XCUIApplication {
+    /// tip's flag without its YES. Without `skipsWelcome` the welcome is left as the launch
+    /// finds it: shown on a fresh one, and after that only until Continue.
+    static func launch(
+        _ flags: [String] = [], pro: Bool = false, defaults: Defaults = .fresh, skipsWelcome: Bool = true
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         // A launch that keeps the last one's defaults and doesn't ask for a run starts with
         // none: a run an earlier test left going (stopped before its End) would otherwise
@@ -225,9 +228,9 @@ enum PhoneApp {
         // nothing, and cleared. A fresh launch has none to restore.
         let asksForRun = flags.contains("-qaRunElapsed") || flags.contains("-qaWatchRun")
         let run = defaults == .keep && !asksForRun ? ["-qaRunElapsed", "100000"] : []
-        app.launchArguments = [
-            "-qaDefaults", defaults.rawValue, "-qaSkipWelcome", "YES", "-phone.editorTipSeen.v1", "YES",
-            "-qaWatch", "installed", "-qaPro", pro ? "pro" : "free",
+        let welcome = skipsWelcome ? ["-qaSkipWelcome", "YES"] : []
+        app.launchArguments = ["-qaDefaults", defaults.rawValue] + welcome + [
+            "-phone.editorTipSeen.v1", "YES", "-qaWatch", "installed", "-qaPro", pro ? "pro" : "free",
         ] + run + flags
         app.launch()
         return app

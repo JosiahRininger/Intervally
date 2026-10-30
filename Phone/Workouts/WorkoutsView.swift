@@ -28,9 +28,11 @@ enum WorkoutsContent {
         "Up next"
     }
 
-    /// Under the delete confirmation. Only an iPhone with a watch has one to remove it from.
-    static func deleteMessage(peer: PeerState) -> String {
-        peer.hasWatch ? "It's removed from your watch too." : "This can't be undone."
+    /// Under the delete confirmation (`confirmsDelete`). Only an iPhone with a watch has one
+    /// to remove it from.
+    static func deleteMessage(on device: DeviceKind, peer: PeerState) -> String {
+        guard device == .phone else { return "It will be removed from this iPad." }
+        return peer.hasWatch ? "It will be removed from this iPhone and your Apple Watch." : "It will be removed from this iPhone."
     }
 
     /// Until the watch has sent its presets once, its own edits are only on the watch. Shown
@@ -45,7 +47,8 @@ enum WorkoutsContent {
 ///
 /// A list rather than a scroll view of cards, for swipe to delete and Edit's reorder. Only
 /// adding is gated: + and Duplicate at the free limit open the paywall first, and finish
-/// once a purchase there unlocks Pro.
+/// once a purchase there unlocks Pro. Delete, from a swipe or the menu, only asks: the
+/// preset goes once the question is answered.
 struct WorkoutsView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(PhoneRun.self) private var run
@@ -59,6 +62,8 @@ struct WorkoutsView: View {
     @State private var sheet: Sheet?
     @State private var followUp = PaywallFollowUp<FollowUp>()
     @State private var editMode: EditMode = .inactive
+    /// The preset a swipe or the menu asked to delete, until the question is answered.
+    @State private var deleting: IntervalWorkout?
 
     enum Sheet: String, Identifiable {
         case paywall, settings
@@ -93,6 +98,8 @@ struct WorkoutsView: View {
                 }
                 .onMove { actions.move(fromOffsets: $0, toOffset: $1) }
             }
+            // On the list, once, for every row's swipe and menu.
+            .confirmsDelete(of: $deleting) { actions.delete($0) }
             .listStyle(.plain)
             .readableList()
             .environment(\.editMode, $editMode)
@@ -173,6 +180,8 @@ struct WorkoutsView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens the editor")
+            // The UI tests find a preset's card and its play button by the preset's name.
+            .accessibilityIdentifier("workouts.preset.\(workout.name)")
 
             if !editMode.isEditing {
                 Button {
@@ -189,15 +198,21 @@ struct WorkoutsView: View {
                 .buttonStyle(.borderless)
                 .padding(.trailing, PresetCard.startMargin)
                 .accessibilityLabel("Start \(workout.name)")
+                .accessibilityIdentifier("workouts.start.\(workout.name)")
             }
         }
-        .swipeActions(edge: .trailing) {
+        // No full swipe: in 1.2 it deleted the preset, on both devices, with nothing asked.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if actions.canDelete {
-                Button(role: .destructive) {
-                    actions.delete(workout)
+                // Red, without the destructive role: a destructive swipe button takes its row
+                // off the list as it is tapped, so Cancel left the preset missing, and Delete
+                // crashed the list, told to remove the row a second time.
+                Button {
+                    deleting = workout
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .tint(.red)
             }
         }
         .contextMenu {
@@ -229,7 +244,7 @@ struct WorkoutsView: View {
             if actions.canDelete {
                 Divider()
                 Button(role: .destructive) {
-                    actions.delete(workout)
+                    deleting = workout
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
@@ -247,6 +262,7 @@ struct WorkoutsView: View {
             }
             .neutralGlass()
             .accessibilityLabel("Settings")
+            .accessibilityIdentifier("workouts.settings")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(editMode.isEditing ? "Done" : "Edit") {
@@ -259,6 +275,7 @@ struct WorkoutsView: View {
             .neutralGlass()
             .accessibilityLabel("New Workout")
             .accessibilityHint(actions.canAdd ? "" : "Opens Intervally Pro")
+            .accessibilityIdentifier("workouts.new")
         }
     }
 

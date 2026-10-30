@@ -26,7 +26,9 @@ xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'p
 # The iPhone app (also builds the embedded watch app): PhoneTests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 # The iPhone UI tests (PhoneUITests/), a few minutes: Apple's accessibility audit on every
-# main screen, and the editor fitting a 6.1- and 6.3-inch iPhone without scrolling
+# main screen, the editor fitting a 6.1- and 6.3-inch iPhone without scrolling, deleting a
+# preset asking first, and journeys end to end: a preset made and copied, a run, History,
+# Sounds & Voice and the welcome
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhoneUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
@@ -36,7 +38,9 @@ launch with the debug build's QA flags. `PhoneUITests/AuditExceptions.swift` lis
 audit reports by design, each with its reason; anything else it finds fails. Every UI test
 launches with `-qaDefaults fresh`, as a new install with no system prompts, so nothing one
 test leaves behind reaches the next; one that checks something lasts relaunches with `keep`
-(`LaunchHygieneTests`).
+(`LaunchHygieneTests`). The journeys (`*JourneyTests`) find the app's own elements by the
+accessibility identifiers its views give them (system chrome such as the tab bar by its
+words), and wait for an element to change rather than for time to pass.
 
 Or every suite in one command, each on a simulator of the script's own (Intervally-QA-iPhone,
 -iPad and -Watch, made when missing, at most two booted, no other simulator touched), with a
@@ -54,6 +58,12 @@ scripts/test-all.sh --unsigned       # with any of these: no team or certificate
 GitHub Actions runs the same script, for information only: the unit suites on every pull
 request and push to master, the UI suites when run by hand (`.github/workflows/ci.yml`). No
 check is required, and it uses no secrets.
+
+`PresenterGuardTests` (iPhone suite) reads both apps' views from the source tree, for
+mistakes that show only on a device: an alert, dialog or sheet on a `Section` or a
+`ForEach`, where every row gets a copy and the first one shown in a launch closes itself;
+and a swipe or menu that deletes without asking, a full swipe that would run Delete, or a
+destructive swipe button, which takes its row off the list before Cancel can keep it.
 
 The watch app ships inside an iPhone companion, `IntervallyPhone`, which owns the root
 bundle ID `com.josiahrininger.intervally` and the App Store record; the watch app is
@@ -226,7 +236,9 @@ tabs, each with a gear for Settings:
   nothing is below the fold. Each tile a tap opens a picker for carries an up-and-down
   chevron, and until the first tile is tapped a line under the name says the name and
   tiles can be changed. Adding is
-  gated as on the watch, and a purchase finishes what the paywall interrupted.
+  gated as on the watch, and a purchase finishes what the paywall interrupted. Delete, from
+  a card's swipe or menu or from the editor, asks first, as the watch's swipe does: a
+  delete reaches the other device too, and nothing brings it back.
 - **History.** The interval workouts either device saved to Health, grouped by week, each
   with its rounds, heart rate per interval and energy. History itself only reads. To Health
   the two apps are one app, and the newest request for a type decides it, so every request,

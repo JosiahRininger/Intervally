@@ -139,6 +139,7 @@ struct HistoryView: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityHint("Shows every interval")
+                    .accessibilityIdentifier("history.session")
                     .cardRow()
                 }
             }
@@ -236,6 +237,7 @@ struct ThisWeekCard: View {
         .tileBackground()
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("This week: \(totals.sessions) \(totals.sessions == 1 ? "session" : "sessions"), \(totals.minutes) minutes")
+        .accessibilityIdentifier("history.thisWeek")
     }
 
     @ViewBuilder

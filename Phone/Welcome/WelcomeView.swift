@@ -90,6 +90,7 @@ struct WelcomeView: View {
                     .frame(maxWidth: .infinity, minHeight: 52)
             }
             .prominentCapsule()
+            .accessibilityIdentifier("welcome.continue")
             .padding(.horizontal, 20)
             .padding(.bottom, 8)
             // As wide as the column above it, on iPad and iPhone Duo's inner screen too.

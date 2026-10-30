@@ -102,6 +102,7 @@ struct PhoneSettingsView: View {
                             )
                         )
                     }
+                    .accessibilityIdentifier("settings.sounds")
                     NavigationLink(value: SettingsRoute.watch) {
                         watchRow
                     }

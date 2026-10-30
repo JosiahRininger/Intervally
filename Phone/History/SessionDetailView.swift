@@ -98,6 +98,7 @@ struct SessionDetailView: View {
                 .font(.system(.title2, design: .rounded).weight(.bold))
                 .multilineTextAlignment(.center)
                 .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("session.title")
             Text(session.start.formatted(date: .complete, time: .shortened))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
