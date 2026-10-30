@@ -38,6 +38,10 @@ enum RunMirrorCommand: Codable, Equatable, Sendable {
     /// Skips the interval at `phase` in the plan, and only that one.
     case skip(phase: Int)
     case end, refresh
+    /// End with Save Workout: the run ends and its Health workout is saved. Sent only to a
+    /// watch whose state says it takes it (`RunMirrorState.supportsEndAndSave`): 1.2 can't
+    /// read it.
+    case endAndSave
 }
 
 /// The watch's run, in enough detail to rebuild it exactly.
@@ -61,12 +65,15 @@ struct RunMirrorState: Codable, Equatable, Sendable {
     /// While paused: how far in it was.
     var pausedElapsed: TimeInterval?
     var health: Health?
+    /// Whether the watch takes `.endAndSave`, so the iPhone can offer Save Workout for its
+    /// run. Every state from 1.3 on says so; 1.2's say nothing.
+    var supportsEndAndSave: Bool?
 }
 
 /// One more thing a workout session can do: carry the run between the devices.
 extension RunMirrorState {
     @MainActor
-    init(engine: TimerEngine, health: Health?) {
+    init(engine: TimerEngine, health: Health?, supportsEndAndSave: Bool? = nil) {
         let status: Status = switch engine.status {
         case .running: .running
         case .paused: .paused
@@ -78,7 +85,8 @@ extension RunMirrorState {
             status: status,
             anchor: engine.status == .running ? engine.anchor : nil,
             pausedElapsed: engine.status == .paused ? engine.elapsed : nil,
-            health: health
+            health: health,
+            supportsEndAndSave: supportsEndAndSave
         )
     }
 }

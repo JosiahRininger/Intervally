@@ -35,6 +35,9 @@ final class WatchRunMirror {
     /// Done closed this session's finished run; the watch's own "finished", arriving after
     /// this side's count got there first, must not bring it back.
     @ObservationIgnored private var closedFinish = false
+    /// Each command as it goes to the watch: a test reads here what the buttons sent, with no
+    /// watch to send it to.
+    @ObservationIgnored var onSend: ((RunMirrorCommand) -> Void)?
 
     @ObservationIgnored private let store = HKHealthStore()
     @ObservationIgnored private var session: HKWorkoutSession?
@@ -120,6 +123,7 @@ final class WatchRunMirror {
     // MARK: - From the buttons here
 
     func send(_ command: RunMirrorCommand) {
+        onSend?(command)
         guard let session, let data = RunMirrorMessage.command(command).encoded() else { return }
         let handed = UncheckedSession(session: session)
         Task { @MainActor in

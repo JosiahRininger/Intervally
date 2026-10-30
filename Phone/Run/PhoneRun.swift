@@ -178,16 +178,45 @@ final class PhoneRun {
     func end() {
         if isMirroring {
             mirror.send(.end)
-            mirror.close()
-            presenter.present(nil)
-            showsWatchRun = false
-            isPresented = false
+            closeWatchRun()
         } else {
             close()
         }
     }
 
-    /// Done on a finished run.
+    /// Whether End offers Save Workout for the run on screen. This iPhone's own run asks its
+    /// coordinator. The watch's is saved on the watch, so it is offered only when the watch
+    /// says it takes the command (a 1.2 watch never hears one it can't read), once a minute
+    /// in like any other; a mirrored run always has a workout session.
+    var offersSaveOnEnd: Bool {
+        guard isMirroring else { return coordinator.offersSaveOnEnd }
+        return mirror.state?.supportsEndAndSave == true && engine.isActive
+            && engine.elapsed >= RunCoordinator.saveOnEndMinimum
+    }
+
+    /// Save Workout, confirmed. This iPhone's run shows its summary, and nothing more will
+    /// sound, so the audio goes back now. The watch's is saved there, and its screen here
+    /// closes at once, as for End.
+    func endAndSave() {
+        guard isMirroring else {
+            coordinator.endAndSave()
+            cues.release()
+            return
+        }
+        guard mirror.state?.supportsEndAndSave == true else { return }
+        mirror.send(.endAndSave)
+        closeWatchRun()
+    }
+
+    /// A watch run's screen and Lock Screen close, ended from here.
+    private func closeWatchRun() {
+        mirror.close()
+        presenter.present(nil)
+        showsWatchRun = false
+        isPresented = false
+    }
+
+    /// Done on a run's summary: finished, or ended with Save Workout.
     func done() {
         if isMirroring {
             mirror.close()

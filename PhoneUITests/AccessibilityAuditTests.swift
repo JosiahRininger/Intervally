@@ -236,12 +236,12 @@ enum PhoneApp {
         return app
     }
 
-    /// End, then End Workout in the confirmation.
+    /// End, then the confirmation's End Workout, or its Discard where it offers Save Workout.
     static func endRun(_ app: XCUIApplication) {
         let end = app.buttons["End Workout"].firstMatch
         guard end.waitForExistence(timeout: 5) else { return }
         end.tap()
-        let confirm = app.buttons.matching(identifier: "End Workout").element(boundBy: 1)
+        let confirm = app.alerts.buttons["run.endConfirm"].firstMatch
         if confirm.waitForExistence(timeout: 3) { confirm.tap() } else if end.exists { end.tap() }
     }
 }

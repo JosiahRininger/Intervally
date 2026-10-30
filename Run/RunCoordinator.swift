@@ -133,11 +133,27 @@ final class RunCoordinator {
     /// it finishes or is ended.
     @ObservationIgnored private var timing = BoundaryTimingTally(lateThreshold: RunPlatform.lateBoundary)
 
-    /// What the finished run amounted to, for the summary screen.
+    /// What the run amounted to, for the summary screen: finished, or ended early with Save
+    /// Workout.
     struct Summary: Equatable, Sendable {
         let duration: TimeInterval
         let rounds: Int
         var health: HealthSave
+        /// Set only for a run ended early with Save Workout: the rounds the workout had, of
+        /// which the run reached `rounds`.
+        var plannedRounds: Int? = nil
+
+        var endedEarly: Bool { plannedRounds != nil }
+
+        /// How far a run ended with Save Workout got: "5 of 8 rounds".
+        var roundsReachedText: String? {
+            plannedRounds.map { "\(rounds) of \(DurationFormat.rounds($0))" }
+        }
+
+        /// The summary's line for a run ended with Save Workout: "Ended early: 5 of 8 rounds".
+        var endedEarlyText: String? {
+            roundsReachedText.map { "Ended early: \($0)" }
+        }
     }
 
     /// What became of the run's Health workout, for the summary screen.
@@ -151,6 +167,25 @@ final class RunCoordinator {
     }
 
     private(set) var summary: Summary?
+
+    /// Whether the run screen shows the summary: the run finished, or was ended with Save
+    /// Workout.
+    var showsSummary: Bool { engine.status == .finished || summary != nil }
+
+    /// How long a run has to have gone on before End offers to save it: one ended in its
+    /// first minute is far more likely a false start than a workout to keep.
+    static let saveOnEndMinimum: TimeInterval = 60
+
+    /// Whether End offers Save Workout: only for a run on a workout session, which has a
+    /// Health workout to save, once it is a minute in. Otherwise End asks as it always has.
+    var offersSaveOnEnd: Bool {
+        engine.isActive && tier == .workout && engine.elapsed >= Self.saveOnEndMinimum
+    }
+
+    /// The snapshot of a run ended with Save Workout whose Health save is still under way. It
+    /// stays saved while no other run has one (`persistSnapshot`), so a relaunch before the
+    /// save is done finishes it (`restoreIfNeeded`).
+    @ObservationIgnored private var pendingSave: RunSnapshot?
 
     /// Counts runs the iPhone ended, so the watch's screen can close itself. A run ended here
     /// closes its own screen; one ended from the iPhone's mirror has nobody on the watch to.
@@ -319,7 +354,9 @@ final class RunCoordinator {
             engine.stop()
             summary = nil
         }
-        guard engine.status == .idle, beginTask == nil else { return }
+        // A run ended with Save Workout keeps its summary up until Done or Repeat, which clears
+        // it first: this is that screen showing again, not a new Start.
+        guard engine.status == .idle, beginTask == nil, summary == nil else { return }
         diagnostics("Run: started \(engine.plan.workout.name)")
         // A new run's cues start out sounding; a failure the last run ended on is not this one's.
         cuesFailing = false
@@ -639,8 +676,9 @@ final class RunCoordinator {
     /// Called when the run screen goes away.
     func end() {
         // Walking away from a finished run ends it, rather than leaving `.finished` behind
-        // to block the next Start.
-        if engine.status == .finished {
+        // to block the next Start, and from one ended with Save Workout, rather than leaving
+        // its summary to block it.
+        if showsSummary {
             stopAndExit()
             return
         }
@@ -756,9 +794,12 @@ final class RunCoordinator {
     }
 
     /// Sends the run to the iPhone that mirrors its workout session, at every change of
-    /// shape. Phase changes need no message: the iPhone counts from the same anchor.
+    /// shape. Phase changes need no message: the iPhone counts from the same anchor. Each says
+    /// the run takes `.endAndSave`, so the iPhone can offer Save Workout.
     private func mirror() {
-        workout.mirror(RunMirrorState(engine: engine, health: summary.map { RunMirrorState.Health($0.health) }))
+        workout.mirror(RunMirrorState(
+            engine: engine, health: summary.map { RunMirrorState.Health($0.health) }, supportsEndAndSave: true
+        ))
     }
 
     /// What the iPhone's mirror asked for.
@@ -777,6 +818,12 @@ final class RunCoordinator {
         case .end:
             guard engine.isActive else { return }
             stopAndExit()
+            endedRemotely += 1
+        case .endAndSave:
+            // Saved just as Save Workout here saves it, and the screen closes as for End:
+            // nobody on the watch is there to tap Done.
+            guard engine.isActive else { return }
+            endAndSave()
             endedRemotely += 1
         case .refresh:
             mirror()
@@ -854,9 +901,74 @@ final class RunCoordinator {
         begin()
     }
 
+    /// End with Save Workout: the run stops where it is, its summary says how far it got, and
+    /// its Health workout is ended and saved, as at the finish, rather than discarded. Until
+    /// the save is done the snapshot says so (`savesOnEnd`), so a relaunch in the middle
+    /// finishes the save instead of bringing the run back.
+    func endAndSave() {
+        guard engine.isActive else { return }
+        // Read before the engine stops, which takes its clock back to zero.
+        let elapsed = engine.elapsed
+        let plan = engine.plan
+        let rounds = Self.roundsReached(at: engine.position, totalRounds: plan.totalRounds)
+        // As at End: a burst still repeating must not outlive the run, and the stop is felt.
+        haptics.cancelPending()
+        playCue(.stop)
+        beginTask?.cancel()
+        beginTask = nil
+        upgradeTask?.cancel()
+        upgradeTask = nil
+        stopTicking()
+        noteTiming()
+        diagnostics("Run: ended early at \(DurationFormat.timer(Int(elapsed))), saving")
+        engine.stop()
+        runtime.stop()
+        let wasWorkoutTier = tier == .workout
+        tier = .none
+        summary = Summary(
+            duration: elapsed,
+            rounds: rounds,
+            health: wasWorkoutTier ? .saving : .notRecorded,
+            plannedRounds: plan.totalRounds
+        )
+        let snapshot = RunSnapshot(workout: plan.workout, anchor: Date(), pausedElapsed: elapsed, savesOnEnd: true)
+        pendingSave = snapshot
+        persistSnapshot()
+        refreshBackstop()
+        // As at the finish: the session ends next, and nothing keeps the app running after.
+        flushDiagnostics()
+        Task {
+            let saved = await workout.end()
+            if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
+            saveSettled(snapshot)
+            flushDiagnostics()
+        }
+    }
+
+    /// The rounds a run had reached at `position`, for the summary of one ended early: the one
+    /// under way, none before the first, and every one from the cooldown on.
+    nonisolated static func roundsReached(at position: IntervalPlan.Position, totalRounds: Int) -> Int {
+        guard let phase = position.phase else { return totalRounds }
+        return switch phase.kind {
+        case .prepare, .warmup: 0
+        case .work, .rest: phase.round
+        case .cooldown: totalRounds
+        }
+    }
+
+    /// The save of a run ended with Save Workout is over, one way or the other, so a relaunch
+    /// has nothing left to finish. Its snapshot goes, unless a run since has one of its own.
+    private func saveSettled(_ snapshot: RunSnapshot) {
+        guard pendingSave == snapshot else { return }
+        pendingSave = nil
+        if !engine.isActive { store.saveActiveRun(nil) }
+    }
+
     /// Ends the run and clears everything associated with it.
     func stopAndExit() {
         let wasFinished = engine.status == .finished
+        // Ended with Save Workout: over already, and its save goes on without the screen.
+        let wasSaved = summary?.endedEarly == true
         // A burst still repeating must not outlive the run.
         haptics.cancelPending()
         // Stopping a timer is the documented meaning of the .stop haptic.
@@ -877,13 +989,14 @@ final class RunCoordinator {
         refreshBackstop()
         // As at the finish: nothing keeps the app running from here.
         flushDiagnostics()
-        // A completed workout is worth saving; one the user abandoned is not.
+        // A completed workout is worth saving; one the user abandoned is not, and one ended
+        // with Save Workout is being saved already.
         if wasFinished {
             Task {
                 await workout.end()
                 flushDiagnostics()
             }
-        } else {
+        } else if !wasSaved {
             workout.discard()
         }
     }
@@ -895,6 +1008,12 @@ final class RunCoordinator {
     @discardableResult
     func restoreIfNeeded(now: Date = Date()) -> Bool {
         guard engine.status == .idle, let snapshot = store.loadActiveRun(now: now) else { return false }
+        // Ended with Save Workout, and the app went away before the save was done: there is
+        // no run to bring back, only the save to finish.
+        if snapshot.savesOnEnd == true {
+            finishSave(of: snapshot)
+            return false
+        }
         engine.restore(
             anchor: snapshot.anchor, workout: snapshot.workout, paused: snapshot.pausedElapsed
         )
@@ -915,6 +1034,23 @@ final class RunCoordinator {
         return true
     }
 
+    /// Finishes the save of a run ended with Save Workout that the app went away in the
+    /// middle of: the session the system kept for it is adopted, tagged if need be, and
+    /// ended, which saves it. With no session left there is nothing more to save.
+    private func finishSave(of snapshot: RunSnapshot) {
+        // Already being finished: a launch restores from more than one place.
+        guard pendingSave == nil else { return }
+        pendingSave = snapshot
+        Task {
+            if await workout.adoptRecoveredSession(for: snapshot.workout) {
+                log.info("finishing the save of a run ended with Save Workout")
+                await workout.end()
+            }
+            saveSettled(snapshot)
+            flushDiagnostics()
+        }
+    }
+
     /// Called when the system relaunches the app to hand back a workout session that
     /// outlived it (`WKApplicationDelegate.handleActiveWorkoutRecovery()`).
     ///
@@ -923,7 +1059,8 @@ final class RunCoordinator {
     /// keeps the app alive, shows the workout indicator, and never reaches Health.
     func recoverWorkoutSession() {
         if engine.status == .idle, restoreIfNeeded() { return }
-        guard !engine.isActive else { return }
+        // A save being finished (`finishSave`) has taken the session already.
+        guard !engine.isActive, pendingSave == nil else { return }
         Task {
             if await workout.adoptRecoveredSession() {
                 log.info("saving an orphaned workout session that had no resumable run")
@@ -994,7 +1131,8 @@ final class RunCoordinator {
                 )
             )
         case .idle, .finished:
-            store.saveActiveRun(nil)
+            // Nothing, unless a run ended with Save Workout is still saving.
+            store.saveActiveRun(pendingSave)
         }
         // The complication reads the same snapshot, so nudge it whenever the run's shape
         // changes. Between these points `Text(timerInterval:)` carries the countdown on
