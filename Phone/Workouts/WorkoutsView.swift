@@ -47,8 +47,9 @@ enum WorkoutsContent {
 ///
 /// A list rather than a scroll view of cards, for swipe to delete and Edit's reorder. Only
 /// adding is gated: + and Duplicate at the free limit open the paywall first, and finish
-/// once a purchase there unlocks Pro. Delete, from a swipe or the menu, only asks: the
-/// preset goes once the question is answered.
+/// once a purchase there unlocks Pro. The paywall from + also offers to edit a preset
+/// instead. Delete, from a swipe or the menu, only asks: the preset goes once the question
+/// is answered.
 struct WorkoutsView: View {
     @Environment(WorkoutStore.self) private var store
     @Environment(PhoneRun.self) private var run
@@ -66,14 +67,24 @@ struct WorkoutsView: View {
     @State private var deleting: IntervalWorkout?
 
     enum Sheet: String, Identifiable {
-        case paywall, settings
+        /// The paywall from + at the free limit, which also offers Edit a Starter Instead.
+        case paywall
+        /// The paywall from Duplicate at the free limit.
+        case duplicatePaywall
+        case settings
         var id: Self { self }
+
+        /// Edit a Starter Instead, on the paywall from + alone: Duplicate was on the way to a
+        /// copy of its own preset.
+        var offersEditInstead: Bool { self == .paywall }
     }
 
     /// What a paywall opened from here was on the way to.
     enum FollowUp: Equatable {
         case addNew
         case duplicate(UUID)
+        /// Edit a Starter Instead: this preset's editor, in place of a new one.
+        case edit(UUID)
     }
 
     private var actions: PresetActions { PresetActions(store: store, pro: pro) }
@@ -117,12 +128,19 @@ struct WorkoutsView: View {
         }
         .sheet(item: $sheet, onDismiss: finishFollowUp) { sheet in
             switch sheet {
-            case .paywall:
+            case .paywall, .duplicatePaywall:
                 NavigationStack {
-                    PhonePaywallView(context: .presets, isSheet: true) {
-                        followUp.unlocked()
-                        self.sheet = nil
-                    }
+                    PhonePaywallView(
+                        context: .presets,
+                        isSheet: true,
+                        onUnlock: {
+                            followUp.unlocked()
+                            self.sheet = nil
+                        },
+                        // Read from the sheet itself: state set as it was presented isn't
+                        // seen here yet.
+                        editInstead: editInsteadAction(on: sheet)
+                    )
                 }
                 .paletteSheet()
             case .settings:
@@ -296,17 +314,33 @@ struct WorkoutsView: View {
     private func duplicate(_ workout: IntervalWorkout) {
         if actions.duplicate(workout) == .paywall {
             followUp.open(for: .duplicate(workout.id))
-            sheet = .paywall
+            sheet = .duplicatePaywall
         }
     }
 
-    /// Runs as a sheet closes. Only a paywall that unlocked Pro leaves anything to finish.
+    private func editInsteadAction(on sheet: Sheet) -> (() -> Void)? {
+        guard sheet.offersEditInstead else { return nil }
+        return editInstead
+    }
+
+    /// Edit a Starter Instead, on the paywall from + at the free limit: the paywall closes and
+    /// a starter opens in its editor (`PresetActions.starterToEdit`). Nothing is added.
+    private func editInstead() {
+        followUp.instead(.edit(actions.starterToEdit.id))
+        sheet = nil
+    }
+
+    /// Runs as a sheet closes. Only a paywall that unlocked Pro, or whose Edit a Starter
+    /// Instead was tapped, leaves anything to finish.
     private func finishFollowUp() {
         switch followUp.closed() {
         case .addNew:
             addNew()
         case .duplicate(let id):
             if let source = store.workouts.first(where: { $0.id == id }) { duplicate(source) }
+        case .edit(let id):
+            editMode = .inactive
+            path.append(.editor(id, isNew: false))
         case nil:
             break
         }

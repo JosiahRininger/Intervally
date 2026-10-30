@@ -26,6 +26,11 @@ protocol CueOutput: AnyObject {
     /// Whether every one of `phrases` is rendered, so the voice can say it whatever else
     /// plays. One that isn't is skipped while other audio plays (`prepare`).
     func hasRendered(_ phrases: [String]) -> Bool
+    /// Hear the Coach: `phrases` one after another, a moment apart. Each is played as
+    /// rendered, or rendered first while nothing else plays; with other audio playing, one
+    /// not rendered yet is left out, as in a run. The audio is taken to play it and kept:
+    /// whoever asked hands it back once it has played.
+    func preview(_ phrases: [String]) async -> CoachSample
     /// Stops whatever is still sounding.
     func silence()
     /// The run is over: the audio is handed back, and the volume buttons go back to the
@@ -121,10 +126,23 @@ final class CueAudio: NSObject, CueOutput {
     private var skippedPhrases: Set<String> = []
     /// Where the audio's notes go. Injectable so tests can see what was written, and when.
     private let diagnostics: RunDiagnostics
+    /// Whether another app's audio is playing, which rendering a phrase would pause.
+    /// Injectable so tests can stand in for music.
+    private let isOtherAudioPlaying: () -> Bool
+    /// Renders a phrase in place of the system voice, when set. Injectable so tests can see
+    /// what was rendered, and in what order, without the simulator's voice.
+    private let renderPhrase: ((String) async -> [Float]?)?
 
-    init(voiceCache: VoiceCache = VoiceCache(), diagnostics: RunDiagnostics = .shared) {
+    init(
+        voiceCache: VoiceCache = VoiceCache(),
+        diagnostics: RunDiagnostics = .shared,
+        isOtherAudioPlaying: @escaping () -> Bool = { AVAudioSession.sharedInstance().isOtherAudioPlaying },
+        renderPhrase: ((String) async -> [Float]?)? = nil
+    ) {
         self.voiceCache = voiceCache
         self.diagnostics = diagnostics
+        self.isOtherAudioPlaying = isOtherAudioPlaying
+        self.renderPhrase = renderPhrase
         super.init()
         setCategory()
         buildEngine()
@@ -243,6 +261,34 @@ final class CueAudio: NSObject, CueOutput {
             return true
         }
     }
+
+    func preview(_ phrases: [String]) async -> CoachSample {
+        var said: [String] = []
+        var samples: [Float] = []
+        for phrase in phrases {
+            // From memory or the disk, or rendered only while nothing else plays.
+            guard let buffer = await buffer(for: phrase), let channel = buffer.floatChannelData?[0] else { continue }
+            if !samples.isEmpty {
+                samples += repeatElement(0, count: Int(format.sampleRate * Self.previewPause))
+            }
+            samples += UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))
+            said.append(phrase)
+        }
+        // One buffer for the whole sample, so it plays as one cue and its length is known.
+        guard let sample = Self.buffer(samples, format: format) else {
+            // Nothing rendered yet, and nothing can be while the music plays: rendering
+            // would pause it.
+            return isOtherAudioPlaying() ? .needsQuiet : .played([], seconds: 0)
+        }
+        pendingPhrase?.cancel()
+        pendingPhrase = nil
+        let wasHealthy = isHealthy
+        noteCue("voice sample", played: schedule(sample, on: voicePlayer), wasHealthy: wasHealthy)
+        return .played(said, seconds: Double(sample.frameLength) / format.sampleRate)
+    }
+
+    /// The pause between the sample's phrases, so each is heard as an interval's own.
+    private static let previewPause: TimeInterval = 0.6
 
     // MARK: - Playing
 
@@ -400,7 +446,7 @@ final class CueAudio: NSObject, CueOutput {
             phrases[phrase] = buffer
             return buffer
         }
-        guard !session.isOtherAudioPlaying else {
+        guard !isOtherAudioPlaying() else {
             if isHeld, skippedPhrases.insert(phrase).inserted {
                 diagnostics.note("Voice: \"\(phrase)\" skipped: not rendered yet, and other audio was playing")
             }
@@ -410,7 +456,7 @@ final class CueAudio: NSObject, CueOutput {
         // Kept in `phrases` as it lands; whoever waits reads it from there.
         let task = Task { [weak self] in
             await previous?.value
-            guard let self, let samples = await self.render(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
+            guard let self, let samples = await self.rendered(phrase), let buffer = Self.buffer(samples, format: self.format) else { return }
             self.phrases[phrase] = buffer
             self.voiceCache.store(samples, for: phrase, voice: self.voiceID)
         }
@@ -424,6 +470,11 @@ final class CueAudio: NSObject, CueOutput {
     /// Which voice renders, for the disk cache: a new system voice renders afresh. Not private
     /// so its tests can fill the cache.
     var voiceID: String { voice?.identifier ?? "default" }
+
+    private func rendered(_ phrase: String) async -> [Float]? {
+        if let renderPhrase { return await renderPhrase(phrase) }
+        return await render(phrase)
+    }
 
     /// `phrase` rendered by the system voice, at the cues' rate, without it ever touching
     /// the app's audio session.

@@ -18,9 +18,13 @@ struct PhonePaywallView: View {
     /// Runs once a purchase or a restore here unlocks Pro, so the screen that opened the
     /// paywall can finish what the user started.
     var onUnlock: (() -> Void)? = nil
+    /// Edit a Starter Instead: set only by + at the free limit, whose screen closes the
+    /// paywall and opens a preset the user already has, so the limit isn't a dead end.
+    var editInstead: (() -> Void)? = nil
 
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
+    @Environment(PhoneRun.self) private var run
     @Environment(\.dismiss) private var dismiss
 
     @State private var lastPurchase: ProStore.PurchaseOutcome?
@@ -30,6 +34,10 @@ struct PhonePaywallView: View {
     @State private var isBuying = false
     @State private var isRestoring = false
     @State private var unlocks = 0
+    /// What the last Hear the Coach needs said under it.
+    @State private var coachNote: String?
+    /// Whether a Hear the Coach is still getting its phrases ready.
+    @State private var isHearingCoach = false
 
     private var content: PaywallContent {
         PaywallContent.make(
@@ -52,9 +60,13 @@ struct PhonePaywallView: View {
                 content: content,
                 isRestoring: isRestoring,
                 canRestore: !isRestoring && !isBuying,
+                coachNote: coachNote,
+                isHearingCoach: isHearingCoach,
                 buy: buy,
                 restore: restore,
-                retry: retry
+                retry: retry,
+                hearCoach: coachAction,
+                editInstead: pro.isPro ? nil : editInstead
             )
         }
         .appCanvas()
@@ -118,6 +130,25 @@ struct PhonePaywallView: View {
         unlocks += 1
         onUnlock?()
     }
+
+    /// Hear the Coach, like Edit a Starter Instead, is for someone deciding on Pro: with it,
+    /// there is nothing to decide.
+    private var coachAction: (() -> Void)? {
+        guard !pro.isPro else { return nil }
+        return hearCoach
+    }
+
+    /// One sample at a time: the first, with nothing rendered yet, takes a moment to start.
+    private func hearCoach() {
+        guard !isHearingCoach else { return }
+        isHearingCoach = true
+        Task {
+            let sample = await run.hearCoach()
+            isHearingCoach = false
+            coachNote = sample.note
+            if let note = sample.note { AccessibilityNotification.Announcement(note).post() }
+        }
+    }
 }
 
 /// The paywall's layout for one `PaywallContent`, apart from the store, so every state can be
@@ -126,9 +157,18 @@ struct PhonePaywallPage: View {
     let content: PaywallContent
     var isRestoring = false
     var canRestore = true
+    /// The line under Hear the Coach after a tap, when it needs one.
+    var coachNote: String? = nil
+    /// Hear the Coach waits for its sample, which can take a moment the first time.
+    var isHearingCoach = false
     var buy: () -> Void = {}
     var restore: () -> Void = {}
     var retry: () -> Void = {}
+    /// Hear the Coach and Edit a Starter Instead, each shown only when set.
+    var hearCoach: (() -> Void)? = nil
+    var editInstead: (() -> Void)? = nil
+
+    static let editInsteadTitle = "Edit a Starter Instead"
 
     @Environment(\.palette) private var palette
 
@@ -137,7 +177,13 @@ struct PhonePaywallPage: View {
             header
             actionArea
             terms
+            if let editInstead {
+                secondaryButton(Self.editInsteadTitle, identifier: "paywall.editInstead", action: editInstead)
+            }
             features
+            if let hearCoach {
+                coachButton(hearCoach)
+            }
             if content.offersRestore {
                 restoreButton
             }
@@ -295,6 +341,42 @@ struct PhonePaywallPage: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .tileBackground()
+    }
+
+    /// Under the list that names it: the voice coach, heard before buying it, as the watch
+    /// lets its stronger taps be felt.
+    private func coachButton(_ action: @escaping () -> Void) -> some View {
+        VStack(spacing: 8) {
+            secondaryButton(CoachSample.title, systemImage: "waveform", identifier: "paywall.hearCoach", action: action)
+                .disabled(isHearingCoach)
+            if let coachNote {
+                Text(coachNote)
+                    .font(.subheadline.weight(.medium))
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    /// In neutral glass, as Restore is: neither buys anything.
+    private func secondaryButton(
+        _ title: String, systemImage: String? = nil, identifier: String, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Label(title, systemImage: systemImage)
+                } else {
+                    Text(title)
+                }
+            }
+            .font(.body.weight(.semibold))
+            .frame(maxWidth: .infinity, minHeight: 44)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.capsule)
+        .neutralGlass()
+        .accessibilityIdentifier(identifier)
     }
 
     private var restoreButton: some View {

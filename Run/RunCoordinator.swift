@@ -351,6 +351,15 @@ final class RunCoordinator {
         await backstopTask?.value
     }
 
+    /// Awaits what a change leaves running once it returns: a tier still being taken (a resume
+    /// with none starts one), then the notification update that ends it, and any top-up. A Live
+    /// Activity tap waits on it (`PhoneRun.control(_:)`): iOS can suspend the app as soon as the
+    /// tap is done, and a resume that left with its alerts still to come had none at all.
+    func changeSettled() async {
+        await supportTask?.value
+        await backstopSettled()
+    }
+
     // MARK: - Lifecycle
 
     /// Called when the run screen appears.
@@ -809,8 +818,11 @@ final class RunCoordinator {
         ))
     }
 
-    /// What the iPhone's mirror asked for.
-    private func handleRemote(_ command: RunMirrorCommand) {
+    /// What the iPhone's mirror asked for, on the watch, or a Live Activity button on iPhone
+    /// (`PhoneRun.control(_:)`). Each is done only if the run still stands as the button
+    /// showed it, so a tap that crosses a change on its way does nothing rather than the
+    /// opposite.
+    func handleRemote(_ command: RunMirrorCommand) {
         switch command {
         case .pause:
             guard engine.status == .running else { return }

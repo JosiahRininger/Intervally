@@ -24,39 +24,52 @@ struct RunPresentation: Equatable, Sendable {
     let workoutName: String
     /// The phase under way; nil once the run has finished.
     let phase: IntervalPhase?
+    /// Where `phase` sits in the plan, so a skip asked for from outside the app skips that
+    /// phase and no other; nil once the run has finished.
+    let phaseIndex: Int?
     /// The phase after it, for "Next: Rest 0:15"; nil in the last phase.
     let next: IntervalPhase?
     let totalRounds: Int
     let totalDuration: TimeInterval
     let clock: Clock
+    /// The watch's run, shown on iPhone. It is paused and skipped on the watch, so nothing
+    /// that shows it here offers to.
+    let isMirrored: Bool
 
     /// Nil while there is nothing to show: before the start, and after a stop.
     @MainActor
-    init?(engine: TimerEngine) {
+    init?(engine: TimerEngine, isMirrored: Bool = false) {
         self.init(
             plan: engine.plan,
             status: engine.status,
             anchor: engine.anchor,
-            elapsed: engine.elapsed
+            elapsed: engine.elapsed,
+            isMirrored: isMirrored
         )
     }
 
     /// Pure, for the tests: what an engine in `status` would show.
-    init?(plan: IntervalPlan, status: TimerEngine.Status, anchor: Date?, elapsed: TimeInterval) {
+    init?(
+        plan: IntervalPlan, status: TimerEngine.Status, anchor: Date?, elapsed: TimeInterval,
+        isMirrored: Bool = false
+    ) {
         workoutName = plan.workout.name
         totalRounds = plan.totalRounds
         totalDuration = plan.totalDuration
+        self.isMirrored = isMirrored
         switch status {
         case .idle:
             return nil
         case .finished:
             phase = nil
+            phaseIndex = nil
             next = nil
             clock = .finished
         case .running, .paused:
             let position = plan.position(atElapsed: elapsed)
             guard let index = position.phaseIndex, let current = position.phase else { return nil }
             phase = current
+            phaseIndex = index
             next = plan.phases.indices.contains(index + 1) ? plan.phases[index + 1] : nil
             if status == .running, let anchor {
                 clock = .running(
