@@ -20,19 +20,16 @@ extension XCUIElement {
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
-    /// Flips a switch in a list, and says whether it changed. Its element spans the whole row,
-    /// and a tap in the middle lands on the title, which turns nothing: the switch itself is
-    /// inside it. A loaded simulator now and then loses a tap on it (the log shows the tap
-    /// sent and the switch as it was, and the same test passes alone), so a tap that changed
-    /// nothing is sent once more. The tap waits for the app to settle, so a change has shown
-    /// by the time the wait begins.
+    /// Flips a switch in a list with one tap, and says whether it changed. Its element spans
+    /// the whole row, and a tap in the middle lands on the title, which turns nothing: the
+    /// switch itself is inside it, so the tap goes to that switch's trailing edge, on the
+    /// track. There is no second tap: a switch that drops its first tap is a bug the test
+    /// should catch, not ride over. A loaded simulator can be slow to show the change, so
+    /// the wait is a generous one.
     func flip() -> Bool {
         let before = value as? String ?? ""
-        for _ in 1...2 {
-            switches.firstMatch.tap()
-            if wait(until: "value != %@", before, timeout: 3) { return true }
-        }
-        return false
+        switches.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.9, dy: 0.5)).tap()
+        return wait(until: "value != %@", before, timeout: 5)
     }
 }
 
