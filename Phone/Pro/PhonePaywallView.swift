@@ -104,10 +104,9 @@ struct PhonePaywallView: View {
             let outcome = await pro.purchase()
             isBuying = false
             lastPurchase = outcome
+            // Paying is a moment to ask for a rating, once back on the library.
+            reviews.purchaseEnded(outcome, using: requestReview)
             guard outcome == .purchased else { return }
-            // Paying is a moment to ask for a rating, once back on the library. A restore
-            // isn't: nothing was decided just now.
-            reviews.markPaidForPro(using: requestReview)
             unlocked()
         }
     }

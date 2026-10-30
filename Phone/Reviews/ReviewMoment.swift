@@ -14,7 +14,8 @@ import SwiftUI
 /// trained with Intervally for real.
 enum ReviewMoment: Equatable, Sendable {
     /// Done, after a workout finished on this iPhone: the best moment there is. `count`
-    /// includes the one just finished.
+    /// includes the one just finished. Done after a Start from the editor closes back onto
+    /// it, so then it asks on the next return to the library.
     case finishedWorkout(count: Int)
     /// Back from a session in History: a workout's payoff, seen on the iPhone.
     case lookedBackAtSession(sessionCount: Int)

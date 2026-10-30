@@ -79,8 +79,9 @@ final class ReviewLedger {
     @ObservationIgnored private var tab: PhoneTab?
     /// What each tab has in front, as it last said.
     @ObservationIgnored private var screens: [PhoneTab: ReviewMoment.Screen] = [:]
-    /// The request a purchase of Pro here earned, until a return to the library makes it.
-    @ObservationIgnored private var purchaseRequest: (@MainActor () -> Void)?
+    /// A moment still owed its request, until a return to the library makes it: a purchase
+    /// of Pro here, or a finished run that closed onto something that wasn't calm.
+    @ObservationIgnored private var held: (moment: ReviewMoment, request: @MainActor () -> Void)?
 
     init(defaults: UserDefaults = .standard, calendar: Calendar = .current) {
         self.defaults = defaults
@@ -138,8 +139,11 @@ final class ReviewLedger {
         )
     }
 
+    /// The moment still waiting for its return to the library, if one is.
+    var heldMoment: ReviewMoment? { held?.moment }
+
     /// A purchase of Pro here is still waiting for its return to the library.
-    var paidForPro: Bool { purchaseRequest != nil }
+    var paidForPro: Bool { heldMoment == .paidForPro }
 
     /// `tab` now has `screen` in front: its own, or something over it. Returns the request a
     /// return to the library made, if it made one, for the tests to wait on.
@@ -158,40 +162,56 @@ final class ReviewLedger {
         return frontChanged(from: before)
     }
 
-    /// A purchase of Pro just went through on this iPhone. Its paywall is still up, so the
-    /// request waits for the next return to the library.
-    func markPaidForPro(request: @escaping @MainActor () -> Void) {
-        purchaseRequest = request
+    /// The paywall's purchase ended with `outcome`. One that went through is a moment, but
+    /// its paywall is still up, so the request waits for the next return to the library. A
+    /// restore never comes here: nothing was decided just now.
+    func purchaseEnded(_ outcome: ProStore.PurchaseOutcome, request: @escaping @MainActor () -> Void) {
+        guard outcome == .purchased else { return }
+        held = (.paidForPro, request)
     }
 
     /// Asks for `moment` through `request` once `requestDelay` has passed, if a prompt can
     /// land then and `ReviewPolicy` says the moment is a good one.
     @discardableResult
     func askLater(_ moment: ReviewMoment, request: @escaping @MainActor () -> Void) -> Task<Void, Never> {
-        land { self.ask(moment, request: request) }
-    }
-
-    /// Back on the library, where a purchase asks. Only a return still in front as its
-    /// request lands spends the purchase: + at the free limit passes the library on its way
-    /// from the paywall to the new workout's editor.
-    private func frontChanged(from before: ReviewMoment.Screen) -> Task<Void, Never>? {
-        guard topScreen == .library, before != .library, purchaseRequest != nil else { return nil }
-        return land {
-            // An earlier return may have asked already.
-            guard let request = self.purchaseRequest else { return }
-            self.purchaseRequest = nil
-            self.ask(.paidForPro, request: request)
+        land {
+            self.ask(moment, request: request)
+        } otherwise: {
+            // A run started from the editor closes back onto it, which isn't calm. Finishing
+            // is still the best moment there is, so it waits for the next return to the
+            // library, as a purchase does. Only if it would ask, so it never takes a
+            // purchase's place for nothing.
+            guard case .finishedWorkout = moment,
+                  ReviewPolicy.shouldAsk(moment, ledger: self.snapshot, version: Self.appVersion, now: .now, calendar: self.calendar)
+            else { return }
+            self.held = (moment, request)
         }
     }
 
-    /// Runs `fire` once `requestDelay` has passed, if a prompt can land then. The wait is long
-    /// enough to start a run, open a sheet or lock the phone, so this is checked as the
-    /// request lands, not as it is made. One that can't land is dropped, and spends nothing.
-    private func land(_ fire: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+    /// Back on the library, where a held moment asks. Only a return still in front as its
+    /// request lands spends it: + at the free limit passes the library on its way from the
+    /// paywall to the new workout's editor.
+    private func frontChanged(from before: ReviewMoment.Screen) -> Task<Void, Never>? {
+        guard topScreen == .library, before != .library, held != nil else { return nil }
+        return land {
+            // An earlier return may have asked already.
+            guard let held = self.held else { return }
+            self.held = nil
+            self.ask(held.moment, request: held.request)
+        }
+    }
+
+    /// Runs `fire` once `requestDelay` has passed, if a prompt can land then, and `dropped`
+    /// if it can't. The wait is long enough to start a run, open a sheet or lock the phone,
+    /// so this is checked as the request lands, not as it is made. One that can't land
+    /// spends nothing.
+    private func land(
+        _ fire: @escaping @MainActor () -> Void, otherwise dropped: @escaping @MainActor () -> Void = {}
+    ) -> Task<Void, Never> {
         let delay = requestDelay
         return Task { @MainActor in
             try? await Task.sleep(for: delay)
-            guard self.canPresentNow else { return }
+            guard self.canPresentNow else { return dropped() }
             fire()
         }
     }

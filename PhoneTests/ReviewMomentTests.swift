@@ -51,7 +51,7 @@ struct ReviewMomentTests {
     }
 
     @Test("Never while a run is going or on screen, here or from the watch")
-    func blockedDuringRun() throws {
+    func blockedDuringRun() async throws {
         #expect(canPresent())
         #expect(!canPresent(runActive: true))
         #expect(!canPresent(runActive: true, topScreen: .summary))
@@ -64,6 +64,29 @@ struct ReviewMomentTests {
         #expect(!reviews.canPresentNow, "Start covers the app with the run")
         run.close()
         #expect(reviews.canPresentNow, "Ended or done, the screen has closed")
+
+        // Finished, the run is over but its summary is still up: only Done closes it.
+        run.start(tabata)
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        while run.coordinator.engine.status == .running { run.coordinator.skip() }
+        #expect(run.coordinator.engine.status == .finished)
+        #expect(!run.coordinator.engine.isActive)
+        #expect(!reviews.canPresentNow, "The summary is on screen")
+        run.done()
+        #expect(reviews.canPresentNow)
+
+        // Start on Watch: nothing here runs yet, but the watch is being woken, or couldn't be.
+        struct Unreachable: Error {}
+        run.wakeWatch = { _ in throw Unreachable() }
+        run.startOnWatch(tabata)
+        #expect(run.watchStart == .starting)
+        #expect(!run.isPresented)
+        #expect(!reviews.canPresentNow, "Starting on the watch")
+        #expect(await waitUntil { run.watchStart == .failed })
+        #expect(!reviews.canPresentNow, "Its failure is still on screen")
+        run.dismissWatchStartFailure()
+        #expect(reviews.canPresentNow)
 
         // A workout on the watch takes the screen here too.
         run.mirror.apply(RunMirrorState(workout: tabata, status: .running, anchor: Date().addingTimeInterval(-20)))
@@ -109,7 +132,7 @@ struct ReviewMomentTests {
         #expect(!reviews.canPresentNow)
         await reviews.askLater(.lookedBackAtSession(sessionCount: 9)) { asked.increment() }.value
         reviews.show(.other, in: .workouts)
-        reviews.markPaidForPro { asked.increment() }
+        reviews.purchaseEnded(.purchased) { asked.increment() }
         await reviews.show(.library, in: .workouts)?.value
         #expect(asked.value == 1, "Neither a session nor a purchase asks again in this version")
     }
@@ -150,6 +173,67 @@ struct ReviewMomentTests {
         #expect(asked.value == 1)
     }
 
+    @Test("A finished run that closes onto the editor asks on the next return to the library")
+    func finishedRunWaitsForLibrary() async throws {
+        let reviews = ledger()
+        let (run, store) = run(wiredTo: reviews)
+        let asked = Counter()
+
+        // A row's editor, then Start: the run covers the editor, and Done closes back onto it.
+        reviews.show(.other, in: .workouts)
+        run.start(try #require(store.workouts.first))
+        run.coordinator.begin()
+        #expect(await waitUntil { run.coordinator.tier == .workout })
+        while run.coordinator.engine.status == .running { run.coordinator.skip() }
+        run.done()
+        await reviews.askLater(.finishedWorkout(count: 5)) { asked.increment() }.value
+        #expect(asked.value == 0, "The editor is in front")
+        #expect(reviews.heldMoment == .finishedWorkout(count: 5), "Kept, not dropped")
+        #expect(reviews.snapshot.lastRequest == nil)
+
+        // Back to the library, and it stays in front: the request goes in, once.
+        await reviews.show(.library, in: .workouts)?.value
+        #expect(asked.value == 1)
+        #expect(reviews.heldMoment == nil)
+        #expect(reviews.snapshot.lastRequestVersion == ReviewLedger.appVersion)
+        reviews.show(.other, in: .workouts)
+        #expect(reviews.show(.library, in: .workouts) == nil)
+        #expect(asked.value == 1)
+    }
+
+    @Test("A finished run is kept only if it would ask, and only a finished run")
+    func onlyAskingFinishedRunsWait() async {
+        let reviews = ledger()
+        let asked = Counter()
+        reviews.show(.other, in: .workouts)
+
+        await reviews.askLater(.finishedWorkout(count: 1)) { asked.increment() }.value
+        #expect(reviews.heldMoment == nil, "Too few workouts to ask at all")
+        await reviews.askLater(.lookedBackAtSession(sessionCount: 9)) { asked.increment() }.value
+        #expect(reviews.heldMoment == nil, "A session's moment is over once it has passed")
+
+        // A purchase waiting isn't pushed out by a finished run that wouldn't ask.
+        reviews.purchaseEnded(.purchased) { asked.increment() }
+        await reviews.askLater(.finishedWorkout(count: 2)) { asked.increment() }.value
+        #expect(reviews.paidForPro)
+        #expect(asked.value == 0)
+    }
+
+    @Test(
+        "Only a purchase that went through is a moment",
+        arguments: [ProStore.PurchaseOutcome.pending, .cancelled, .notAllowed, .unverified, .unavailable, .failed]
+    )
+    func onlyCompletedPurchaseCounts(outcome: ProStore.PurchaseOutcome) {
+        let reviews = ledger()
+        reviews.show(.other, in: .workouts)
+        reviews.purchaseEnded(outcome) {}
+        #expect(!reviews.paidForPro)
+        #expect(reviews.show(.library, in: .workouts) == nil)
+        reviews.show(.other, in: .workouts)
+        reviews.purchaseEnded(.purchased) {}
+        #expect(reviews.paidForPro)
+    }
+
     @Test("Buying Pro asks once, on the next return to the library still in front as it lands")
     func purchaseCountsAsMoment() async {
         // A purchase needs no workouts or open days of its own, only the first days past.
@@ -163,7 +247,7 @@ struct ReviewMomentTests {
         let reviews = ledger()
         let asked = Counter()
         reviews.show(.other, in: .workouts)
-        reviews.markPaidForPro { asked.increment() }
+        reviews.purchaseEnded(.purchased) { asked.increment() }
         #expect(reviews.paidForPro)
         #expect(reviews.show(.other, in: .workouts) == nil, "Nothing asks while the paywall is up")
 

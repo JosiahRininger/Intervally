@@ -14,8 +14,9 @@ extension ReviewLedger {
         askLater(moment) { requestReview() }
     }
 
-    /// A purchase of Pro went through here: the next return to the library asks, as above.
-    func markPaidForPro(using requestReview: RequestReviewAction) {
-        markPaidForPro { requestReview() }
+    /// The paywall's purchase ended: one that went through asks on the next return to the
+    /// library, as above.
+    func purchaseEnded(_ outcome: ProStore.PurchaseOutcome, using requestReview: RequestReviewAction) {
+        purchaseEnded(outcome) { requestReview() }
     }
 }
