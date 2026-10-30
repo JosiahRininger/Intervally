@@ -8,7 +8,8 @@ import SwiftUI
 /// Choose, rename, duplicate, or remove saved interval presets.
 ///
 /// Row actions live in swipe actions on both edges. watchOS dropped long-press menus in
-/// version 7, so `.contextMenu` compiles here but never shows.
+/// version 7, so `.contextMenu` compiles here but never shows. Delete only asks, as on the
+/// iPhone: the preset goes once the question is answered.
 ///
 /// Free users keep up to three presets. At the limit, New Preset and Duplicate push the
 /// paywall instead of adding; a purchase there pops back and makes the copy after all.
@@ -20,6 +21,8 @@ struct PresetListView: View {
 
     /// The preset currently being renamed, if any.
     @State private var renaming: IntervalWorkout?
+    /// The preset a swipe asked to delete, until the question is answered.
+    @State private var deleting: IntervalWorkout?
     @State private var copyGate = PresetCopyGate()
 
     var body: some View {
@@ -47,6 +50,16 @@ struct PresetListView: View {
                 }
             }
             .accessibilityHint(canAdd ? "" : "Opens Intervally Pro")
+        }
+        // On the list, once: on each row, every row's copy would race to show it.
+        .confirmationDialog(
+            deleting.map { PresetDeletion.title(for: $0.name) } ?? "",
+            isPresented: Binding { deleting != nil } set: { if !$0 { deleting = nil } },
+            titleVisibility: .visible,
+            presenting: deleting
+        ) { workout in
+            Button("Delete", role: .destructive) { store.delete(workout) }
+            Button("Cancel", role: .cancel) {}
         }
         .accentTitle()
         .navigationTitle("Presets")
@@ -122,13 +135,18 @@ struct PresetListView: View {
             }
             .accessibilityHint(canAdd ? "" : "Opens Intervally Pro")
         }
-        .swipeActions(edge: .trailing) {
+        // No full swipe: in 1.2 it deleted the preset, on both devices, with nothing asked.
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if store.workouts.count > 1 {
-                Button(role: .destructive) {
-                    store.delete(workout)
+                // Red, without the destructive role, as on the iPhone, where a destructive
+                // swipe button takes its row off the list as it is tapped, before anything
+                // is answered.
+                Button {
+                    deleting = workout
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
+                .tint(.red)
             }
             Button {
                 renaming = workout

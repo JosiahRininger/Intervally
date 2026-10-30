@@ -90,3 +90,14 @@ struct DuplicateNamingTests {
         #expect(PresetListView.uniqueName(after: "5", among: []) == "5 2")
     }
 }
+
+@Suite("Delete confirmation")
+struct DeleteConfirmationTests {
+
+    /// The watch's swipe asks it in a dialog, the iPhone and iPad in an alert.
+    @Test("Every device asks the same question, by the preset's name")
+    func title() {
+        #expect(PresetDeletion.title(for: "Tabata") == "Delete “Tabata”?")
+        #expect(PresetDeletion.title(for: "Hill Sprints 2") == "Delete “Hill Sprints 2”?")
+    }
+}

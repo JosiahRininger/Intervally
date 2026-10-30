@@ -55,7 +55,8 @@ struct PresetEditorView: View {
 
     @State private var sheet: Sheet?
     @State private var followUp = PaywallFollowUp<FollowUp>()
-    @State private var confirmingDelete = false
+    /// Set by the menu's Delete, which only asks (`confirmsDelete`).
+    @State private var deleting: IntervalWorkout?
     @State private var name = ""
     @FocusState private var nameFocused: Bool
     /// Coming back from the copy Duplicate opened must not empty and refocus the name again.
@@ -198,14 +199,9 @@ struct PresetEditorView: View {
         // The tabs stay, as in Apple's own apps: hidden here, they only came back once Back's
         // animation had finished, a beat after the workouts were already showing. The ring
         // gives up the room they take (EditorLayout.ringSide).
-        // An alert: iOS 26's confirmation dialog shows no Cancel.
-        .alert("Delete “\(workout.name)”?", isPresented: $confirmingDelete) {
-            Button("Cancel", role: .cancel) {}
-            Button("Delete Workout", role: .destructive) {
-                if actions.delete(workout) { dismiss() }
-            }
-        } message: {
-            Text(WorkoutsContent.deleteMessage(peer: sync.peer))
+        // The library's question, word for word.
+        .confirmsDelete(of: $deleting) { pending in
+            if actions.delete(pending) { dismiss() }
         }
         .onAppear {
             guard !hasAppeared else { return }
@@ -464,7 +460,7 @@ struct PresetEditorView: View {
                 }
                 .accessibilityIdentifier("editor.duplicate")
                 Button(role: .destructive) {
-                    confirmingDelete = true
+                    deleting = workout
                 } label: {
                     Label("Delete", systemImage: "trash")
                 }
