@@ -31,9 +31,10 @@ final class WorkoutSessionController: NSObject {
     /// the notification backstop, so the run loses every remaining alert.
     @ObservationIgnored var onUnexpectedEnd: (() -> Void)?
 
-    /// Set while the app is deliberately tearing the session down, so an expected `.ended`
-    /// transition is not mistaken for a failure.
-    @ObservationIgnored private var isEnding = false
+    /// Where the Health save and the delegate bodies below note what happened: `RunDiagnostics`,
+    /// for the user to share. Injectable so tests can read them.
+    @ObservationIgnored var diagnostics: @MainActor (String) -> Void = { RunDiagnostics.shared.note($0) }
+
     /// A start still waiting on `beginCollection`. The delegate marks the session running
     /// as soon as its activity starts, before collection has: a second caller then took
     /// "running" for a session that the timeout went on to end, and its run sat on the
@@ -45,8 +46,18 @@ final class WorkoutSessionController: NSObject {
     // HKHealthStore is safe to call from any queue; marked so it can be used from the
     // recovery timeout race below without a strict-concurrency complaint.
     @ObservationIgnored private let store = HKHealthStore()
-    @ObservationIgnored private var session: HKWorkoutSession?
-    @ObservationIgnored private var builder: HKLiveWorkoutBuilder?
+    @ObservationIgnored private var session: HKWorkoutSession? {
+        didSet { sessionIdentity = session.map(ObjectIdentifier.init) }
+    }
+    @ObservationIgnored private var builder: HKLiveWorkoutBuilder? {
+        didSet { builderIdentity = builder.map(ObjectIdentifier.init) }
+    }
+    /// The session and builder whose delegate callbacks are acted on: the two above. A
+    /// callback from one already let go of (ended, discarded, or failed to start) can still be
+    /// on its way to the main actor, and must not tear down or report on the run after it.
+    /// Kept apart from the objects so a test can stand one in, with no HealthKit session to hold.
+    @ObservationIgnored var sessionIdentity: ObjectIdentifier?
+    @ObservationIgnored var builderIdentity: ObjectIdentifier?
     @ObservationIgnored private let log = Logger(subsystem: "com.josiahrininger.intervally", category: "workout")
 
     static var isSupported: Bool { HKHealthStore.isHealthDataAvailable() }
@@ -118,6 +129,8 @@ final class WorkoutSessionController: NSObject {
         )
         recovered.delegate = self
         builder.delegate = self
+        // Held like one started here, so its callbacks face the same check (`sessionIdentity`),
+        // and any still coming from a session let go of before it are ignored.
         self.session = recovered
         self.builder = builder
 
@@ -340,11 +353,9 @@ final class WorkoutSessionController: NSObject {
                 // references is not enough — it would carry on with nobody holding it, keep
                 // the workout indicator up, and be offered back for "recovery" on the next
                 // launch. End it before walking away.
-                isEnding = true
                 session.end()
                 builder.discardWorkout()
                 teardown()
-                isEnding = false
                 if case .failed(let error) = outcome { throw error }
                 throw CollectionTimedOut()
             }
@@ -503,7 +514,6 @@ final class WorkoutSessionController: NSObject {
 
     private func performEnd(at date: Date) async -> Bool {
         guard let session, let builder else { return false }
-        isEnding = true
         // Close the final interval's activity at exactly the workout's end date. Left open,
         // `session.end()` closes it at whatever instant HealthKit gets round to the call — a
         // fraction of a second after `date` — and HealthKit then rejects the *entire* workout
@@ -513,9 +523,12 @@ final class WorkoutSessionController: NSObject {
             session.endCurrentActivity(on: date)
         }
         session.end()
+        // Let go of it before anything it says can arrive, so its own .ended, landing during
+        // the save below, is an earlier session's and is ignored. A flag held until the save
+        // was done used to say so instead, and a save that never finished left it set: a newer
+        // session the system then ended was taken for this one ending as asked.
         teardown()
 
-        defer { isEnding = false }
         // A session whose collection never began — a leftover recovered from a run that
         // failed to start — has nothing to save, and asking HealthKit to save it fails with
         // "cannot set endDate without a startDate". Discard it instead.
@@ -526,23 +539,36 @@ final class WorkoutSessionController: NSObject {
         }
         do {
             try await builder.endCollection(at: date)
-            _ = try await builder.finishWorkout()
-            log.info("workout saved")
-            return true
+            let workout = try await builder.finishWorkout()
+            // finishWorkout has been seen to return no workout and no error on a locked iPhone
+            // (iOS 26.4 and later), which is how most iPhone runs end. Nothing reached Health
+            // then, and the summary must not say it did.
+            if workout == nil {
+                log.error("finishWorkout returned nil; the workout was not saved")
+                diagnostics("Health save: finishWorkout returned nil")
+            } else {
+                log.info("workout saved")
+            }
+            return Self.saveOutcome(workout: workout, error: nil)
         } catch {
             log.error("could not save workout: \(error.localizedDescription, privacy: .public)")
-            return false
+            diagnostics("Health save failed: \(RunDiagnostics.describe(error))")
+            return Self.saveOutcome(workout: nil, error: error)
         }
+    }
+
+    /// Whether a save reached Health: only when a workout came back, with no error. Takes any
+    /// object, so a test can stand one in for the `HKWorkout` only a real save makes.
+    nonisolated static func saveOutcome(workout: AnyObject?, error: (any Error)?) -> Bool {
+        workout != nil && error == nil
     }
 
     /// Discards the session without writing anything to Health.
     func discard() {
         guard let session, let builder else { return }
-        isEnding = true
         session.end()
         builder.discardWorkout()
         teardown()
-        isEnding = false
     }
 
     private func teardown() {
@@ -587,17 +613,9 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
         date: Date
     ) {
         RunDiagnostics.shared.note("Session: \(Self.describe(fromState)) → \(Self.describe(toState))")
-        Task { @MainActor in
-            self.isRunning = (toState == .running)
-            // The system can end a session out from under the app — another workout app
-            // takes over, or the watch decides to stop it.
-            if toState == .ended, !self.isEnding, self.session != nil {
-                self.log.notice("workout session ended by the system")
-                RunDiagnostics.shared.note("Session: ENDED BY THE SYSTEM (another workout, or iOS)")
-                self.teardown()
-                self.onUnexpectedEnd?()
-            }
-        }
+        // The session itself goes along, not just its identity, so it can't be freed and its
+        // address taken by a newer session before the main actor compares them.
+        Task { @MainActor in self.sessionDidChange(ObjectIdentifier(workoutSession), to: toState) }
     }
 
     nonisolated func workoutSession(
@@ -624,12 +642,7 @@ extension WorkoutSessionController: HKWorkoutSessionDelegate {
 
     nonisolated func workoutSession(_ workoutSession: HKWorkoutSession, didFailWithError error: Error) {
         RunDiagnostics.shared.note("Session: failed: \(RunDiagnostics.describe(error))")
-        Task { @MainActor in
-            self.log.error("workout session failed: \(error.localizedDescription, privacy: .public)")
-            let wasExpected = self.isEnding
-            self.teardown()
-            if !wasExpected { self.onUnexpectedEnd?() }
-        }
+        Task { @MainActor in self.sessionDidFail(ObjectIdentifier(workoutSession), with: error) }
     }
 }
 
@@ -644,12 +657,62 @@ extension WorkoutSessionController: HKLiveWorkoutBuilderDelegate {
         if collectedTypes.contains(heartRateType) {
             let unit = HKUnit.count().unitDivided(by: .minute())
             let value = workoutBuilder.statistics(for: heartRateType)?.mostRecentQuantity()?.doubleValue(for: unit)
-            Task { @MainActor in self.heartRate = value }
+            Task { @MainActor in self.builderDidCollect(ObjectIdentifier(workoutBuilder), heartRate: value) }
         }
         let energyType = HKQuantityType(.activeEnergyBurned)
         if collectedTypes.contains(energyType) {
             let value = workoutBuilder.statistics(for: energyType)?.sumQuantity()?.doubleValue(for: .kilocalorie())
-            Task { @MainActor in self.activeEnergy = value }
+            Task { @MainActor in self.builderDidCollect(ObjectIdentifier(workoutBuilder), activeEnergy: value) }
         }
+    }
+}
+
+/// The delegate callbacks' bodies, on the main actor. HealthKit calls the delegate on a queue
+/// of its own, and the hop here lets a callback land after its session was let go of, even
+/// once a newer one has started. Each body acts only for the session and builder held now
+/// (`sessionIdentity`), and notes any other. They take identities, not HealthKit's objects,
+/// so tests can drive them.
+extension WorkoutSessionController {
+    func sessionDidChange(_ id: ObjectIdentifier, to toState: HKWorkoutSessionState) {
+        guard id == sessionIdentity else {
+            diagnostics("Session: ignored an earlier session's change to \(Self.describe(toState))")
+            return
+        }
+        isRunning = (toState == .running)
+        // The system can end a session out from under the app: another workout app takes
+        // over, or the watch decides to stop it. One the app ends is let go of first, so its
+        // .ended is turned away above.
+        if toState == .ended {
+            log.notice("workout session ended by the system")
+            diagnostics("Session: ENDED BY THE SYSTEM (another workout, or iOS)")
+            teardown()
+            onUnexpectedEnd?()
+        }
+    }
+
+    func sessionDidFail(_ id: ObjectIdentifier, with error: any Error) {
+        log.error("workout session failed: \(error.localizedDescription, privacy: .public)")
+        guard id == sessionIdentity else {
+            diagnostics("Session: ignored an earlier session's failure")
+            return
+        }
+        teardown()
+        onUnexpectedEnd?()
+    }
+
+    func builderDidCollect(_ id: ObjectIdentifier, heartRate value: Double?) {
+        guard id == builderIdentity else {
+            diagnostics("Session: ignored an earlier session's heart rate")
+            return
+        }
+        heartRate = value
+    }
+
+    func builderDidCollect(_ id: ObjectIdentifier, activeEnergy value: Double?) {
+        guard id == builderIdentity else {
+            diagnostics("Session: ignored an earlier session's energy")
+            return
+        }
+        activeEnergy = value
     }
 }

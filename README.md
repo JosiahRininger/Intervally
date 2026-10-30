@@ -116,6 +116,13 @@ but keep the workout's HIIT type — every activity of an interval workout share
 another type would switch the sensor algorithm mid-session — and carry their phase in
 `IntervallyPhase` metadata, with no `IntervallyRound`.
 
+A run's summary says Saved to Health only when `finishWorkout()` hands back a workout, with
+no error (`WorkoutSessionController.saveOutcome`): on a locked iPhone it has been seen to
+return none, and the run is then shown as not saved. HealthKit calls the session's delegate
+on a queue of its own, so a callback can land after its session was let go of, even once a
+newer one is running. The controller acts only on callbacks from the session and builder it
+holds, and notes any other in the diagnostics.
+
 `UIBackgroundModes: [audio]` is declared alongside `WKBackgroundModes`, because Apple's
 "Running workout sessions" article requires it: "If your app plays audio or provides haptic
 feedback during the workout session, you must also add the Audio background mode." The app
