@@ -309,6 +309,15 @@ final class RunCoordinator {
         await backstopTask?.value
     }
 
+    /// Awaits what a change leaves running once it returns: a tier still being taken (a resume
+    /// with none starts one), then the notification update that ends it, and any top-up. A Live
+    /// Activity tap waits on it (`PhoneRun.control(_:)`): iOS can suspend the app as soon as the
+    /// tap is done, and a resume that left with its alerts still to come had none at all.
+    func changeSettled() async {
+        await supportTask?.value
+        await backstopSettled()
+    }
+
     // MARK: - Lifecycle
 
     /// Called when the run screen appears.

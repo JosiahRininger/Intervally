@@ -177,10 +177,15 @@ final class PhoneRun {
     /// this iPhone's own run: the watch's run shows no buttons. Taken as the watch takes its
     /// iPhone mirror's buttons, so one that lands after the run has moved on, an interval run
     /// out or a pause made in the app, does nothing. Returns once the activity shows what the
-    /// tap did: iOS can suspend the app again as soon as the intent returns.
+    /// tap did and the run's own follow-up has landed, a tier taken on a resume and the alerts
+    /// scheduled or cancelled: iOS can suspend the app again as soon as the intent returns.
+    /// Away from the app, all of it is given the time to finish (`beginBackgroundWork`).
     func control(_ command: RunMirrorCommand) async {
+        let finished = coordinator.isAppActive() ? nil : coordinator.beginBackgroundWork("Take a Lock Screen tap")
         coordinator.handleRemote(command)
         await activity.settled()
+        await coordinator.changeSettled()
+        finished?()
     }
 
     /// End, confirmed. A watch run is ended on the watch, and its screen here closes at once,

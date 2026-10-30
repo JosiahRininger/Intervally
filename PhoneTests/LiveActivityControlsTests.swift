@@ -27,12 +27,15 @@ struct LiveActivityControlsTests {
 
     /// Hill Sprints on this iPhone, brought back paused `elapsed` seconds in, as a relaunch
     /// brings a run back, with its Live Activity showing it.
-    private func pausedRun(at elapsed: TimeInterval) async -> (PhoneRun, WorkoutStore) {
+    private func pausedRun(
+        at elapsed: TimeInterval, workout: FakeWorkoutSession = FakeWorkoutSession(),
+        backstop: FakeBackstop = FakeBackstop()
+    ) async -> (PhoneRun, WorkoutStore) {
         let store = WorkoutStore(defaults: defaults)
         store.saveActiveRun(RunSnapshot(workout: Fixture.hillSprints12, anchor: Date(), pausedElapsed: elapsed))
         let run = PhoneRun(
             store: store, pro: FakePro(), theme: ThemeStore(defaults: defaults), output: FakeCueOutput(),
-            workout: FakeWorkoutSession(), notifications: FakeBackstop(), activityHost: host, defaults: defaults
+            workout: workout, notifications: backstop, activityHost: host, defaults: defaults
         )
         run.coordinator.runOnVirtualTime(time)
         run.restoreAtLaunch()
@@ -82,8 +85,8 @@ struct LiveActivityControlsTests {
         #expect(lastShown?.controls == nil)
 
         let calls = host.calls.count
-        await run.control(PauseRunIntent().command)
-        await run.control(SkipIntervalIntent(phaseIndex: 2).command)
+        await PauseRunIntent().perform(on: run)
+        await SkipIntervalIntent(phaseIndex: 2).perform(on: run)
         #expect(run.engine.status == .running, "The watch's run is paused and skipped on the watch")
         #expect(run.coordinator.engine.status == .idle)
         #expect(host.calls.count == calls)
@@ -112,8 +115,8 @@ struct LiveActivityControlsTests {
 
         // A tap left from the card before, landing on the finished run, does nothing.
         let calls = host.calls.count
-        await run.control(ResumeRunIntent().command)
-        await run.control(SkipIntervalIntent(phaseIndex: 13).command)
+        await ResumeRunIntent().perform(on: run)
+        await SkipIntervalIntent(phaseIndex: 13).perform(on: run)
         #expect(run.coordinator.engine.status == .finished)
         #expect(host.calls.count == calls)
         run.close()
@@ -138,7 +141,7 @@ struct LiveActivityControlsTests {
 
         // Skipped from the Lock Screen into the cooldown, the card loses its Skip at once.
         let (run, _) = await pausedRun(at: 930)
-        await run.control(SkipIntervalIntent(phaseIndex: 12).command)
+        await SkipIntervalIntent(phaseIndex: 12).perform(on: run)
         #expect(run.coordinator.engine.position.phaseIndex == 13)
         #expect(lastShown?.phase == .cooldown)
         #expect(lastShown?.controls == .init(canPause: false, canResume: true, canSkip: false))
@@ -152,11 +155,11 @@ struct LiveActivityControlsTests {
         let (run, _) = await pausedRun(at: 330.5)
         let engine = run.coordinator.engine
         let sprint = SkipIntervalIntent(phaseIndex: 2)
-        await run.control(sprint.command)
+        await sprint.perform(on: run)
         #expect(engine.position.phaseIndex == 3)
         #expect(engine.elapsed == 345)
         let calls = host.calls.count
-        await run.control(sprint.command)
+        await sprint.perform(on: run)
         #expect(engine.position.phaseIndex == 3)
         #expect(engine.elapsed == 345, "The Walk isn't skipped as well")
         #expect(host.calls.count == calls)
@@ -174,7 +177,7 @@ struct LiveActivityControlsTests {
         #expect(lastShown?.phaseIndex == 4)
         let elapsed = engine.elapsed
         let shown = host.calls.count
-        await run.control(walk.command)
+        await walk.perform(on: run)
         #expect(engine.position.phaseIndex == 4)
         #expect(engine.elapsed == elapsed)
         #expect(host.calls.count == shown)
@@ -190,7 +193,7 @@ struct LiveActivityControlsTests {
         #expect(engine.status == .running)
         let calls = host.calls.count
 
-        await run.control(PauseRunIntent().command)
+        await PauseRunIntent().perform(on: run)
         #expect(engine.status == .paused)
         #expect(engine.elapsed == 330.5)
         #expect(store.loadActiveRun(now: Self.virtualNow)?.pausedElapsed == 330.5, "Saved at once")
@@ -200,7 +203,7 @@ struct LiveActivityControlsTests {
         #expect(lastShown?.controls == .init(canPause: false, canResume: true, canSkip: true))
 
         // The same Pause again, landing on the paused run, doesn't resume it.
-        await run.control(PauseRunIntent().command)
+        await PauseRunIntent().perform(on: run)
         #expect(engine.status == .paused)
         #expect(host.calls.count == calls + 1)
         run.close()
@@ -213,7 +216,7 @@ struct LiveActivityControlsTests {
         #expect(lastShown?.controls == .init(canPause: false, canResume: true, canSkip: true))
         let calls = host.calls.count
 
-        await run.control(ResumeRunIntent().command)
+        await ResumeRunIntent().perform(on: run)
         #expect(engine.status == .running)
         #expect(engine.elapsed == 330.5)
         let anchor = Self.virtualNow.addingTimeInterval(-330.5)
@@ -228,7 +231,7 @@ struct LiveActivityControlsTests {
         #expect(lastShown?.controls == .init(canPause: true, canResume: false, canSkip: true))
 
         // The same Resume again changes nothing.
-        await run.control(ResumeRunIntent().command)
+        await ResumeRunIntent().perform(on: run)
         #expect(engine.status == .running)
         #expect(host.calls.count == calls + 1)
         run.close()
@@ -242,7 +245,7 @@ struct LiveActivityControlsTests {
         let engine = run.coordinator.engine
         #expect(lastShown?.phaseIndex == 2)
 
-        await run.control(SkipIntervalIntent(phaseIndex: 2).command)
+        await SkipIntervalIntent(phaseIndex: 2).perform(on: run)
         #expect(engine.status == .running)
         #expect(engine.position.phaseIndex == 3)
         #expect(engine.position.phase?.title == "Walk")
@@ -255,10 +258,123 @@ struct LiveActivityControlsTests {
         run.close()
     }
 
+    @Test("A Resume away from the app returns only once the run can be heard, its alerts scheduled while the cues can't be")
+    func resumeAwayWaitsForBackstop() async throws {
+        // Brought back paused with no session, as iOS relaunches the app for the tap, and one
+        // that is slow to start and then fails, so the alerts mark the intervals.
+        let workout = FakeWorkoutSession()
+        workout.startsSucceed = false
+        let starting = Gate()
+        workout.startGate = starting
+        let backstop = FakeBackstop()
+        let (run, _) = await pausedRun(at: 330.5, workout: workout, backstop: backstop)
+        let away = BackgroundWorkLog()
+        run.coordinator.isAppActive = { false }
+        run.coordinator.beginBackgroundWork = away.begin
+        await run.coordinator.changeSettled()
+        let schedules = await backstop.schedules
+        let calls = host.calls.count
+
+        let tap = TapLog()
+        let done = Task {
+            await ResumeRunIntent().perform(on: run)
+            tap.returned = true
+        }
+        #expect(await waitUntil { workout.starts == 1 && host.calls.count == calls + 1 }, "Resumed and shown so, the session still starting")
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!tap.returned, "Not done while the run has nothing to mark its intervals")
+        #expect(await backstop.schedules == schedules)
+        #expect(away.open == 1, "Given the time to finish")
+
+        starting.open()
+        await done.value
+        #expect(await backstop.schedules == schedules + 1, "The alerts are in before the tap returns")
+        #expect(away.begun == ["Take a Lock Screen tap"])
+        #expect(away.open == 0)
+        run.close()
+    }
+
+    @Test("A Pause away from the app returns only once the alerts are cancelled, so none goes off in the pause")
+    func pauseAwayWaitsForCancel() async throws {
+        let backstop = FakeBackstop()
+        let (run, _) = await pausedRun(at: 330.5, backstop: backstop)
+        run.togglePause()
+        await run.coordinator.changeSettled()
+        await run.activity.settled()
+        #expect(run.coordinator.engine.status == .running)
+        let away = BackgroundWorkLog()
+        run.coordinator.isAppActive = { false }
+        run.coordinator.beginBackgroundWork = away.begin
+        let cancelling = Gate()
+        await backstop.holdCancels(until: cancelling)
+        let cancels = await backstop.cancels
+        let calls = host.calls.count
+
+        let tap = TapLog()
+        let done = Task {
+            await PauseRunIntent().perform(on: run)
+            tap.returned = true
+        }
+        #expect(await waitUntil { host.calls.count == calls + 1 }, "Paused and shown so")
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!tap.returned, "Not done while the alerts are still up")
+        #expect(away.open == 1)
+
+        cancelling.open()
+        await done.value
+        #expect(await backstop.cancels == cancels + 1, "Cancelled before the tap returns")
+        #expect(away.begun == ["Take a Lock Screen tap"])
+        #expect(away.open == 0)
+        run.close()
+    }
+
+    @Test("A run closed here hands the Lock Screen back to the watch's paused run, without buttons")
+    func closeHandsWatchRunBackWithoutControls() async throws {
+        let (run, _) = await pausedRun(at: 930)
+        run.mirror.apply(RunMirrorState(
+            workout: Fixture.hillSprints12, status: .paused, anchor: nil, pausedElapsed: 330.5, health: nil
+        ))
+        await run.activity.settled()
+        #expect(!run.isMirroring, "This iPhone's run comes first")
+        #expect(lastShown?.phaseIndex == 12)
+        #expect(lastShown?.controls != nil)
+
+        run.close()
+        await run.activity.settled()
+        #expect(run.isMirroring)
+        #expect(lastShown?.phaseIndex == 2, "The watch's run is on the Lock Screen")
+        #expect(lastShown?.controls == nil)
+
+        // A tap left from this iPhone's card does nothing to the watch's run.
+        let calls = host.calls.count
+        await ResumeRunIntent().perform(on: run)
+        #expect(run.engine.status == .paused)
+        #expect(host.calls.count == calls)
+    }
+
     @Test("Siri and Shortcuts are offered none of the buttons")
     func intentsNotDiscoverable() {
         #expect(!PauseRunIntent.isDiscoverable)
         #expect(!ResumeRunIntent.isDiscoverable)
         #expect(!SkipIntervalIntent.isDiscoverable)
     }
+}
+
+/// The background time a run asked for, by name, and how much of it is still held.
+@MainActor
+private final class BackgroundWorkLog {
+    private(set) var begun: [String] = []
+    private(set) var open = 0
+
+    func begin(_ name: String) -> @MainActor () -> Void {
+        begun.append(name)
+        open += 1
+        return { self.open -= 1 }
+    }
+}
+
+/// Whether a tap's intent has returned.
+@MainActor
+private final class TapLog {
+    var returned = false
 }

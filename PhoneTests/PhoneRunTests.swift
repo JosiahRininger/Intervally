@@ -71,10 +71,15 @@ final class FakeWorkoutSession: WorkoutSessioning {
     private(set) var activities: [IntervalPhase.Kind] = []
     private(set) var ended = 0
     private(set) var discarded = 0
+    private(set) var starts = 0
+    /// When set, `start` waits on it, as a session slow to start does.
+    var startGate: Gate?
 
     func requestAuthorization() async -> Bool { true }
     func adoptRecoveredSession() async -> Bool { false }
     func start(at date: Date) async -> Bool {
+        starts += 1
+        await startGate?.wait()
         isRunning = startsSucceed
         return startsSucceed
     }
@@ -106,7 +111,13 @@ actor FakeBackstop: BoundaryScheduling {
         schedules += 1
         leads.append(minimumLead)
     }
-    func cancelAll() async { cancels += 1 }
+    /// When set, a cancel waits on it before it counts, as one still on its way does.
+    private var cancelGate: Gate?
+    func holdCancels(until gate: Gate) { cancelGate = gate }
+    func cancelAll() async {
+        await cancelGate?.wait()
+        cancels += 1
+    }
     /// Never: it schedules nothing to run out of.
     func needsTopUp(now: Date) async -> Bool { false }
     func disarm(identifier: String) async { disarmed.append(identifier) }
