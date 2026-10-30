@@ -233,6 +233,13 @@ struct CuePlanTests {
         #expect(SoundsRow.subtitle(all.effective(isPro: false)) == "Beeps")
         #expect(SoundsRow.subtitle(CueSettings(beeps: false, countdown: true, voice: false)) == "Off")
     }
+
+    @Test("Interval Changes' footer names the device the run is on")
+    func changesFooterNamesTheDevice() {
+        #expect(SoundsRow.changesFooter(on: .phone).hasSuffix("a notification marks each change while iPhone is locked."))
+        #expect(SoundsRow.changesFooter(on: .pad).hasSuffix("a notification marks each change while iPad is locked."))
+        #expect(!SoundsRow.changesFooter(on: .pad).contains("iPhone"))
+    }
 }
 
 @Suite("Cue tones")
