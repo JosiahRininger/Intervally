@@ -67,7 +67,8 @@ final class WatchSync: NSObject {
     @ObservationIgnored private let debounce: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private let now: () -> Date
-    /// Where the last start request acted on is remembered.
+    /// Where the last start request acted on, and the last context answered at activation,
+    /// are remembered.
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var pendingPush: Task<Void, Never>?
 

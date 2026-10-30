@@ -50,13 +50,15 @@ struct PayloadBudgetTests {
         }
 
         var presets: [UUID: PresetRecord] = [:]
+        /// Each name as it was typed, before the cap cut it.
+        var typed: [UUID: String] = [:]
         for index in 0..<299 {
             // Built on the preset with every field set, so a field added later is weighed too.
             var workout = IntervalWorkout.everyFieldSet
             workout.id = rng.uuid()
-            // Far longer than a save keeps, and cut to the cap on the way in, as every save
-            // is. Uncut, names this long would take the document past the budget.
+            // Far longer than a save keeps, and cut to the cap on the way in, as every save is.
             workout.name = phrase(longerThan: 200)
+            typed[workout.id] = workout.name
             workout.prepareSeconds = 300
             workout.warmupSeconds = 1800
             workout.workSeconds = 3600
@@ -86,13 +88,26 @@ struct PayloadBudgetTests {
 
         // The largest context there is: the theme and a start request beside the document.
         let sentAt = Date(timeIntervalSince1970: 1_790_000_000)
-        let context = try SyncWire.context(
-            for: document, theme: Register(value: "pastel", stamp: stamp()), sentAt: sentAt,
-            start: SyncWire.StartRequest(id: rng.uuid(), presetID: live[0], requestedAt: sentAt)
-        )
-        let bytes = try PropertyListSerialization.data(fromPropertyList: context, format: .binary, options: 0).count
+        let theme = Register(value: "pastel", stamp: stamp())
+        let start = SyncWire.StartRequest(id: rng.uuid(), presetID: live[0], requestedAt: sentAt)
+        func context(for document: SyncDocument) throws -> [String: Any] {
+            try SyncWire.context(for: document, theme: theme, sentAt: sentAt, start: start)
+        }
+        let sent = try context(for: document)
+        let bytes = try Self.bytes(of: sent)
         #expect(bytes < Self.budget, "\(bytes) bytes")
-        #expect(SyncWire.document(from: context) == document, "And it still arrives whole")
+        #expect(SyncWire.document(from: sent) == document, "And it still arrives whole")
+
+        // The cap is what keeps it there: uncut, the same names would not fit.
+        var uncut = document
+        for (id, name) in typed { uncut.presets[id]?.workout.name = name }
+        let uncutBytes = try Self.bytes(of: context(for: uncut))
+        #expect(uncutBytes > Self.budget, "\(uncutBytes) bytes uncut")
+    }
+
+    /// The context's size as WatchConnectivity carries it: a property list.
+    static func bytes(of context: [String: Any]) throws -> Int {
+        try PropertyListSerialization.data(fromPropertyList: context, format: .binary, options: 0).count
     }
 }
 

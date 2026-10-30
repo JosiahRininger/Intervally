@@ -60,7 +60,7 @@ struct WatchStatusViewModelTests {
         now = now.addingTimeInterval(120)
         sync.push(force: true)
         #expect(transport.sent.count == 2)
-        let content = WatchStatusContent(peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt)
+        let content = WatchStatusContent(sync: sync)
         #expect(content.lastSynced == now)
         #expect(content.syncedLine(now: now) == "Synced just now")
     }
