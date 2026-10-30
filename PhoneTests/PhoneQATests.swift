@@ -162,7 +162,10 @@ struct PhoneQATests {
         let support = FileManager.default.temporaryDirectory.appendingPathComponent("support-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: support) }
         let diagnosticsURL = support.appendingPathComponent("run-diagnostics.json")
-        RunDiagnostics(url: diagnosticsURL).note("Run: started Left Behind")
+        let diagnostics = RunDiagnostics(url: diagnosticsURL)
+        diagnostics.note("Run: started Left Behind")
+        // Written now, as the app leaving the screen would, rather than a moment later.
+        diagnostics.flush()
         #expect(FileManager.default.fileExists(atPath: diagnosticsURL.path))
 
         QADefaults.clear(defaults: defaults, domain: domain, suite: defaults, support: support)
