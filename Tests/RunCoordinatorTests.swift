@@ -1902,6 +1902,18 @@ struct RunCoordinatorAudibleBackstopTests {
     }
 }
 
+/// The background time Save Workout asks for, and gives back.
+@MainActor
+private final class SaveWork {
+    private(set) var asked: [String] = []
+    private(set) var givenBack = 0
+
+    func begin(_ name: String) -> @MainActor () -> Void {
+        asked.append(name)
+        return { [self] in givenBack += 1 }
+    }
+}
+
 @Suite("Run coordinator — Save on End")
 @MainActor
 struct RunCoordinatorSaveOnEndTests {
@@ -1986,6 +1998,25 @@ struct RunCoordinatorSaveOnEndTests {
         #expect(RunCoordinator.Summary(duration: 230, rounds: 8, health: .saved).endedEarlyText == nil)
         #expect(RunCoordinator.Summary(duration: 230, rounds: 8, health: .saved).ringFraction == 1)
         #expect(RunCoordinator.Summary(duration: 30, rounds: 0, health: .saved, plannedRounds: 8).ringFraction == 0)
+    }
+
+    @Test("Save Workout asks for the time to finish the save, and gives it back once the save is over")
+    func endAndSaveKeepsTheAppForTheSave() async {
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator()
+        workout.endGate = Gate()
+        let work = SaveWork()
+        coordinator.beginBackgroundWork = { work.begin($0) }
+        useTabata(store)
+        await run(coordinator, to: 130)
+
+        coordinator.endAndSave()
+        await settle(coordinator)
+        #expect(work.asked == ["Save the workout"], "Asked at the tap, in front, before the phone can be locked")
+        #expect(work.givenBack == 0, "Kept while the save goes on")
+        workout.endGate?.open()
+        await settle(coordinator)
+        #expect(coordinator.summary?.health == .saved)
+        #expect(work.givenBack == 1)
     }
 
     @Test("Saving, the snapshot says so, and a relaunch then finishes the save instead of bringing the run back")
