@@ -63,8 +63,11 @@ final class PaywallJourneyTests: XCTestCase {
         let close = app.buttons["Close"].firstMatch
         XCTAssertTrue(close.waitForExistence(timeout: 5))
         close.tap()
+        // An iPad's sheet takes longer to go than an iPhone's, longer still on a busy Mac: wait
+        // for the paywall to be gone, then for Back, rather than tapping Back under the sheet.
+        XCTAssertTrue(app.staticTexts["Intervally Pro"].firstMatch.waitForNonExistence(timeout: 10), "The paywall didn't close")
 
-        XCTAssertTrue(app.navigationBars.buttons["BackButton"].wait(until: "isHittable == true"))
+        XCTAssertTrue(app.navigationBars.buttons["BackButton"].wait(until: "isHittable == true", timeout: 10))
         app.navigationBars.buttons["BackButton"].tap()
         XCTAssertTrue(app.buttons["workouts.new"].wait(until: "isHittable == true"), "The library didn't come back")
         XCTAssertEqual(presets.count, before, "A preset was added past the free limit")

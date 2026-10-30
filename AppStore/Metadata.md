@@ -57,15 +57,12 @@ app inside its build. Archive and upload the `IntervallyPhone` scheme only.
 |---|---|
 | Privacy Policy URL | https://josiahrininger.com/intervally/privacy |
 | Support URL | https://josiahrininger.com/intervally/support |
-| Marketing URL | *(optional — leave blank)* |
+| Marketing URL | https://josiahrininger.com/intervally |
 
-Both pages cover the iPhone app since josiahrininger.com#41. For 1.1 they must also say,
-through a josiahrininger.com pull request merged before submitting:
-
-- Workouts run on iPhone as well as on Apple Watch, and a workout finished on iPhone is
-  saved to Apple Health on that iPhone. Nothing leaves the user's devices.
-- The Lock Screen countdown is a Live Activity, drawn on the device; no push server.
-- Sounds & Voice in Settings: beeps, the 3-2-1 countdown, the Pro voice coach, Keep Screen On.
+All three are live since josiahrininger.com#54 (merged 2026-10-30, before 1.3 was
+submitted): the landing page at /intervally, the privacy policy rewritten for 1.3 (iPhone,
+iPad and Apple Watch; Health stays on the devices; diagnostics never sent; Lock Screen
+controls; Data Not Collected), and support with how to redeem a code and restore Pro.
 
 ## Promotional text (170)
 
