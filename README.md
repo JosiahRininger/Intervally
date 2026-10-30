@@ -75,8 +75,9 @@ plan's next countdown second or interval change (`IntervalPlan.nextEventElapsed`
 screen rather than up to half a second after it. A change that a skip left waiting while
 paused plays half a second after Resume, clear of Resume's own tap. Each run notes in its
 diagnostics how late its changes were announced. The notes are written two seconds after
-they're made, off the main thread, and at once when a run finishes or ends or the app leaves
-the screen; with no run going, the watch notes a wrist raise at most once a minute.
+they're made, off the main thread, and at once when a run finishes or ends, its Health save
+is over, the iPhone lets go of the audio, or the app goes to the background; with no run
+going, the watch notes a wrist raise at most once a minute.
 
 A `RunSnapshot` is persisted to the shared App Group on every state change, so relaunching
 after termination resumes the run exactly where it had got to, and the Smart Stack

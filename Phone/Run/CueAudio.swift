@@ -116,9 +116,12 @@ final class CueAudio: NSObject, CueOutput {
     private let voiceCache: VoiceCache
     /// Phrases the voice skipped this run, noted once each.
     private var skippedPhrases: Set<String> = []
+    /// Where the audio's notes go. Injectable so tests can see what was written, and when.
+    private let diagnostics: RunDiagnostics
 
-    init(voiceCache: VoiceCache = VoiceCache()) {
+    init(voiceCache: VoiceCache = VoiceCache(), diagnostics: RunDiagnostics = .shared) {
         self.voiceCache = voiceCache
+        self.diagnostics = diagnostics
         super.init()
         setCategory()
         buildEngine()
@@ -199,7 +202,11 @@ final class CueAudio: NSObject, CueOutput {
 
     func handBackAudio() {
         // A run that ended away from the app: its last stretch is noted now.
-        if let line = awayCues.close() { RunDiagnostics.shared.note(line) }
+        if let line = awayCues.close() { diagnostics.note(line) }
+        // Written now: letting the audio go below lets the app be suspended with the phone
+        // locked, before the write two seconds on comes round. This line says whether the
+        // cues sounded with the phone locked, the one most worth keeping.
+        diagnostics.flush()
         isHeld = false
         watchdog?.cancel()
         watchdog = nil
@@ -246,13 +253,13 @@ final class CueAudio: NSObject, CueOutput {
         do {
             try engine.start()
             if UIApplication.shared.applicationState != .active {
-                RunDiagnostics.shared.note("Audio: engine restarted away from the app")
+                diagnostics.note("Audio: engine restarted away from the app")
             }
             report(healthy: true)
             return true
         } catch {
             // Noted once an outage: every try after it fails the same way.
-            if isHealthy { RunDiagnostics.shared.note("Audio: engine didn't start: \(RunDiagnostics.describe(error))") }
+            if isHealthy { diagnostics.note("Audio: engine didn't start: \(RunDiagnostics.describe(error))") }
             log.notice("cue engine didn't start: \(error.localizedDescription, privacy: .public)")
             report(healthy: false)
             return false
@@ -263,7 +270,7 @@ final class CueAudio: NSObject, CueOutput {
         guard isHeld else { return }
         if healthy != isHealthy {
             isHealthy = healthy
-            RunDiagnostics.shared.note(healthy ? "Audio: cues can sound again" : "Audio: CUES CAN'T SOUND; marking changes with notifications")
+            diagnostics.note(healthy ? "Audio: cues can sound again" : "Audio: CUES CAN'T SOUND; marking changes with notifications")
         }
         onHealthReport?(healthy)
     }
@@ -286,7 +293,7 @@ final class CueAudio: NSObject, CueOutput {
                     failures = 0
                     continue
                 }
-                if failures == 0 { RunDiagnostics.shared.note("Audio: watchdog found the engine stopped") }
+                if failures == 0 { self.diagnostics.note("Audio: watchdog found the engine stopped") }
                 failures = self.ensureRunning() ? 0 : failures + 1
             }
         }
@@ -295,7 +302,7 @@ final class CueAudio: NSObject, CueOutput {
     /// Back in front, where the engine can always be started: one still stopped starts now,
     /// not at the watchdog's next try, and the cues while the app was away are noted.
     private func becameActive() {
-        if let line = awayCues.close() { RunDiagnostics.shared.note(line) }
+        if let line = awayCues.close() { diagnostics.note(line) }
         if isHeld, !engine.isRunning { _ = ensureRunning() }
     }
 
@@ -314,14 +321,14 @@ final class CueAudio: NSObject, CueOutput {
         observers.append(NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.isHeld else { return }
-                RunDiagnostics.shared.note("Audio: engine configuration changed; restarting")
+                self.diagnostics.note("Audio: engine configuration changed; restarting")
                 _ = self.ensureRunning()
             }
         })
     }
 
     private func mediaServicesReset() {
-        RunDiagnostics.shared.note("Audio: media services were reset; rebuilding")
+        diagnostics.note("Audio: media services were reset; rebuilding")
         isActive = false
         buildEngine()
         setCategory()
@@ -335,14 +342,14 @@ final class CueAudio: NSObject, CueOutput {
         case .oldDeviceUnavailable: "headphones or a speaker disconnected"
         default: "output changed"
         }
-        RunDiagnostics.shared.note("Audio: \(why)")
+        diagnostics.note("Audio: \(why)")
         // The engine stops when its output goes; it may also carry on. Either way it is
         // running again before the next cue.
         _ = ensureRunning()
     }
 
     private func interrupted(began: Bool) {
-        RunDiagnostics.shared.note("Audio: interrupted, \(began ? "began" : "ended")")
+        diagnostics.note("Audio: interrupted, \(began ? "began" : "ended")")
         if began {
             // The system has let the session go and stopped the engine.
             isActive = false
@@ -376,7 +383,7 @@ final class CueAudio: NSObject, CueOutput {
         }
         guard !session.isOtherAudioPlaying else {
             if isHeld, skippedPhrases.insert(phrase).inserted {
-                RunDiagnostics.shared.note("Voice: \"\(phrase)\" skipped: not rendered yet, and other audio was playing")
+                diagnostics.note("Voice: \"\(phrase)\" skipped: not rendered yet, and other audio was playing")
             }
             return nil
         }
@@ -414,7 +421,7 @@ final class CueAudio: NSObject, CueOutput {
         guard !samples.isEmpty else {
             log.notice("phrase not rendered: \(phrase, privacy: .public)")
             if UIApplication.shared.applicationState != .active {
-                RunDiagnostics.shared.note("Voice: \"\(phrase)\" not rendered away from the app")
+                diagnostics.note("Voice: \"\(phrase)\" not rendered away from the app")
             }
             return nil
         }
@@ -440,7 +447,7 @@ final class CueAudio: NSObject, CueOutput {
         let firstAway = state != .active && awayCues.count(played: played)
         guard played ? firstAway : wasHealthy else { return }
         let where_ = state == .background ? "in the background" : state == .inactive ? "while inactive" : "in front"
-        RunDiagnostics.shared.note("Cue: \(cue) \(played ? "played" : "FAILED TO PLAY") \(where_), engine running \(engine.isRunning)")
+        diagnostics.note("Cue: \(cue) \(played ? "played" : "FAILED TO PLAY") \(where_), engine running \(engine.isRunning)")
     }
 
     // MARK: - Session
@@ -462,7 +469,7 @@ final class CueAudio: NSObject, CueOutput {
             isActive = true
             onVolumeChange?(session.outputVolume)
         } catch {
-            if isHealthy { RunDiagnostics.shared.note("Audio: session not activated: \(RunDiagnostics.describe(error))") }
+            if isHealthy { diagnostics.note("Audio: session not activated: \(RunDiagnostics.describe(error))") }
             // A phone call, or another app holding audio that can't be mixed: the cue is lost,
             // the tap and the screen still mark the change. The next cue tries again.
             log.notice("audio session not activated: \(error.localizedDescription, privacy: .public)")

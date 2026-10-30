@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 /// A record of what a run went through, kept on the device for the user to share: Health
 /// access, each workout session asked for and what HealthKit said, the app moving between
@@ -18,8 +19,8 @@ import Foundation
 /// whatever else was noted meanwhile. The whole file used to be rewritten on the main thread
 /// at every note, and the watch notes the app coming forward: each wrist raise paid for a
 /// write before the screen could update. The moments after which the app may not run again
-/// for a while, a run's finish or End and the app leaving the screen, write at once
-/// (`flush()`).
+/// for a while, a run's finish or End, its Health save, the audio let go, and the app going to
+/// the background, write at once (`flush()`).
 final class RunDiagnostics: @unchecked Sendable {
     static let shared = RunDiagnostics()
 
@@ -113,6 +114,26 @@ final class RunDiagnostics: @unchecked Sendable {
     /// Nothing to write when nothing was noted since the last write.
     func flush() {
         save(fromSchedule: false)
+    }
+
+    /// Writes out everything noted so far on a background queue, now rather than two seconds
+    /// on, so the calling thread never waits on the disk.
+    func flushInBackground() {
+        guard lock.withLock({ isDirty }) else { return }
+        schedule(0) { [weak self] in self?.save(fromSchedule: false) }
+    }
+
+    /// The app moving on screen or off it. In the background the app is suspended in moments
+    /// unless a run holds it, so the log is written there and then. Inactive is the watch's
+    /// wrist down, at every glance during a run, and the app runs on: the write goes to a
+    /// background queue straight away rather than hold up the main thread, which keeps the
+    /// run's time and taps, as the screen turns to its wrist-down look.
+    func sceneChanged(to phase: ScenePhase) {
+        switch phase {
+        case .background: flush()
+        case .inactive: flushInBackground()
+        default: break
+        }
     }
 
     var all: [Entry] { lock.withLock { entries } }

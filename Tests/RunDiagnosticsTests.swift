@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import Intervally
 
@@ -23,11 +24,24 @@ private func settle(_ coordinator: RunCoordinator) async {
 private final class WriteSpy: @unchecked Sendable {
     private let lock = NSLock()
     private var written: [Data] = []
+    private var threads: [Bool] = []
+    private var times: [Date] = []
 
     var count: Int { lock.withLock { written.count } }
+    /// For each write, whether it ran on the main thread.
+    var onMain: [Bool] { lock.withLock { threads } }
+    /// When each write ran.
+    var dates: [Date] { lock.withLock { times } }
 
     var write: RunDiagnostics.Write {
-        { [self] data, _ in lock.withLock { written.append(data) } }
+        { [self] data, _ in
+            let main = Thread.isMainThread
+            lock.withLock {
+                written.append(data)
+                threads.append(main)
+                times.append(Date())
+            }
+        }
     }
 
     /// The entries the latest write held.
@@ -179,6 +193,68 @@ struct RunDiagnosticsTests {
         }
         #expect(onMain == false)
     }
+
+    @Test("By default a note made on the main thread is written two seconds on, off it")
+    @MainActor
+    func defaultScheduleWaitsTwoSecondsOffTheMainThread() async throws {
+        #expect(RunDiagnostics.writeDelay == 2)
+        let writes = WriteSpy()
+        let log = RunDiagnostics(url: tempURL(), write: writes.write)
+        let noted = Date()
+        log.note("Run: started Tabata")
+        #expect(writes.count == 0, "Not as it's noted")
+
+        let deadline = Date().addingTimeInterval(10)
+        while writes.count == 0, Date() < deadline { try await Task.sleep(for: .milliseconds(50)) }
+        #expect(writes.count == 1)
+        #expect(writes.onMain == [false])
+        let waited = try #require(writes.dates.first).timeIntervalSince(noted)
+        #expect(waited >= 1.9, "Written \(waited) s on, not two")
+        #expect(try writes.lastEntries().map(\.text) == ["Run: started Tabata"])
+    }
+
+    @Test("A flush in the background goes to the queue at once, and only with something to write")
+    func flushInBackgroundLeavesTheCallingThread() throws {
+        let writes = WriteSpy()
+        let later = HeldSchedule()
+        let log = RunDiagnostics(url: tempURL(), write: writes.write, schedule: later.schedule)
+
+        log.flushInBackground()
+        #expect(later.delays.isEmpty, "Nothing noted, nothing to write")
+
+        log.note("one")
+        log.flushInBackground()
+        #expect(writes.count == 0, "Not on the calling thread")
+        #expect(later.delays == [2, 0], "Straight away, alongside the write the note asked for")
+        later.runWaiting()
+        #expect(writes.count == 1, "The second finds nothing left to write")
+        #expect(try writes.lastEntries().map(\.text) == ["one"])
+    }
+
+    @Test("Going to the background writes at once; going inactive, the watch's wrist-down, hands the write to the queue")
+    func sceneChangesWrite() throws {
+        let writes = WriteSpy()
+        let later = HeldSchedule()
+        let log = RunDiagnostics(url: tempURL(), write: writes.write, schedule: later.schedule)
+
+        // A wrist raise during a run notes the app coming forward; lowering it again must not
+        // write on the main thread.
+        log.note("App: in front")
+        log.sceneChanged(to: .inactive)
+        #expect(writes.count == 0, "Inactive writes nothing on the calling thread")
+        #expect(later.delays == [2, 0], "It goes to the background queue straight away")
+        log.sceneChanged(to: .active)
+        #expect(later.delays == [2, 0], "Coming forward asks for nothing more")
+        later.runWaiting()
+        #expect(writes.count == 1)
+
+        log.note("App: left")
+        log.sceneChanged(to: .background)
+        #expect(writes.count == 2, "In the background it's written there and then")
+        #expect(try writes.lastEntries().last?.text == "App: left")
+        log.sceneChanged(to: .background)
+        #expect(writes.count == 2, "Nothing new, no write")
+    }
 }
 
 /// A wall clock the test sets by hand.
@@ -197,18 +273,17 @@ struct RunDiagnosticsWritingTests {
 
     /// A coordinator whose notes go to a log of their own, its writes counted, and whose
     /// ticker sleeps on a clock nothing moves, so only the test advances the run.
-    private func makeNoting() -> (RunCoordinator, WorkoutStore, RunDiagnostics) {
+    private func makeNoting() -> (RunCoordinator, WorkoutStore, RunDiagnostics, FakeWorkoutSession) {
         let log = RunDiagnostics(url: tempURL(), write: writes.write, schedule: later.schedule)
-        let (coordinator, store, _, _, _, _, _) = makeCoordinator()
+        let (coordinator, store, workout, _, _, _, _) = makeCoordinator()
         coordinator.diagnostics = { log.note($0) }
         coordinator.flushDiagnostics = { log.flush() }
         coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
-        return (coordinator, store, log)
+        return (coordinator, store, log, workout)
     }
 
-    @Test("A finished run's notes are written as it finishes, not left for a write that may never come")
-    func finishFlushesImmediately() async throws {
-        let (coordinator, store, _) = makeNoting()
+    /// A one-round, five-second run, begun and run to its finish.
+    private func finishShortRun(_ coordinator: RunCoordinator, _ store: WorkoutStore) async throws {
         var short = store.selected
         short.prepareSeconds = 0
         short.workSeconds = 5
@@ -224,16 +299,48 @@ struct RunDiagnosticsWritingTests {
         coordinator.engine.now = { anchor.addingTimeInterval(5.25) }
         coordinator.advance()
         #expect(coordinator.engine.status == .finished)
+    }
+
+    @Test("A finished run's notes are written as it finishes, and the save's once it's over, not left for a write that may never come")
+    func finishFlushesImmediately() async throws {
+        let (coordinator, store, log, workout) = makeNoting()
+        let saving = Gate()
+        workout.endGate = saving
+        try await finishShortRun(coordinator, store)
         #expect(writes.count == 1, "Written as the run finished")
         let written = try writes.lastEntries().map(\.text)
         #expect(written.contains { $0.hasPrefix("Run: started") })
         #expect(written.contains { $0.hasPrefix("Run timing:") }, "The run's timing line among them")
+
+        // What the session notes as it ends and saves comes after that write.
+        log.note("Session: running → ended")
+        saving.open()
+        await settle(coordinator)
+        #expect(writes.count == 2, "Written once the save is over, not two seconds on")
+        #expect(try writes.lastEntries().last?.text == "Session: running → ended")
         coordinator.stopAndExit()
+    }
+
+    @Test("Done on a finished run writes what the Health save noted once the save is over")
+    func doneAfterFinishFlushesAfterTheSave() async throws {
+        let (coordinator, store, log, workout) = makeNoting()
+        try await finishShortRun(coordinator, store)
+        await settle(coordinator)
+
+        let saving = Gate()
+        workout.endGate = saving
+        coordinator.stopAndExit()
+        let ended = writes.count
+        log.note("Session: running → ended")
+        saving.open()
+        await settle(coordinator)
+        #expect(writes.count == ended + 1, "Written once the save is over, not two seconds on")
+        #expect(try writes.lastEntries().last?.text == "Session: running → ended")
     }
 
     @Test("Ending a run writes its notes at once too")
     func endFlushesImmediately() async throws {
-        let (coordinator, _, _) = makeNoting()
+        let (coordinator, _, _, _) = makeNoting()
         coordinator.begin()
         await settle(coordinator)
         #expect(writes.count == 0)
@@ -245,7 +352,7 @@ struct RunDiagnosticsWritingTests {
 
     @Test("With no run under way, coming to the front is noted once a minute at most; during a run, every time")
     func idleForegroundWritesAtMostOncePerMinute() async {
-        let (coordinator, _, log) = makeNoting()
+        let (coordinator, _, log, _) = makeNoting()
         let clock = HandClock()
         coordinator.engine.now = { clock.now }
         let start = clock.now

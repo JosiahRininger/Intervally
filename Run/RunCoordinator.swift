@@ -86,8 +86,8 @@ final class RunCoordinator {
     @ObservationIgnored var diagnostics: @MainActor (String) -> Void = { RunDiagnostics.shared.note($0) }
 
     /// Writes the notes out now rather than two seconds on (`RunDiagnostics.flush()`): at the
-    /// finish and at End, after which the app may not run again for a while. Injectable
-    /// alongside `diagnostics`.
+    /// finish and at End, and again once the workout's Health save is over, after which the
+    /// app may not run again for a while. Injectable alongside `diagnostics`.
     @ObservationIgnored var flushDiagnostics: @MainActor () -> Void = { RunDiagnostics.shared.flush() }
 
     /// When `handleForeground` last noted the app coming to the front, on the run's clock.
@@ -705,6 +705,8 @@ final class RunCoordinator {
             // workout app is expected to do once it has taken a session.
             let saved = await workout.end()
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
+            // What the session noted as it ended and saved came after the flush above.
+            flushDiagnostics()
         }
     }
 
@@ -742,7 +744,10 @@ final class RunCoordinator {
         flushDiagnostics()
         // A completed workout is worth saving; one the user abandoned is not.
         if wasFinished {
-            Task { await workout.end() }
+            Task {
+                await workout.end()
+                flushDiagnostics()
+            }
         } else {
             workout.discard()
         }

@@ -30,12 +30,11 @@ struct IntervallyApp: App {
         }
         .onChange(of: scenePhase) { _, phase in
             // Lowering the wrist suspends the app soon after; send an edit made just before
-            // rather than leave it waiting out the debounce until the next launch, and write
-            // out the run's diagnostics rather than leave them waiting on theirs.
-            if phase != .active {
-                delegate.sync.flush()
-                RunDiagnostics.shared.flush()
-            }
+            // rather than leave it waiting out the debounce until the next launch.
+            if phase != .active { delegate.sync.flush() }
+            // And write out the run's diagnostics rather than leave them waiting on theirs:
+            // off the main thread at wrist-down, at once in the background.
+            RunDiagnostics.shared.sceneChanged(to: phase)
         }
     }
 }
