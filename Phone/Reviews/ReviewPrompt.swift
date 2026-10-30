@@ -5,24 +5,7 @@
 
 import Foundation
 import Observation
-
-/// A moment the iPhone app may ask for an App Store rating.
-///
-/// Only Apple's own prompt is allowed (Guideline 5.6.1 rules out custom prompts, and with
-/// them any "Enjoying Intervally?" gate in front of it), the watch has none at all
-/// (`RequestReviewAction` is unavailable on watchOS), and the system shows it at most three
-/// times a year whatever the app asks. So the iPhone asks rarely, and only once someone has
-/// trained with Intervally for real.
-enum ReviewMoment: Equatable, Sendable {
-    /// Done, after a workout finished on this iPhone: the best moment there is. `count`
-    /// includes the one just finished.
-    case finishedWorkout(count: Int)
-    /// Back from a session in History: a workout's payoff, seen on the iPhone.
-    case lookedBackAtSession(sessionCount: Int)
-    /// Just after Put on Watch, the iPhone's own job done. For the people who never connect
-    /// Health, whose sessions the iPhone can't see.
-    case sentToWatch
-}
+import SwiftUI
 
 /// When a moment is good enough to ask. Pure, so the cadence is tested rather than hoped for.
 enum ReviewPolicy {
@@ -48,6 +31,8 @@ enum ReviewPolicy {
         case .finishedWorkout(let count): return count >= minimumSessions
         case .lookedBackAtSession(let count): return count >= minimumSessions
         case .sentToWatch: return ledger.activeDays >= minimumActiveDays
+        // Paying for Pro is use enough, with no count of its own to reach.
+        case .paidForPro: return true
         }
     }
 
@@ -56,7 +41,9 @@ enum ReviewPolicy {
     }
 }
 
-/// What the cadence needs to remember, on this iPhone only: never synced, never sent.
+/// What the cadence needs to remember, on this iPhone only: never synced, never sent. And,
+/// for this launch only, what is in front, so a request lands only where it interrupts
+/// nothing (`ReviewMoment.canPresent`).
 @MainActor
 @Observable
 final class ReviewLedger {
@@ -80,6 +67,20 @@ final class ReviewLedger {
     @ObservationIgnored private let calendar: Calendar
     /// Debug launches with QA flags never ask: a prompt over a screenshot capture.
     @ObservationIgnored var isSuppressed = false
+
+    /// The app's scene, as the app reports it.
+    @ObservationIgnored var scenePhase = ScenePhase.active
+    /// Whether a run is going or on screen, here or from the watch. `PhoneServices` wires it
+    /// to the run.
+    @ObservationIgnored var runIsActive: @MainActor () -> Bool = { false }
+    /// How long a request waits after its moment, so the prompt never lands mid-transition.
+    @ObservationIgnored var requestDelay = Duration.seconds(1)
+    /// The tab in front, once the tabs show: none on the welcome.
+    @ObservationIgnored private var tab: PhoneTab?
+    /// What each tab has in front, as it last said.
+    @ObservationIgnored private var screens: [PhoneTab: ReviewMoment.Screen] = [:]
+    /// The request a purchase of Pro here earned, until a return to the library makes it.
+    @ObservationIgnored private var purchaseRequest: (@MainActor () -> Void)?
 
     init(defaults: UserDefaults = .standard, calendar: Calendar = .current) {
         self.defaults = defaults
@@ -120,6 +121,79 @@ final class ReviewLedger {
         defaults.set(version, forKey: Key.lastRequestVersion)
         request()
         return true
+    }
+
+    // MARK: - Landing
+
+    /// What is in front: the front tab's own report, and nothing calm before the tabs show.
+    var topScreen: ReviewMoment.Screen {
+        tab.flatMap { screens[$0] } ?? .other
+    }
+
+    /// Whether a prompt could land right now.
+    var canPresentNow: Bool {
+        ReviewMoment.canPresent(
+            runActive: runIsActive(), scenePhase: scenePhase, topScreen: topScreen,
+            lastPromptVersion: snapshot.lastRequestVersion, currentVersion: Self.appVersion
+        )
+    }
+
+    /// A purchase of Pro here is still waiting for its return to the library.
+    var paidForPro: Bool { purchaseRequest != nil }
+
+    /// `tab` now has `screen` in front: its own, or something over it. Returns the request a
+    /// return to the library made, if it made one, for the tests to wait on.
+    @discardableResult
+    func show(_ screen: ReviewMoment.Screen, in tab: PhoneTab) -> Task<Void, Never>? {
+        let before = topScreen
+        screens[tab] = screen
+        return frontChanged(from: before)
+    }
+
+    /// `tab` is now the one in front.
+    @discardableResult
+    func select(_ tab: PhoneTab) -> Task<Void, Never>? {
+        let before = topScreen
+        self.tab = tab
+        return frontChanged(from: before)
+    }
+
+    /// A purchase of Pro just went through on this iPhone. Its paywall is still up, so the
+    /// request waits for the next return to the library.
+    func markPaidForPro(request: @escaping @MainActor () -> Void) {
+        purchaseRequest = request
+    }
+
+    /// Asks for `moment` through `request` once `requestDelay` has passed, if a prompt can
+    /// land then and `ReviewPolicy` says the moment is a good one.
+    @discardableResult
+    func askLater(_ moment: ReviewMoment, request: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+        land { self.ask(moment, request: request) }
+    }
+
+    /// Back on the library, where a purchase asks. Only a return still in front as its
+    /// request lands spends the purchase: + at the free limit passes the library on its way
+    /// from the paywall to the new workout's editor.
+    private func frontChanged(from before: ReviewMoment.Screen) -> Task<Void, Never>? {
+        guard topScreen == .library, before != .library, purchaseRequest != nil else { return nil }
+        return land {
+            // An earlier return may have asked already.
+            guard let request = self.purchaseRequest else { return }
+            self.purchaseRequest = nil
+            self.ask(.paidForPro, request: request)
+        }
+    }
+
+    /// Runs `fire` once `requestDelay` has passed, if a prompt can land then. The wait is long
+    /// enough to start a run, open a sheet or lock the phone, so this is checked as the
+    /// request lands, not as it is made. One that can't land is dropped, and spends nothing.
+    private func land(_ fire: @escaping @MainActor () -> Void) -> Task<Void, Never> {
+        let delay = requestDelay
+        return Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard self.canPresentNow else { return }
+            fire()
+        }
     }
 
     nonisolated static var appVersion: String {

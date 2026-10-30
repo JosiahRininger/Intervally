@@ -67,6 +67,7 @@ struct HistoryMessage: Equatable {
 /// a watch workout over in its own time.
 struct HistoryView: View {
     @Environment(HistoryModel.self) private var history
+    @Environment(ReviewLedger.self) private var reviews
     @Environment(\.palette) private var palette
     @State private var path: [SessionSummary] = []
     @State private var showsSettings = false
@@ -94,6 +95,10 @@ struct HistoryView: View {
         .sheet(isPresented: $showsSettings) {
             PhoneSettingsView()
                 .paletteSheet()
+        }
+        // A rating prompt lands on the list or a session's summary, never on Settings.
+        .onChange(of: showsSettings, initial: true) { _, settings in
+            reviews.show(settings ? .other : .summary, in: .history)
         }
         .onAppear {
             Task { await history.appear() }
@@ -262,4 +267,5 @@ struct ThisWeekCard: View {
 #Preview {
     HistoryView()
         .environment(HistoryModel(source: HealthHistory()))
+        .environment(ReviewLedger(defaults: UserDefaults(suiteName: "preview.reviews") ?? .standard))
 }

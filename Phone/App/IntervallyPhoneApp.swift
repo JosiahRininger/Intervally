@@ -32,6 +32,8 @@ struct IntervallyPhoneApp: App {
                 .environment(services.run)
         }
         .onChange(of: scenePhase) { _, phase in
+            // A rating prompt lands only while the app is in front.
+            services.reviews.scenePhase = phase
             if phase == .background {
                 RunDiagnostics.shared.note("App: left (background time \(Self.backgroundTime))")
             }

@@ -61,6 +61,12 @@ final class PhoneServices {
         let sync = self.sync
         self.run.requestWatchStart = { sync.requestStart(of: $0) }
         self.run.withdrawWatchStart = { sync.push(force: true) }
+        // A rating prompt never lands on a run: starting on the watch, going on either device,
+        // or still on screen with its summary.
+        self.reviews.runIsActive = { [run = self.run] in
+            run.isPresented || run.watchStart != .idle || run.coordinator.engine.isActive
+                || run.mirror.engine?.isActive == true
+        }
     }
 
     /// The app's own services, started. The only place the app creates them.

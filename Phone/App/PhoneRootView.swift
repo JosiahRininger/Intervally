@@ -78,6 +78,7 @@ enum PhoneTab: Hashable {
 /// The app's two tabs: the workouts, and the sessions they came to. Each has its own stack
 /// and its own gear for Settings.
 struct PhoneTabs: View {
+    @Environment(ReviewLedger.self) private var reviews
     @State private var tab = PhoneTab.workouts
 
     var body: some View {
@@ -89,6 +90,8 @@ struct PhoneTabs: View {
                 HistoryView()
             }
         }
+        // Which tab's screen a rating prompt would land on.
+        .onChange(of: tab, initial: true) { _, tab in reviews.select(tab) }
         #if DEBUG
         .modifier(TabsQAOpen(tab: $tab))
         #endif

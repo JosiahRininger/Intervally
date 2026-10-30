@@ -3,6 +3,7 @@
 //  IntervallyPhone
 //
 
+import StoreKit
 import SwiftUI
 
 /// Intervally Pro on iPhone: what it adds, its price, and Restore, in the shared
@@ -25,6 +26,8 @@ struct PhonePaywallView: View {
     @Environment(ProStore.self) private var pro
     @Environment(WatchSync.self) private var sync
     @Environment(PhoneRun.self) private var run
+    @Environment(ReviewLedger.self) private var reviews
+    @Environment(\.requestReview) private var requestReview
     @Environment(\.dismiss) private var dismiss
 
     @State private var lastPurchase: ProStore.PurchaseOutcome?
@@ -101,7 +104,11 @@ struct PhonePaywallView: View {
             let outcome = await pro.purchase()
             isBuying = false
             lastPurchase = outcome
-            if outcome == .purchased { unlocked() }
+            guard outcome == .purchased else { return }
+            // Paying is a moment to ask for a rating, once back on the library. A restore
+            // isn't: nothing was decided just now.
+            reviews.markPaidForPro(using: requestReview)
+            unlocked()
         }
     }
 

@@ -89,6 +89,9 @@ struct WorkoutsView: View {
 
     private var actions: PresetActions { PresetActions(store: store, pro: pro) }
 
+    /// No editor pushed, and no sheet or delete question over the list.
+    private var libraryInFront: Bool { path.isEmpty && sheet == nil && deleting == nil }
+
     var body: some View {
         NavigationStack(path: $path) {
             List {
@@ -147,6 +150,10 @@ struct WorkoutsView: View {
                 PhoneSettingsView()
                     .paletteSheet()
             }
+        }
+        // A rating prompt lands on the library only while nothing is over it.
+        .onChange(of: libraryInFront, initial: true) { _, inFront in
+            reviews.show(inFront ? .library : .other, in: .workouts)
         }
         #if DEBUG
         .modifier(WorkoutsQAOpen(path: $path, sheet: $sheet))
