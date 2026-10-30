@@ -892,7 +892,7 @@ final class RunCoordinator {
         Task {
             // A completed workout is saved to Health automatically, which is what a
             // workout app is expected to do once it has taken a session.
-            let saved = await workout.end(at: endedAt)
+            let saved = await workout.end()
             if wasWorkoutTier { summary?.health = saved ? .saved : .failed }
             // What the session noted as it ended and saved came after the flush above.
             flushDiagnostics()
