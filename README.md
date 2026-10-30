@@ -26,8 +26,9 @@ xcodebuild test -project Intervally.xcodeproj -scheme Intervally -destination 'p
 # The iPhone app (also builds the embedded watch app): PhoneTests/ and SyncTests/
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhone -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 # The iPhone UI tests (PhoneUITests/), a few minutes: Apple's accessibility audit on every
-# main screen, the editor fitting a 6.1- and 6.3-inch iPhone without scrolling, and
-# deleting a preset asking first
+# main screen, the editor fitting a 6.1- and 6.3-inch iPhone without scrolling, deleting a
+# preset asking first, and journeys end to end: a preset made and copied, a run, History,
+# Sounds & Voice and the welcome
 xcodebuild test -project Intervally.xcodeproj -scheme IntervallyPhoneUITests -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
 
@@ -37,7 +38,9 @@ launch with the debug build's QA flags. `PhoneUITests/AuditExceptions.swift` lis
 audit reports by design, each with its reason; anything else it finds fails. Every UI test
 launches with `-qaDefaults fresh`, as a new install with no system prompts, so nothing one
 test leaves behind reaches the next; one that checks something lasts relaunches with `keep`
-(`LaunchHygieneTests`).
+(`LaunchHygieneTests`). The journeys (`*JourneyTests`) find the app's own elements by the
+accessibility identifiers its views give them (system chrome such as the tab bar by its
+words), and wait for an element to change rather than for time to pass.
 
 Or every suite in one command, each on a simulator of the script's own (Intervally-QA-iPhone,
 -iPad and -Watch, made when missing, at most two booted, no other simulator touched), with a
@@ -122,6 +125,13 @@ splits instead of one undifferentiated block. The warmup and cooldown are activi
 but keep the workout's HIIT type — every activity of an interval workout shares it, and
 another type would switch the sensor algorithm mid-session — and carry their phase in
 `IntervallyPhase` metadata, with no `IntervallyRound`.
+
+A run's summary says Saved to Health only when `finishWorkout()` hands back a workout, with
+no error (`WorkoutSessionController.saveOutcome`): on a locked iPhone it has been seen to
+return none, and the run is then shown as not saved. HealthKit calls the session's delegate
+on a queue of its own, so a callback can land after its session was let go of, even once a
+newer one is running. The controller acts only on callbacks from the session and builder it
+holds, commands from the iPhone's mirror included, and notes any other in the diagnostics.
 
 `UIBackgroundModes: [audio]` is declared alongside `WKBackgroundModes`, because Apple's
 "Running workout sessions" article requires it: "If your app plays audio or provides haptic

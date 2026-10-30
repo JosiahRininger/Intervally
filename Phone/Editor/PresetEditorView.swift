@@ -284,6 +284,7 @@ struct PresetEditorView: View {
             }
             .onDisappear { commitName() }
             .accessibilityLabel("Name")
+            .accessibilityIdentifier("editor.name")
     }
 
     // MARK: - Activity
@@ -457,6 +458,7 @@ struct PresetEditorView: View {
                 } label: {
                     Label("Duplicate", systemImage: "plus.square.on.square")
                 }
+                .accessibilityIdentifier("editor.duplicate")
                 Button(role: .destructive) {
                     deleting = workout
                 } label: {
@@ -468,6 +470,7 @@ struct PresetEditorView: View {
             }
             .neutralGlass()
             .accessibilityLabel("More")
+            .accessibilityIdentifier("editor.more")
         }
     }
 

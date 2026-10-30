@@ -52,6 +52,7 @@ struct UpNextCard: View {
             .accessibilityLabel("\(title). \(content.spokenSummary)")
             .accessibilityValue(showsWatch ? "Also up next on your watch" : "")
             .accessibilityHint("Opens the editor")
+            .accessibilityIdentifier("workouts.upNext")
 
             buttons
         }

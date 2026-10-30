@@ -180,6 +180,8 @@ struct WorkoutsView: View {
             }
             .buttonStyle(.plain)
             .accessibilityHint("Opens the editor")
+            // The UI tests find a preset's card and its play button by the preset's name.
+            .accessibilityIdentifier("workouts.preset.\(workout.name)")
 
             if !editMode.isEditing {
                 Button {
@@ -196,6 +198,7 @@ struct WorkoutsView: View {
                 .buttonStyle(.borderless)
                 .padding(.trailing, PresetCard.startMargin)
                 .accessibilityLabel("Start \(workout.name)")
+                .accessibilityIdentifier("workouts.start.\(workout.name)")
             }
         }
         // No full swipe: in 1.2 it deleted the preset, on both devices, with nothing asked.
@@ -259,6 +262,7 @@ struct WorkoutsView: View {
             }
             .neutralGlass()
             .accessibilityLabel("Settings")
+            .accessibilityIdentifier("workouts.settings")
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
             Button(editMode.isEditing ? "Done" : "Edit") {
@@ -271,6 +275,7 @@ struct WorkoutsView: View {
             .neutralGlass()
             .accessibilityLabel("New Workout")
             .accessibilityHint(actions.canAdd ? "" : "Opens Intervally Pro")
+            .accessibilityIdentifier("workouts.new")
         }
     }
 
