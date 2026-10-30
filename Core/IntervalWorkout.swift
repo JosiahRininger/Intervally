@@ -160,6 +160,16 @@ struct IntervalWorkout: Codable, Equatable, Sendable, Identifiable {
         return String(chosen.prefix(maxNameLength)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    /// What a name field showing `field` saves over the `stored` name, or nil when it saves
+    /// nothing: the field left as it was, or typed back to the same name. A name kept longer
+    /// than the cap from 1.2 is cut when someone renames it, not because its editor was
+    /// opened and closed, which would sync a change nobody made.
+    static func savedName(typed field: String, stored: String) -> String? {
+        guard field != stored else { return nil }
+        let committed = committedName(field, fallback: stored)
+        return committed == stored ? nil : committed
+    }
+
     /// A copy with every field clamped into its supported range, and the name held to its
     /// cap. A name left empty is the default's, as a preset decoded without one gets.
     var clamped: IntervalWorkout {

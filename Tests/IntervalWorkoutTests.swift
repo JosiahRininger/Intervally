@@ -95,6 +95,22 @@ extension IntervalWorkoutTests {
         #expect(IntervalWorkout.committedName(Self.fortyCharacters, fallback: "Classic") == Self.fortyCharacters)
     }
 
+    @Test("A name field left as it was saves nothing, so a long 1.2 name is cut only by a rename")
+    func savedNameOnlyForARename() {
+        let legacy = Self.fortyCharacters + " and then some"
+        // Opened and closed: the field still shows the whole stored name.
+        #expect(IntervalWorkout.savedName(typed: legacy, stored: legacy) == nil)
+        #expect(IntervalWorkout.savedName(typed: "Tabata", stored: "Tabata") == nil)
+        // Typed back to the stored name, or emptied, which puts it back: nothing to save.
+        #expect(IntervalWorkout.savedName(typed: "  Tabata ", stored: "Tabata") == nil)
+        #expect(IntervalWorkout.savedName(typed: "", stored: "Tabata") == nil)
+        // Emptying a long name is typing in it, though: what comes back is held to the cap.
+        #expect(IntervalWorkout.savedName(typed: "", stored: legacy) == Self.fortyCharacters)
+        // A rename saves, trimmed and cut, even when it only shortens a long name.
+        #expect(IntervalWorkout.savedName(typed: " Hills ", stored: "Tabata") == "Hills")
+        #expect(IntervalWorkout.savedName(typed: legacy + "!", stored: legacy) == Self.fortyCharacters)
+    }
+
     /// A name, the other names taken, and what its copy is called.
     static let copiesAtTheCap: [(String, [String], String)] = {
         let x = { (count: Int) in String(repeating: "x", count: count) }
