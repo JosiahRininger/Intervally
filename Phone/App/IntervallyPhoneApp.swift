@@ -34,6 +34,8 @@ struct IntervallyPhoneApp: App {
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 RunDiagnostics.shared.note("App: left (background time \(Self.backgroundTime))")
+                // Written now: with no run holding it, the app is suspended in moments.
+                RunDiagnostics.shared.flush()
             }
             guard phase == .active else {
                 services.handleBackground()

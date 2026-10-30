@@ -74,14 +74,18 @@ plan's next countdown second or interval change (`IntervalPlan.nextEventElapsed`
 8 ms past it, never more than half a second at a time, so a tap lands with the change on
 screen rather than up to half a second after it. A change that a skip left waiting while
 paused plays half a second after Resume, clear of Resume's own tap. Each run notes in its
-diagnostics how late its changes were announced.
+diagnostics how late its changes were announced. The notes are written two seconds after
+they're made, off the main thread, and at once when a run finishes or ends or the app leaves
+the screen; with no run going, the watch notes a wrist raise at most once a minute.
 
 A `RunSnapshot` is persisted to the shared App Group on every state change, so relaunching
 after termination resumes the run exactly where it had got to, and the Smart Stack
 complication can render a live countdown without the app being awake. If the system kept a
 workout session alive across that termination it is *adopted* rather than replaced — starting
 a second session orphans the first, and everything recorded before the crash never reaches
-Health.
+Health. A run relaunched while paused on a phase it skipped to still plays that change on
+Resume. `TimerEngineFuzzTests` runs 2,000 generated plans through ticks, suspensions,
+pauses, skips and relaunches, and checks every step.
 
 Each interval is its own `HKWorkoutActivity`, so the saved workout carries real per-interval
 splits instead of one undifferentiated block. The warmup and cooldown are activities too,
@@ -347,6 +351,7 @@ PhoneTests/                Swift Testing, iPhone app
 SyncTests/                 Swift Testing, compiled into both bundles: sync runs on both devices
 TestSupport/               helpers for both bundles: the App Store listing's parser;
                            VirtualTime, a clock only the test moves, with a run's ticker on it;
+                           SeededGenerator, which makes a fuzz test's failing case replayable;
                            and Fixtures/, what 1.2 stored, sent and decided, frozen so later
                            versions are held to it (Fixture.swift has the rules)
 AppStore/                  Metadata.md (the App Store Connect listing, checked by tests) and
