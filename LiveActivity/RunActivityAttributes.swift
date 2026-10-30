@@ -32,6 +32,17 @@ struct RunActivityAttributes: ActivityAttributes {
         var clock: Clock
         /// The theme the app shows, so the activity matches it.
         var theme: AppTheme
+        /// Where the phase sits in the plan, for Skip Interval: a tap that lands once the
+        /// phase has run out skips nothing. Nil once finished, and in 1.2's states.
+        var phaseIndex: Int? = nil
+        /// The buttons the activity shows; nil for none, as in 1.2's states.
+        var controls: Controls? = nil
+
+        /// Pause or Resume, and Skip Interval. Never End: ending a workout asks first what to
+        /// do with it, and only the app can ask.
+        struct Controls: Codable, Hashable {
+            var canPause, canResume, canSkip: Bool
+        }
     }
 
     var workoutName: String
@@ -47,5 +58,11 @@ extension RunActivityAttributes.ContentState {
     var staleDate: Date? {
         if case .running(_, let phaseEnd, _) = clock { return phaseEnd.addingTimeInterval(2) }
         return nil
+    }
+
+    /// The buttons to draw: none once the system has marked the activity stale, when the
+    /// phase it shows has run out and the app hasn't been able to say what came next.
+    func visibleControls(isStale: Bool) -> Controls? {
+        isStale ? nil : controls
     }
 }

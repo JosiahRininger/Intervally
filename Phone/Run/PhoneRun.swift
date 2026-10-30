@@ -72,13 +72,14 @@ final class PhoneRun {
         workout: (any WorkoutSessioning)? = nil,
         notifications: (any BoundaryScheduling)? = nil,
         presenter: (any RunPresenting)? = nil,
+        activityHost: any LiveActivityHosting = ActivityKitHost(),
         defaults: UserDefaults = SharedDefaults.suite
     ) {
         self.store = store
         self.defaults = defaults
         let resolvedOutput = output ?? CueAudio()
         let cues = PhoneCuePlayer(output: resolvedOutput, pro: pro, defaults: defaults)
-        let activity = LiveActivityPresenter { theme.effective(isPro: pro.isPro) }
+        let activity = LiveActivityPresenter(host: activityHost) { theme.effective(isPro: pro.isPro) }
         self.cues = cues
         self.activity = activity
         // A test's stand-in sees what the Live Activity would have been shown.
@@ -170,6 +171,16 @@ final class PhoneRun {
         guard isMirroring else { return coordinator.skip() }
         guard let phase = engine.position.phaseIndex else { return }
         mirror.send(.skip(phase: phase))
+    }
+
+    /// A tap on the Live Activity's Pause, Resume or Skip Interval (`RunActivityIntents`), for
+    /// this iPhone's own run: the watch's run shows no buttons. Taken as the watch takes its
+    /// iPhone mirror's buttons, so one that lands after the run has moved on, an interval run
+    /// out or a pause made in the app, does nothing. Returns once the activity shows what the
+    /// tap did: iOS can suspend the app again as soon as the intent returns.
+    func control(_ command: RunMirrorCommand) async {
+        coordinator.handleRemote(command)
+        await activity.settled()
     }
 
     /// End, confirmed. A watch run is ended on the watch, and its screen here closes at once,
@@ -294,7 +305,7 @@ final class PhoneRun {
         // been none here.
         if let watchRun = mirror.engine, watchRun.isActive {
             showsWatchRun = true
-            presenter.present(RunPresentation(engine: watchRun))
+            presenter.present(RunPresentation(engine: watchRun, isMirrored: true))
         } else {
             isPresented = false
         }

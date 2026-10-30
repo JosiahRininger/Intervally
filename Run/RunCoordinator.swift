@@ -761,8 +761,11 @@ final class RunCoordinator {
         workout.mirror(RunMirrorState(engine: engine, health: summary.map { RunMirrorState.Health($0.health) }))
     }
 
-    /// What the iPhone's mirror asked for.
-    private func handleRemote(_ command: RunMirrorCommand) {
+    /// What the iPhone's mirror asked for, on the watch, or a Live Activity button on iPhone
+    /// (`PhoneRun.control(_:)`). Each is done only if the run still stands as the button
+    /// showed it, so a tap that crosses a change on its way does nothing rather than the
+    /// opposite.
+    func handleRemote(_ command: RunMirrorCommand) {
         switch command {
         case .pause:
             guard engine.status == .running else { return }

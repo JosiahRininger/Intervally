@@ -92,7 +92,7 @@ final class WatchRunMirror {
         }
         self.engine = engine
         if engine.status == .running { startTicking() } else { stopTicking() }
-        onPresentation?(RunPresentation(engine: engine))
+        onPresentation?(RunPresentation(engine: engine, isMirrored: true))
         if isNew { onShow?() }
     }
 
@@ -108,7 +108,7 @@ final class WatchRunMirror {
         _ = engine.advance()
         if engine.status == .running, engine.plan.totalDuration - engine.elapsed < Self.finishTolerance {
             settleFinished(engine)
-            onPresentation?(RunPresentation(engine: engine))
+            onPresentation?(RunPresentation(engine: engine, isMirrored: true))
         }
         guard engine.status != .finished else { return }
         log.info("the watch's session ended")
@@ -174,7 +174,7 @@ final class WatchRunMirror {
                 guard let self, !Task.isCancelled, let engine = self.engine else { return }
                 let events = engine.advance()
                 if events.contains(where: { if case .countdown = $0 { false } else { true } }) {
-                    self.onPresentation?(RunPresentation(engine: engine))
+                    self.onPresentation?(RunPresentation(engine: engine, isMirrored: true))
                 }
                 if engine.status != .running { self.stopTicking() }
             }
