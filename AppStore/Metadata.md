@@ -26,6 +26,13 @@ app inside its build. Archive and upload the `IntervallyPhone` scheme only.
 > 1.0 nor 1.1 reached a reviewer, so 1.2 is Intervally's first release (no What's New
 > field), and Intervally Pro goes in with it. The listing below is 1.2's.
 
+> **1.3 (build 14) is the first update.** New: Pause, Resume and Skip Interval on the Lock
+> Screen and in the Dynamic Island; End can save the workout so far; deleting asks first;
+> cues land on the second; Hear the Coach before buying; "Saved to Health" only when it was.
+> Intervally Pro is approved and on the store, so this submission leaves it out. The rest of
+> the 1.3 plan (sets and circuits, History without Health, goals and reminders, Siri starts,
+> workout files) moves to 1.4.
+
 ## App information
 
 | Field | Value |
@@ -63,38 +70,41 @@ through a josiahrininger.com pull request merged before submitting:
 ## Promotional text (170)
 
 ```
-Press Start and hear every interval, even over your music. Name each interval and give it an icon. On Apple Watch, every change taps your wrist, screen off or not.
+No subscription: Pro is a one-time purchase. Cues play over your music, and your music keeps playing. On Apple Watch, every change taps your wrist, screen off or not.
 ```
-(163)
+(166)
 
 ## Description (4000)
 
 ```
 Intervally is an interval timer for iPhone, iPad and Apple Watch. Set how long to work, how long to rest, and how many rounds, press Start, and train. Every interval change is marked for you, with a tone on your iPhone or a tap on your wrist, so you never have to watch the clock.
 
+NO SUBSCRIPTION, NO ADS
+Intervally is free to use, with no ads and no account. Intervally Pro is a one-time purchase, not a subscription: buy it once and it unlocks iPhone, iPad and Apple Watch, shared with your family.
+
 TRAIN WITH YOUR IPHONE OR IPAD
-Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. The cues play right over your music, and the music keeps playing, with Intervally open or your phone locked. The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
+Press Start and put your phone down. A tone marks each change, higher for work and lower for rest, with a 3-2-1 countdown before it. The cues play right over your music, and the music keeps playing, with Intervally open or your phone locked. The countdown stays on your Lock Screen and in the Dynamic Island, where you can pause, resume or skip an interval without unlocking.
 
 OR ON YOUR WRIST
-With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone, then tap Start on Watch to run one on your wrist right away. Tap Put on Watch and it's the next workout your watch starts. Changes reach your watch on their own, and each app keeps working without the other.
+With Apple Watch, every interval change taps your wrist, even with your wrist down or the screen off. Build workouts on iPhone, then tap Start on Watch to run one on your wrist right away. Tap Put on Watch and it's the next workout your watch starts. Workouts sync between iPhone and Apple Watch, and each app keeps working without the other. On iPad, they stay on the iPad.
 
 KNOW WHERE YOU ARE AT A GLANCE
-A large countdown sits inside a ring that runs down with it. Each phase has its own color — amber to get ready, blue to work, green to rest — so a quick glance tells you everything mid-burpee.
+A large countdown sits inside a ring that runs down with it. Each phase has its own color: amber to get ready, blue to work, green to rest. A quick glance tells you everything mid-burpee.
 
 SEE EVERY SESSION
-Every workout you finish is saved to Apple Health. History on iPhone shows them all: the rounds you finished and the calories you burned in every interval, and with Apple Watch your average and highest heart rate and your heart rate for every interval.
+Every workout you finish is saved to Apple Health. End a workout early and you choose: save what you did, or discard it. History on iPhone shows them all: the rounds you finished and the calories you burned in every interval, and with Apple Watch your average and highest heart rate and your heart rate for every interval.
 
 NAME EVERY INTERVAL
-Call each interval what it is, Run and Walk, Lift and Breathe, Sprint and Recover, and give it an icon. Its name shows on the run screen, your Lock Screen and your watch, and the voice coach says it.
+Call each interval what it is, Run and Walk, Brisk and Easy for Japanese interval walking, Lift and Breathe, Sprint and Recover, and give it an icon. Its name shows on the run screen, your Lock Screen and your watch, and the voice coach says it.
 
 PRESETS FOR HOW YOU TRAIN
 Start with Classic, Tabata, or EMOM and adjust any interval. Intervally Pro, a one-time purchase, adds unlimited presets, warmup and cooldown phases, a voice coach that calls out every interval on iPhone, stronger taps on Apple Watch, and Pastel, a theme in soft colors. Buy it once, on your iPhone or your watch, and it unlocks both.
 
 KEEPS GOING, WHATEVER YOU DO
-Lock your phone, lower your wrist, or switch apps mid-set. Intervally keeps exact time regardless, and picks up right where you were if the app is closed. With Apple Health on, it runs as a workout, so every change is marked even when you are not looking.
+Lock your phone, lower your wrist, or switch apps mid-set. Intervally keeps exact time regardless, lands every cue on the second, and picks up right where you were if the app is closed. With Apple Health on, it runs as a workout, so every change is marked even when you are not looking.
 
-COUNTS TOWARD YOUR RINGS
-With Apple Health, every completed workout is saved as the activity you choose for it, from HIIT to running, cycling, rowing, strength or yoga, with each work and rest interval recorded separately so you can see the breakdown in Fitness.
+SAVED THE WAY YOU TRAIN
+With Apple Health, every completed workout is saved as the activity you choose for it, from HIIT to running, cycling, rowing, strength or yoga, with each work and rest interval recorded separately so you can see the breakdown in Fitness. With Apple Watch, your workouts count toward your Activity rings.
 
 START IT YOUR WAY ON APPLE WATCH
 • Say "Start my Intervally workout" to Siri
@@ -104,7 +114,7 @@ START IT YOUR WAY ON APPLE WATCH
 • Add the complication to your watch face to see the interval you're on
 
 PRIVATE BY DESIGN
-No account, no ads, no tracking, and no servers. Your presets and workouts stay on your iPhone, iPad and Apple Watch and in Apple Health, and presets travel directly between your own devices.
+No account, no ads, no tracking, and no servers. Your presets and workouts stay on your iPhone, iPad and Apple Watch and in Apple Health, and presets travel directly between your iPhone and your Apple Watch.
 
 Workouts run on iPhone, iPad or Apple Watch, whichever you start them on. Made for every iPhone, iPhone Duo included, and for iPad in any orientation. Intervally is a timer, not a medical device. Check with a healthcare provider before starting a new exercise program.
 ```
@@ -112,30 +122,54 @@ Workouts run on iPhone, iPad or Apple Watch, whichever you start them on. Made f
 ## Keywords (100)
 
 ```
-watch,circuit,boxing,training,rounds,rest,gym,countdown,amrap,cardio,sprint,yoga,coach,beep,fitness
+run,walk,walking,japanese,round,boxing,circuit,amrap,wod,watch,rest,sprint,training,cardio,countdown
 ```
-(99) — omits words already in the name and subtitle (interval, timer, hiit, tabata, emom, workouts), which Apple indexes anyway.
+(100) — omits words already in the name and subtitle (interval, timer, hiit, tabata, emom, workouts), which Apple indexes anyway, and every es-MX keyword (below).
 
-## What's New in 1.2 (4000)
-
-Not asked for: App Store Connect has no What's New field until a version is on the store,
-and 1.2 is Intervally's first. Kept for the first update.
+## What's New in 1.3 (4000)
 
 ```
-Intervally now runs your workouts on iPhone and iPad too, no Apple Watch needed.
-
-• Press Start on any workout and hear every interval: a tone for each change, higher for work and lower for rest, with a 3-2-1 countdown before it, right over your music.
-• Name every interval and give it an icon: Run and Walk, Lift and Breathe. The voice coach says your names.
-• Choose what Apple Health records each workout as, from HIIT to running, cycling or rowing.
-• Set any length to the five seconds, with a wheel for minutes and one for seconds.
-• The countdown stays on your Lock Screen and in the Dynamic Island, and the workout keeps going with your phone locked.
-• Every workout you finish is saved to Apple Health. History now shows the calories you burned in every interval.
-• Intervally Pro adds a voice coach that calls out every interval.
-• Choose what you hear, and how loud, in Settings > Sounds & Voice.
-• Made for iPad and iPhone Duo, in any orientation.
-
-With Apple Watch: tap Start on Watch to run a workout on your wrist straight from your iPhone.
+• Pause, resume or skip an interval right from your Lock Screen or the Dynamic Island.
+• End a workout early and keep it: End now offers Save Workout, so a session you cut short still counts in Apple Health.
+• Every cue lands right on the second, even after a pause or a skip.
+• Deleting a workout always asks first, on iPhone, iPad and Apple Watch.
+• Hear the voice coach before you buy Intervally Pro. At the free limit, you can edit a starter workout instead.
+• If Apple Health couldn't save a workout, the summary says so.
+• Workouts sync more reliably between iPhone and Apple Watch, and long workouts keep their final alert.
 ```
+(630)
+
+## Listing localizations
+
+en-GB, en-AU and en-CA reuse the en-US name, subtitle, promotional text, description,
+keywords, What's New and screenshots. es-MX reuses the en-US copy and screenshots with
+keywords of its own, which share no word with the en-US keywords, the name or the subtitle:
+the US storefront indexes es-MX too, so they widen what Intervally is found for.
+
+| Field | Value |
+|---|---|
+| es-MX Keywords (100) | `rowing,cycling,spin,rope,jump,kettlebell,plank,stretch,strength,core,pilates,kickboxing,dance,stairs` (100) |
+
+## Accessibility Nutrition Labels
+
+Declared only for what the app does by default and the audits back
+(`AccessibilityAuditTests`: contrast, descriptions and the largest text size on iPhone).
+
+| Device | Declared |
+|---|---|
+| iPhone | Dark Interface, Larger Text, Sufficient Contrast |
+| iPad | Dark Interface |
+| Apple Watch | Dark Interface |
+
+Not declared yet: VoiceOver, Voice Control, Reduced Motion, Differentiate Without Color
+Alone, Captions and Audio Descriptions. The accessibility work planned for 1.4 (p52 to p55
+in the 1.3 plan) and audits on iPad and the watch are what would earn them.
+
+## Analytics Reports
+
+An ONGOING Analytics Reports request was filed with the Admin API key on 2026-10-30
+(`e9d40318-256d-448e-9e4e-85bd2c27247c`). Apple starts producing the reports a day or two
+later; they hold no personal data.
 
 ## App Privacy (nutrition label)
 
@@ -158,9 +192,9 @@ app and widget).
 
 **Sign-in required:** No (uncheck it: it has defaulted to checked before).
 
-**In-App Purchases:** add Intervally Pro to the submission. App Review hasn't seen it: it went
-in with 1.0 and then 1.1, and each was pulled before review. The API can't attach a first
-In-App Purchase, so use the In-App Purchase's page, **Add for Review**, then the version's.
+**In-App Purchases:** Intervally Pro is approved and on the store (approved 2026-10-27, with
+1.2), so a version goes in without it. Add it to a submission only when its own record
+changes; through the API, an In-App Purchase that has been approved before goes in on its own.
 
 ### Notes for the reviewer (4000)
 
@@ -168,33 +202,32 @@ Paste this verbatim. It pre-empts the questions HealthKit, the background modes,
 Activity and the In-App Purchase attract:
 
 ```
-Intervally is an interval timer for iPhone, iPad and Apple Watch. No account or sign-in is needed. Workouts run on iPhone and iPad, no Apple Watch required, and every screen works without a watch.
+Intervally is an interval timer for iPhone, iPad and Apple Watch. No account, sign-in or Apple Watch is needed.
 
 ON IPHONE
-1. Workouts lists the presets. Tap Start on the workout up next, or the play button on any workout, to run it. The first run asks for notifications and Apple Health.
-2. The run counts down a 10-second lead-in, then alternates work and rest, with a tone at each change and a 3-2-1 tick before it. Lock the phone: the countdown stays on the Lock Screen (a Live Activity) and the tones continue. X (bottom left) ends the run; bottom right skips an interval. A finished run shows a summary and is saved to Health.
-3. Tap a workout to edit it: each tile (Work, Rest, Rounds, Get Ready) opens a picker, and changes save as they are made. In a phase's picker, tap its name to rename it and pick an icon; the capsule at the top of the editor sets its Health activity. With a paired watch, Start on Watch runs it on the watch, and Put on Watch makes it the workout the watch starts next. + adds a workout.
-4. History reads the interval workouts saved to Apple Health by either device. Tap Connect Apple Health.
+1. Tap Start on the workout up next, or the play button on any workout, to run it; the first run asks for notifications and Apple Health.
+2. A 10-second lead-in, then work and rest alternate: a tone at each change, a 3-2-1 tick before it. Locked, the Lock Screen and Dynamic Island show the countdown with Pause or Resume and Skip Interval, and the tones go on. X (bottom left) ends the run and asks first: after a minute with Health on, Save Workout keeps what was done; or Discard, or Keep Going. Bottom right skips an interval.
+3. Tap a workout to edit it: each tile (Work, Rest, Rounds, Get Ready) opens a picker, and changes save as made. In a phase's picker, tap its name to rename it. With a paired watch, Start on Watch runs it there, and Put on Watch makes it the workout the watch starts next. + adds a workout; Delete always asks first.
+4. History reads the interval workouts either device saved to Apple Health. Tap Connect Apple Health.
 5. Settings (the gear at top left) has Intervally Pro, Theme, Sounds & Voice, Apple Watch, Apple Health, Restore Purchases, Redeem Code, Support and the Privacy Policy.
-6. Settings > Theme switches between Classic and Pastel. Pastel is part of Intervally Pro, and also changes the Home Screen icon.
-7. Settings > Sounds & Voice turns the beeps, the 3-2-1 countdown and Keep Screen On on or off, and plays a sample. Its Voice Coach, which calls out each interval as it starts, is part of Intervally Pro.
+6. Settings > Theme switches between Classic and Pastel. Pastel is part of Intervally Pro and also changes the Home Screen icon.
+7. Settings > Sounds & Voice turns the beeps, the 3-2-1 countdown and Keep Screen On on or off. Its Voice Coach, which calls out each interval as it starts, is part of Intervally Pro. Free users can tap Hear the Coach to hear it.
 
 ON APPLE WATCH
-1. Tap Start. Allow notifications and Apple Health when asked.
-2. A 10-second lead-in, then work and rest alternate.
-3. Lower your wrist or let the screen turn off: the watch taps at each change.
-4. X (bottom left) ends the run; let it finish to see the summary and the workout saved to Health. Top right skips an interval.
-Presets sync directly between the user's own devices over WatchConnectivity; each app works on its own.
+1. Tap Start; allow notifications and Apple Health when asked. A 10-second lead-in, then work and rest alternate.
+2. Lower your wrist or let the screen turn off: the watch taps at each change.
+3. X (bottom left) ends the run; let it finish to see the summary. Top right skips an interval.
+Presets sync between the user's iPhone and watch over WatchConnectivity; each app works on its own.
 
 IN-APP PURCHASE
-Intervally Pro (com.josiahrininger.intervally.pro), a one-time, non-consumable unlock for both apps, is submitted with this version. On iPhone, tap + (top right of Workouts): the 3 starter presets fill the free limit, so the Intervally Pro screen opens. On the watch, tap the list icon (top left of the setup screen), then New Preset. If the product doesn't load, the screen says "Pro isn't available right now" with Try Again, and every free feature still works.
+Intervally Pro (com.josiahrininger.intervally.pro), a one-time unlock for both apps, is approved and on the store, so it isn't in this submission. On iPhone, tap + (top right of Workouts): the 3 starter presets fill the free limit, so the Intervally Pro screen opens. On the watch, tap the list icon (top left), then New Preset. If the product doesn't load, the screen says "Pro isn't available right now" with Try Again, and every free feature still works.
 
 HEALTHKIT
-Health access is optional on both devices. Each device saves the workouts it runs as the activity chosen for it (High Intensity Interval Training by default), each interval its own segment. The watch reads heart rate during a workout; iPhone History reads workouts, heart rate and active energy. To Health the two apps are one app, so every request asks for the same types. If Health is declined, the timer still works: on iPhone its sounds mark each change with the app in the background, and notifications take over if they can't play. On the watch, notifications do. No health data leaves the user's devices.
+Health is optional on both devices. Each device saves the workouts it runs (High Intensity Interval Training by default), each interval its own segment. The watch reads heart rate during a workout; iPhone History reads workouts, heart rate and active energy. If Health is declined, the timer still works: on iPhone its sounds mark each change in the background, and notifications take over if they can't play; on the watch, notifications do. No health data leaves the user's devices.
 
 BACKGROUND MODES
 iPhone app:
-- audio: each interval change is a tone, or the voice coach's words, played while the phone is locked or another app is in front. iOS won't start an app's audio from the background, so a workout's audio output stays open from Start to the end. The workout session (HKWorkoutSession) saves the workout to Health.
+- audio: each interval change is a tone, or the voice coach's words, played while the phone is locked or another app is in front. iOS won't start an app's audio from the background, so a workout's audio output stays open from Start to the end, mixed with other audio: cues play over music without lowering it. Voice coach phrases are prepared only while no other audio plays and kept on the device, so the app never pauses or lowers other audio; a phrase not ready while music plays is skipped and the tone still marks the change. The workout session (HKWorkoutSession) saves the workout to Health.
 Apple Watch app:
 - workout-processing: taps the wrist at each change with the screen off; watchOS allows background haptics only during a workout session.
 - physical-therapy: the fallback when Health is declined, so changes are still signaled.
