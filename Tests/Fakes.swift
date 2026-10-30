@@ -138,8 +138,9 @@ final class FakeRuntimeSession: RuntimeSessioning {
 /// Records the ordered notification-scheduling calls the coordinator makes.
 final class SpyScheduler: BoundaryScheduling, @unchecked Sendable {
     enum Call: Equatable {
-        case schedule(anchor: Date)
+        case schedule(anchor: Date, minimumLead: TimeInterval)
         case cancelAll
+        case disarm(String)
     }
 
     private let lock = NSLock()
@@ -155,17 +156,34 @@ final class SpyScheduler: BoundaryScheduling, @unchecked Sendable {
 
     var scheduleCount: Int { calls.filter { if case .schedule = $0 { true } else { false } }.count }
 
+    /// The lead each schedule asked for, in order.
+    var leads: [TimeInterval] {
+        calls.compactMap { if case .schedule(_, let lead) = $0 { lead } else { nil } }
+    }
+
+    /// Each alert taken down, in order.
+    var disarmed: [String] {
+        calls.compactMap { if case .disarm(let identifier) = $0 { identifier } else { nil } }
+    }
+
     /// What the notification permission prompt resolves to.
     nonisolated(unsafe) var authorizationResult = true
 
     func requestAuthorization() async -> Bool { authorizationResult }
 
-    func schedule(plan: IntervalPlan, anchor: Date) async {
-        append(.schedule(anchor: anchor))
+    func schedule(plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval) async {
+        append(.schedule(anchor: anchor, minimumLead: minimumLead))
     }
 
     func cancelAll() async {
         append(.cancelAll)
+    }
+
+    /// Never: it schedules nothing to run out of.
+    func needsTopUp(now: Date) async -> Bool { false }
+
+    func disarm(identifier: String) async {
+        append(.disarm(identifier))
     }
 }
 

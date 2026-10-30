@@ -268,8 +268,10 @@ final class QAWorkoutSession: WorkoutSessioning {
 /// schedules nothing.
 struct QABackstop: BoundaryScheduling {
     func requestAuthorization() async -> Bool { true }
-    func schedule(plan: IntervalPlan, anchor: Date) async {}
+    func schedule(plan: IntervalPlan, anchor: Date, minimumLead: TimeInterval) async {}
     func cancelAll() async {}
+    func needsTopUp(now: Date) async -> Bool { false }
+    func disarm(identifier: String) async {}
 }
 
 /// History from Health for a fresh launch: read as usual, but Connect asks for nothing, so

@@ -45,7 +45,7 @@ struct SoundsSettingsView: View {
             } header: {
                 Text("Interval Changes")
             } footer: {
-                Text("A tone marks each change, higher for work and lower for rest. With the countdown on, three ticks come before it.")
+                Text("A tone marks each change, higher for work and lower for rest. With the countdown on, three ticks come before it. With beeps and the voice coach off, a notification marks each change while iPhone is locked.")
             }
 
             Section {

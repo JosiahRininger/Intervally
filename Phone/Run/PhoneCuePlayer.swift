@@ -101,6 +101,20 @@ final class PhoneCuePlayer: BoundaryHaptics {
         }
     }
 
+    /// Whether the run's cues will be heard away from the app at media volume `volume`, so the
+    /// run can take each change's alert down and let the cue mark it. The beeps, which carry
+    /// the countdown too, always play. The voice counts only once every phrase of the run is
+    /// rendered: away from the app, with music playing, one that isn't is skipped, and with
+    /// the beeps off nothing else would sound. Muted, nothing is heard, though the alerts
+    /// still are: they ring at the ringer's volume, which is apart. Without any of it a
+    /// change is only a tap, felt only with the app in front.
+    func isHeardAway(atVolume volume: Float) -> Bool {
+        let settings = self.settings
+        guard volume > 0 else { return false }
+        return settings.beeps
+            || (settings.voice && output.hasRendered(Self.phrases(for: phasesInRun(), totalRounds: roundsInRun())))
+    }
+
     /// Whether the cues would be hard to hear at `volume`: with something to hear (beeps,
     /// which carry the countdown too, or the voice), and the media volume near the bottom.
     func isQuiet(atVolume volume: Float) -> Bool {

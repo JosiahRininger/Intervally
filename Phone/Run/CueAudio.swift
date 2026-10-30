@@ -23,6 +23,9 @@ protocol CueOutput: AnyObject {
     /// can say them away from the app, where the system voice may not render, and with music
     /// playing, which rendering would pause. Those already rendered are skipped.
     func prepare(_ phrases: [String])
+    /// Whether every one of `phrases` is rendered, so the voice can say it whatever else
+    /// plays. One that isn't is skipped while other audio plays (`prepare`).
+    func hasRendered(_ phrases: [String]) -> Bool
     /// Stops whatever is still sounding.
     func silence()
     /// The run is over: the audio is handed back, and the volume buttons go back to the
@@ -230,6 +233,17 @@ final class CueAudio: NSObject, CueOutput {
         }
     }
 
+    func hasRendered(_ phrases: [String]) -> Bool {
+        phrases.allSatisfy { phrase in
+            if self.phrases[phrase] != nil { return true }
+            // Read from the disk now, into memory, where the cue it's asked about reads it.
+            guard let samples = voiceCache.samples(for: phrase, voice: voiceID),
+                  let buffer = Self.buffer(samples, format: format) else { return false }
+            self.phrases[phrase] = buffer
+            return true
+        }
+    }
+
     // MARK: - Playing
 
     /// Plays `buffer` now on `node`, cutting off what it was playing. False if the engine
@@ -348,11 +362,16 @@ final class CueAudio: NSObject, CueOutput {
         _ = ensureRunning()
     }
 
-    private func interrupted(began: Bool) {
+    /// A call, Siri, or audio that can't be mixed took the audio, or gave it back. Not private
+    /// so its tests can stand in for the interruption notification.
+    func interrupted(began: Bool) {
         diagnostics.note("Audio: interrupted, \(began ? "began" : "ended")")
         if began {
-            // The system has let the session go and stopped the engine.
+            // The system has let the session go and stopped the engine. Said at once, so the
+            // run marks its changes with notifications from now, not from the first cue that
+            // fails to play.
             isActive = false
+            report(healthy: false)
         } else if isHeld {
             // Back after a call: the engine picks up again, which works in front and, as a
             // resumption the system offers, often away from it too.
@@ -402,8 +421,9 @@ final class CueAudio: NSObject, CueOutput {
         return phrases[phrase]
     }
 
-    /// Which voice renders, for the disk cache: a new system voice renders afresh.
-    private var voiceID: String { voice?.identifier ?? "default" }
+    /// Which voice renders, for the disk cache: a new system voice renders afresh. Not private
+    /// so its tests can fill the cache.
+    var voiceID: String { voice?.identifier ?? "default" }
 
     /// `phrase` rendered by the system voice, at the cues' rate, without it ever touching
     /// the app's audio session.

@@ -1513,3 +1513,381 @@ struct RunCoordinatorCueHealthTests {
         #expect(!coordinator.cuesFailing)
     }
 }
+
+/// Background time a run asked for, and what was pending as it gave each back.
+@MainActor
+private final class SpyBackgroundWork {
+    private(set) var asked: [String] = []
+    /// How many alerts were pending at each give-back.
+    private(set) var pendingAtEnd: [Int] = []
+    private let center: FakeNotificationCenter
+
+    init(center: FakeNotificationCenter) {
+        self.center = center
+    }
+
+    func begin(_ name: String) -> @MainActor () -> Void {
+        asked.append(name)
+        return { [self] in pendingAtEnd.append(center.pending.count) }
+    }
+}
+
+@Suite("Run coordinator — the backstop, by whether the cues can be heard")
+@MainActor
+struct RunCoordinatorAudibleBackstopTests {
+
+    let time = VirtualTime()
+
+    /// work 5 | rest 5 | work 5: changes at 5 and 10 s, the finish at 15 s.
+    private func useShortWorkout(_ store: WorkoutStore) {
+        var short = store.selected
+        short.prepareSeconds = 0
+        short.workSeconds = 5
+        short.restSeconds = 5
+        short.rounds = 2
+        store.update(short)
+    }
+
+    /// Health declined, with no retries, so nothing changes the tier under the test.
+    private func declineHealth(_ workout: FakeWorkoutSession) {
+        workout.isSupported = false
+        workout.startResult = false
+    }
+
+    /// A run on the real scheduler, its clock the notification center's.
+    private func makeScheduledRun(
+        _ center: FakeNotificationCenter, store: WorkoutStore, pro: FakePro = FakePro()
+    ) -> RunCoordinator {
+        let workout = FakeWorkoutSession()
+        declineHealth(workout)
+        let coordinator = RunCoordinator(
+            store: store, pro: pro, haptics: SpyHaptics(), workout: workout, runtime: FakeRuntimeSession(),
+            notifications: NotificationScheduler(center: center, now: { center.now }),
+            playCue: { _ in }, reloadWidgets: {}
+        )
+        coordinator.engine.now = { center.now }
+        // Asleep on a clock nothing moves, so only the test advances the run.
+        coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+        return coordinator
+    }
+
+    /// Begins a run made by `makeScheduledRun`, and waits for its first schedule. Its start
+    /// asks the scheduler's actor for permission and the schedule runs there, and `settle`'s
+    /// yields on the main actor don't wait for another one.
+    private func beginScheduled(_ coordinator: RunCoordinator) async {
+        coordinator.begin()
+        #expect(await waitUntil { coordinator.tier == .extendedRuntime })
+        await coordinator.backstopSettled()
+    }
+
+    /// Wakes the ticker to the run's end, and says which alerts came down, at which wake.
+    private func disarms(_ coordinator: RunCoordinator, _ spy: SpyScheduler) async -> [(at: TimeInterval, identifier: String)] {
+        var disarms: [(at: TimeInterval, identifier: String)] = []
+        while coordinator.engine.status == .running {
+            let seen = spy.calls.count
+            guard await coordinator.nextWake(on: time) != nil else { break }
+            await coordinator.backstopSettled()
+            for case .disarm(let identifier) in spy.calls.dropFirst(seen) {
+                disarms.append((time.elapsed, identifier))
+            }
+        }
+        return disarms
+    }
+
+    @Test("The watch decides as 1.2 did for every tier, running or not, its cues sounding or not, and takes nothing down")
+    func watchDecisionUnchangedForEveryTier() {
+        // The watch leaves `awayCuesAudible` as it comes.
+        let (coordinator, _, _, _, _, _, _) = makeCoordinator()
+        for tier in RunCoordinator.RuntimeTier.allCases {
+            for isRunning in [true, false] {
+                for cuesFailing in [false, true] {
+                    let decided = RunCoordinator.backstop(
+                        isRunning: isRunning, tier: tier,
+                        cuesAudible: coordinator.awayCuesAudible(tier) && !cuesFailing
+                    )
+                    // 1.2's rule, as it was written.
+                    let scheduled12 = isRunning && (!tier.deliversHaptics || cuesFailing)
+                    #expect(
+                        decided == RunCoordinator.Backstop(isScheduled: scheduled12, disarms: false),
+                        "\(tier), running \(isRunning), cues failing \(cuesFailing)"
+                    )
+                }
+            }
+        }
+    }
+
+    @Test("On the watch, without a workout session, every change keeps its alert to the end")
+    func watchFallbackTakesNothingDown() async {
+        let (coordinator, store, workout, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        declineHealth(workout)
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .extendedRuntime)
+        #expect(await waitUntil { time.sleeping == 1 })
+        #expect(await disarms(coordinator, spy).isEmpty)
+        #expect(coordinator.engine.status == .finished)
+        #expect(spy.leads == [NotificationScheduler.defaultMinimumLead])
+        coordinator.stopAndExit()
+    }
+
+    @Test("iPhone, Health declined, sounds on: each change's alert comes down 2 s before it, the finish's too, once each")
+    func phoneHealthDeclinedSoundsOnDisarmsEachBoundary() async {
+        let (coordinator, store, workout, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        declineHealth(workout)
+        // The iPhone's sounds, on: heard away from the app, whatever keeps the run going.
+        coordinator.awayCuesAudible = { _ in true }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .extendedRuntime)
+        #expect(spy.leads == [RunCoordinator.disarmingMinimumLead], "Scheduled all the same: the app could be suspended")
+        #expect(await waitUntil { time.sleeping == 1 })
+        // Off the half-second grid, so each comes down at the 2-second tick rather than at a
+        // wake that happens to fall 2 s before the change.
+        await coordinator.pauseOffTheGrid(on: time)
+        let disarms = await disarms(coordinator, spy)
+
+        #expect(coordinator.engine.status == .finished)
+        #expect(disarms.map(\.identifier) == [
+            NotificationScheduler.identifier(forPhase: 1), NotificationScheduler.identifier(forPhase: 2),
+            NotificationScheduler.finishIdentifier,
+        ])
+        for (disarm, change) in zip(disarms, [5.0, 10, 15]) {
+            #expect(abs(change - disarm.at - 1.992) < 0.000_001, "\(disarm.identifier) came down at \(disarm.at) s")
+        }
+        #expect(spy.leads.allSatisfy { $0 == RunCoordinator.disarmingMinimumLead })
+        coordinator.stopAndExit()
+    }
+
+    @Test("Repeat's run takes its alerts down too, though they have the last run's names")
+    func repeatedRunTakesItsAlertsDown() async {
+        let (coordinator, store, workout, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        declineHealth(workout)
+        coordinator.awayCuesAudible = { _ in true }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        let first = await disarms(coordinator, spy).map(\.identifier)
+        #expect(first.count == 3)
+
+        coordinator.restart()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        #expect(await disarms(coordinator, spy).map(\.identifier) == first)
+        coordinator.stopAndExit()
+    }
+
+    @Test("iPhone with a workout session but the beeps and the voice off: notifications mark each change, none taken down")
+    func phoneWorkoutTierSoundsOffSchedulesBackstop() async {
+        let (coordinator, store, _, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        coordinator.awayCuesAudible = { _ in false }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .workout)
+        // On the watch a session's taps mark the changes; an iPhone's are felt only in front.
+        #expect(spy.leads == [NotificationScheduler.defaultMinimumLead])
+        #expect(await waitUntil { time.sleeping == 1 })
+        #expect(await disarms(coordinator, spy).isEmpty, "Nothing will be heard, so every alert stays up")
+        #expect(spy.calls.last == .cancelAll, "Gone with the finish")
+        coordinator.stopAndExit()
+    }
+
+    @Test("iPhone with a workout session and sounds on: the cues mark each change, and no alerts are scheduled")
+    func phoneWorkoutTierSoundsOnSchedulesNothing() async {
+        let (coordinator, store, _, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        coordinator.awayCuesAudible = { _ in true }
+        coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(coordinator.tier == .workout)
+        coordinator.togglePause()
+        coordinator.togglePause()
+        coordinator.skip()
+        coordinator.handleForeground()
+        await settle(coordinator)
+        #expect(spy.scheduleCount == 0)
+        #expect(spy.calls.allSatisfy { $0 == .cancelAll })
+        coordinator.stopAndExit()
+    }
+
+    @Test("Without a workout session, cues that stop sounding leave the alerts up, and nothing is scheduled again")
+    func cueHealthFlipOutsideWorkoutDoesNotReschedule() async {
+        let (coordinator, store, workout, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        declineHealth(workout)
+        coordinator.awayCuesAudible = { _ in true }
+        coordinator.runOnVirtualTime(time)
+
+        coordinator.begin()
+        await settle(coordinator)
+        #expect(await waitUntil { time.sleeping == 1 })
+        let scheduled = spy.calls
+
+        // The audio stops before the first change, so its alert has to go off.
+        coordinator.cuesHealthChanged(healthy: false)
+        await settle(coordinator)
+        #expect(spy.calls == scheduled, "The alerts are up already: nothing cancelled, nothing added")
+        _ = await coordinator.tick(on: time) { coordinator.engine.position.phaseIndex == 1 }
+        await coordinator.backstopSettled()
+        #expect(spy.disarmed.isEmpty, "No cue will mark the rest, so its alert stays up")
+
+        // Sounding again: the next change's alert comes down before it, still with nothing
+        // scheduled afresh.
+        coordinator.cuesHealthChanged(healthy: true)
+        _ = await coordinator.tick(on: time) { coordinator.engine.position.phaseIndex == 2 }
+        await coordinator.backstopSettled()
+        #expect(spy.disarmed == [NotificationScheduler.identifier(forPhase: 2)])
+        #expect(spy.calls.count == scheduled.count + 1)
+        coordinator.stopAndExit()
+    }
+
+    @Test("While the app takes the alerts down, every schedule leaves out a change under 2.5 s off; otherwise 1.2's half second")
+    func rescheduleUsesMinimumLeadWhileDisarming() async {
+        let (coordinator, store, workout, _, spy, _, _) = makeCoordinator()
+        useShortWorkout(store)
+        declineHealth(workout)
+        coordinator.awayCuesAudible = { _ in true }
+        coordinator.tickSleep = { [time] in try await time.sleep(for: .seconds($0)) }
+
+        // The start, a skip, a resume and coming back to the front all schedule afresh.
+        coordinator.begin()
+        await settle(coordinator)
+        coordinator.skip()
+        coordinator.togglePause()
+        coordinator.togglePause()
+        coordinator.handleForeground()
+        await settle(coordinator)
+        #expect(spy.leads == Array(repeating: RunCoordinator.disarmingMinimumLead, count: 4))
+
+        // Cues that can't sound, and then none on at all: nothing is taken down, so the lead
+        // goes back to 1.2's.
+        coordinator.cuesHealthChanged(healthy: false)
+        coordinator.handleForeground()
+        await settle(coordinator)
+        coordinator.cuesHealthChanged(healthy: true)
+        coordinator.awayCuesAudible = { _ in false }
+        coordinator.handleForeground()
+        await settle(coordinator)
+        #expect(spy.leads.dropFirst(4) == [NotificationScheduler.defaultMinimumLead, NotificationScheduler.defaultMinimumLead])
+        coordinator.stopAndExit()
+    }
+
+    @Test("A schedule straight after an alert came down doesn't put it back")
+    func rescheduleKeepsATakenDownAlertDown() async {
+        let center = FakeNotificationCenter(now: Date(timeIntervalSinceReferenceDate: 700_000))
+        let store = WorkoutStore(defaults: makeTestDefaults())
+        useShortWorkout(store)
+        let coordinator = makeScheduledRun(center, store: store)
+        coordinator.awayCuesAudible = { _ in true }
+        let rest = NotificationScheduler.identifier(forPhase: 1)
+
+        await beginScheduled(coordinator)
+        #expect(center.pending.map(\.identifier).contains(rest))
+        // 1.8 s before the rest, the app takes its alert down: its cue will mark it.
+        center.advance(by: 3.2)
+        coordinator.advance()
+        await settle(coordinator)
+        #expect(!center.pending.map(\.identifier).contains(rest))
+
+        // Back in front, which schedules afresh. With 1.2's lead the rest's alert came back up.
+        coordinator.handleForeground()
+        await settle(coordinator)
+        #expect(center.pending.map(\.identifier) == [
+            NotificationScheduler.identifier(forPhase: 2), NotificationScheduler.finishIdentifier,
+        ])
+        coordinator.stopAndExit()
+    }
+
+    @Test("An alert due to come down while a schedule is still adding it comes down once that schedule is in")
+    func disarmWaitsForTheScheduleInFlight() async {
+        let center = FakeNotificationCenter(now: Date(timeIntervalSinceReferenceDate: 750_000))
+        let store = WorkoutStore(defaults: makeTestDefaults())
+        useShortWorkout(store)
+        let coordinator = makeScheduledRun(center, store: store)
+        coordinator.awayCuesAudible = { _ in true }
+        let rest = NotificationScheduler.identifier(forPhase: 1)
+
+        await beginScheduled(coordinator)
+        #expect(center.added.count == 3)
+        // 2.6 s before the rest, back in front: a schedule afresh, which still names the rest,
+        // and whose add of it is held on its way to the server.
+        let inFlight = center.holdAdd(4, landed: false)
+        center.advance(by: 2.4)
+        coordinator.handleForeground()
+        await inFlight.reached()
+        #expect(center.added.last?.identifier == rest)
+
+        // At the 2-second tick the rest's alert is due to come down. A disarm that didn't wait
+        // for the schedule would find nothing pending, and the add would then put it up.
+        center.advance(by: 0.608)
+        coordinator.advance()
+        let removals = center.removed.count
+        try? await Task.sleep(for: .milliseconds(100))
+        #expect(center.removed.count == removals, "Nothing comes down while the schedule adds")
+
+        inFlight.release()
+        await settle(coordinator)
+        #expect(center.removed.last == [rest])
+        #expect(center.pending.map(\.identifier) == [
+            NotificationScheduler.identifier(forPhase: 2), NotificationScheduler.finishIdentifier,
+        ])
+        coordinator.stopAndExit()
+    }
+
+    @Test("A long workout's alerts are topped up as they run low, so every change has one, to the finish", arguments: [true, false])
+    func topUpAfterPhaseBeganWhenWindowLow(inFront: Bool) async throws {
+        let center = FakeNotificationCenter(now: Date(timeIntervalSinceReferenceDate: 800_000))
+        let store = WorkoutStore(defaults: makeTestDefaults())
+        // The longest workout the app allows: 200 phases, so 199 changes and the finish, where
+        // one schedule holds 59 changes and the finish.
+        var longest = store.selected
+        longest.prepareSeconds = 10
+        longest.warmupSeconds = 60
+        longest.workSeconds = 5
+        longest.restSeconds = 5
+        longest.rounds = 99
+        longest.cooldownSeconds = 60
+        store.update(longest)
+        let coordinator = makeScheduledRun(center, store: store, pro: FakePro(isPro: true))
+        let work = SpyBackgroundWork(center: center)
+        coordinator.isAppActive = { inFront }
+        coordinator.beginBackgroundWork = { work.begin($0) }
+
+        await beginScheduled(coordinator)
+        let plan = coordinator.engine.plan
+        #expect(plan.phases.count == 200)
+        let anchor = try #require(coordinator.engine.anchor)
+        for (index, phase) in plan.phases.enumerated().dropFirst() {
+            let moment = anchor.addingTimeInterval(phase.start)
+            let alert = center.pending.first { $0.identifier == NotificationScheduler.identifier(forPhase: index) }
+            #expect(alert.map { abs($0.fireDate.timeIntervalSince(moment)) < 0.001 } == true, "Change \(index) has its alert")
+            center.advance(by: moment.timeIntervalSince(center.now) + 0.008)
+            coordinator.advance()
+            await settle(coordinator)
+        }
+        #expect(center.pending.contains { $0.identifier == NotificationScheduler.finishIdentifier })
+        // The start's schedule, and a top-up as each lot ran low: at the 50th change, the 100th
+        // and the 150th.
+        #expect(center.added.filter { $0.identifier == NotificationScheduler.finishIdentifier }.count == 4)
+        if inFront {
+            #expect(work.asked.isEmpty, "In front, there's no background time to ask for")
+        } else {
+            #expect(work.asked.count == 3)
+            #expect(work.pendingAtEnd == [60, 60, 50], "Given back once each top-up was in")
+        }
+        coordinator.stopAndExit()
+    }
+}
