@@ -203,13 +203,15 @@ struct WorkoutsModelTests {
     }
 
     /// On iPad, or an iPhone with no watch paired, nothing is removed from any watch.
-    @Test("Delete's confirmation names the watch only when there is one", arguments: [
+    @Test("Delete's question names the device, and the watch only on an iPhone that has one", arguments: [
         PeerState.unsupported, .activating, .notPaired, .appNotInstalled, .ready,
     ])
     func deleteMessage(peer: PeerState) {
-        let message = WorkoutsContent.deleteMessage(peer: peer)
-        #expect(message.contains("watch") == peer.hasWatch)
-        #expect(message == (peer.hasWatch ? "It's removed from your watch too." : "This can't be undone."))
+        #expect(WorkoutsContent.deleteMessage(on: .phone, peer: peer) == (peer.hasWatch
+            ? "It will be removed from this iPhone and your Apple Watch."
+            : "It will be removed from this iPhone."))
+        // iPad never has a watch, whatever the peer reads as.
+        #expect(WorkoutsContent.deleteMessage(on: .pad, peer: peer) == "It will be removed from this iPad.")
     }
 
     @Test("The bring-your-presets hint shows until the watch has sent anything", arguments: [
