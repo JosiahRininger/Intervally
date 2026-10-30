@@ -4,6 +4,7 @@
 //
 
 import Foundation
+import UserNotifications
 
 /// The seams `RunCoordinator` is built against.
 ///
@@ -77,6 +78,20 @@ protocol BoundaryScheduling: Sendable {
     func cancelAll() async
 }
 
+/// What `NotificationScheduler` asks of `UNUserNotificationCenter`. The scheduler's bugs have
+/// been in its timing and its ordering: delays fixed before slow round trips, and a cancel
+/// landing between two adds. Neither shows against the real center in a test, so its tests
+/// run it against a stand-in that can make an add take time, or hold one open meanwhile.
+protocol NotificationCentering: Sendable {
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func authorizationStatus() async -> UNAuthorizationStatus
+    /// Every request still to fire, the app's own of every kind, not only the run's.
+    func pendingRequestIdentifiers() async -> [String]
+    func removePendingRequests(withIdentifiers identifiers: [String])
+    /// Replaces any pending request with the same identifier.
+    func add(_ request: UNNotificationRequest) async throws
+}
+
 /// What marks each boundary: taps on the watch, sounds, a voice and taps on iPhone. A
 /// stronger tap repeats after the call that starts it returns, so the coordinator must be
 /// able to silence the rest when the run pauses, stops or starts over — and its tests need
@@ -120,7 +135,25 @@ extension ExtendedRuntimeController: RuntimeSessioning {}
 
 extension NotificationScheduler: BoundaryScheduling {
     func schedule(plan: IntervalPlan, anchor: Date) async {
-        await schedule(plan: plan, anchor: anchor, now: Date())
+        await schedule(plan: plan, anchor: anchor, minimumLead: Self.defaultMinimumLead)
+    }
+}
+
+/// The app's one notification center, which 1.2 already called from the scheduler's actor,
+/// off the main thread. UserNotifications doesn't mark it Sendable, so this does.
+extension UNUserNotificationCenter: @unchecked @retroactive Sendable {}
+
+extension UNUserNotificationCenter: NotificationCentering {
+    func authorizationStatus() async -> UNAuthorizationStatus {
+        await notificationSettings().authorizationStatus
+    }
+
+    func pendingRequestIdentifiers() async -> [String] {
+        await pendingNotificationRequests().map(\.identifier)
+    }
+
+    func removePendingRequests(withIdentifiers identifiers: [String]) {
+        removePendingNotificationRequests(withIdentifiers: identifiers)
     }
 }
 

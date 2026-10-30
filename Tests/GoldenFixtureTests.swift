@@ -180,13 +180,19 @@ private enum Replay {
         var body: String
     }
 
-    /// Tabata's alerts, scheduled the moment its run starts.
+    /// Tabata's alerts, scheduled the moment its run starts. An alert keeps its moment now,
+    /// not 1.2's delay, so the delay is how long after that start it goes off.
     static func tabataAlerts() -> [Alert] {
         NotificationScheduler.requests(
             plan: IntervalPlan(workout: Fixture.starters12[1]),
             anchor: Fixture.anchor12, now: Fixture.anchor12, limit: 60
         )
-        .map { Alert(identifier: $0.identifier, delay: $0.delay, title: $0.title, body: $0.body) }
+        .map {
+            Alert(
+                identifier: $0.identifier, delay: $0.fireDate.timeIntervalSince(Fixture.anchor12),
+                title: $0.title, body: $0.body
+            )
+        }
     }
 
     // MARK: Taps
