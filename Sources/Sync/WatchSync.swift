@@ -294,34 +294,44 @@ final class WatchSync: NSObject {
         if let pendingTheme = SyncWire.theme(from: received) { _ = mergeTheme(pendingTheme) }
         // Start on Watch launches the app; the request it came with may be waiting here.
         receiveStart(SyncWire.startRequest(from: received))
-        pushAtActivation(answering: pending)
+        pushAtActivation(answering: pending, sentAt: SyncWire.sentAt(from: received))
     }
 
     /// Where the other device's last context answered at activation is remembered, by its
-    /// digest (`SyncDocument.digest`).
+    /// digest (`SyncDocument.digest`) and when it was sent (`activationReplyMarker`).
     nonisolated static let activationReplyKey = "sync.activationReply.v1"
+
+    /// One context, told apart from any other. Every fresh install sends the same starters,
+    /// so the digest alone would match a reinstalled device's context to an answer given to
+    /// the first install, and that device would wait for the next edit. Its send time sets
+    /// it apart; a context from a version that doesn't say when it was sent goes by digest.
+    nonisolated static func activationReplyMarker(digest: String, sentAt: Date?) -> String {
+        guard let sentAt else { return digest }
+        return "\(digest)@\(sentAt.timeIntervalSinceReferenceDate)"
+    }
 
     /// Activation's send. An ordinary push skips a document this device has sent before, but
     /// the other device may never have taken it: it was reinstalled, or the context arrived
     /// while it couldn't, and it would wait for the next edit here. So when its last context
     /// lacks writes this device holds, the whole document goes again, forced, and that
-    /// context's digest is remembered. One that is still behind at the next launch, as from
-    /// a device that took the answer and had nothing to add, isn't answered again: the two
+    /// context is remembered. The same context still behind at the next launch, as from a
+    /// device that took the answer and had nothing to add, isn't answered again: the two
     /// would wake each other at every launch. Compared by stamps alone, so a version that
     /// drops a field it doesn't know is never behind for that.
-    private func pushAtActivation(answering pending: SyncDocument?) {
+    private func pushAtActivation(answering pending: SyncDocument?, sentAt: Date?) {
         guard let pending else {
             push()
             return
         }
         let theirs = pending.digest
-        guard theirs != store.document.digest, defaults.string(forKey: Self.activationReplyKey) != theirs else {
+        let marker = Self.activationReplyMarker(digest: theirs, sentAt: sentAt)
+        guard theirs != store.document.digest, defaults.string(forKey: Self.activationReplyKey) != marker else {
             push()
             return
         }
         // Remembered only once sent: an answer that couldn't go is tried again at the next launch.
         guard push(force: true) else { return }
-        defaults.set(theirs, forKey: Self.activationReplyKey)
+        defaults.set(marker, forKey: Self.activationReplyKey)
         log.info("answered the other device's last presets, which lacked some of these")
     }
 

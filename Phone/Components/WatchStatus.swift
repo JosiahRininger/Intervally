@@ -86,6 +86,17 @@ extension PeerState {
 }
 
 /// Where the watch stands, and when the presets last went across.
+extension WatchStatusContent {
+    /// Where `sync` stands, as every screen that shows the watch reads it. One place, so no
+    /// screen can leave out the suspension and say "You're set" while nothing syncs.
+    @MainActor
+    init(sync: WatchSync) {
+        self.init(
+            peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt, syncSuspended: sync.isSuspended
+        )
+    }
+}
+
 struct WatchStatusCard: View {
     let content: WatchStatusContent
 

@@ -97,20 +97,23 @@ struct WatchStatusContentTests {
         #expect(suspended == WatchStatusContent(peer: peer, lastSentAt: earlier, lastReceivedAt: later))
     }
 
-    @Test("The card reads the store's suspension through sync")
+    @Test("The card reads the store's suspension through sync, the way every screen builds it")
     @MainActor
     func suspensionReachesTheCard() {
         let defaults = makeTestDefaults()
-        let readable = WatchSync(store: WorkoutStore(defaults: defaults), transport: FakeTransport())
+        let transport = FakeTransport()
+        let readable = WatchSync(store: WorkoutStore(defaults: defaults), transport: transport)
         #expect(readable.isSuspended == false)
+        #expect(WatchStatusContent(sync: readable).title == "You're set")
+        #expect(WatchStatusContent(sync: readable).offersSendNow)
 
         defaults.set(Data("not a document".utf8), forKey: WorkoutStore.Key.document)
-        let sync = WatchSync(store: WorkoutStore(defaults: defaults), transport: FakeTransport())
+        let sync = WatchSync(store: WorkoutStore(defaults: defaults), transport: transport)
         #expect(sync.isSuspended)
-        let content = WatchStatusContent(
-            peer: sync.peer, lastSentAt: sync.lastSentAt, lastReceivedAt: sync.lastReceivedAt, syncSuspended: sync.isSuspended
-        )
+        #expect(sync.peer == .ready)
+        let content = WatchStatusContent(sync: sync)
         #expect(content.title == "Workouts aren't syncing")
         #expect(content.offersSendNow == false)
+        #expect(content.lastSynced == nil)
     }
 }

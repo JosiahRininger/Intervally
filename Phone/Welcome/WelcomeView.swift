@@ -71,12 +71,7 @@ struct WelcomeView: View {
                     // Only with a watch to speak of: without one, "No Apple Watch paired" on
                     // the first screen would read as something missing.
                     if sync.peer.hasWatch {
-                        WatchStatusCard(content: WatchStatusContent(
-                            peer: sync.peer,
-                            lastSentAt: sync.lastSentAt,
-                            lastReceivedAt: sync.lastReceivedAt,
-                            syncSuspended: sync.isSuspended
-                        ))
+                        WatchStatusCard(content: WatchStatusContent(sync: sync))
                     }
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { belowRing = $0 }

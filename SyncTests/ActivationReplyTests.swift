@@ -141,6 +141,38 @@ struct ActivationReplyTests {
         #expect(transport.sentDocuments.last == store.document)
     }
 
+    @Test("A device reinstalled after an answer sends the same starters again, and is answered again, once")
+    func reinstalledPeerAnswered() throws {
+        try peerMissesTheLastSend()
+        launch().0.sessionDidActivate()
+        #expect(transport.sent.count == 2)
+
+        // Reinstalled, the other device starts from the starters again: the same digest as
+        // the context just answered, but a new send.
+        let reinstalled = try SyncWire.context(for: .fresh, sentAt: Date(timeIntervalSince1970: 2_000))
+        #expect(SyncWire.document(from: reinstalled)?.digest == SyncWire.document(from: PeerDevice().context)?.digest)
+        transport.receivedApplicationContext = reinstalled
+        let (sync, store) = launch()
+        sync.sessionDidActivate()
+        #expect(transport.sent.count == 3)
+        #expect(transport.sentDocuments.last == store.document)
+
+        // It took the answer and had nothing to add: that context isn't answered again.
+        for _ in 0..<3 { launch().0.sessionDidActivate() }
+        #expect(transport.sent.count == 3)
+    }
+
+    @Test("A context that doesn't say when it was sent is answered once, by its digest")
+    func contextWithoutSentAtAnsweredOnce() throws {
+        try peerMissesTheLastSend()
+        var undated = PeerDevice().context
+        undated[SyncWire.sentAtKey] = nil
+        transport.receivedApplicationContext = undated
+        for _ in 0..<3 { launch().0.sessionDidActivate() }
+        #expect(transport.sent.count == 2)
+        #expect(defaults.string(forKey: WatchSync.activationReplyKey) == SyncDocument.fresh.digest)
+    }
+
     @Test("An answer that couldn't be sent is tried again at the next launch")
     func failedReplyRetried() throws {
         try peerMissesTheLastSend()
