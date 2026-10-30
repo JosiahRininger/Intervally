@@ -428,17 +428,27 @@ struct RunCoordinatorLifecycleTests {
         #expect(coordinator.summary?.health == .saved)
     }
 
-    @Test("A failed Health save is reported, not shown as saved")
-    func summaryReportsFailedSave() async {
+    @Test("A failed Health save is reported, never shown as saved, here or to the iPhone")
+    func failedSaveSummaryIsNotSaved() async {
         let (coordinator, _, workout, _, _, _, _) = makeCoordinator()
+        // What the controller now says of a save whose finishWorkout returned no workout.
         workout.endResult = false
+        let gate = Gate()
+        workout.endGate = gate
 
         coordinator.begin()
         await settle(coordinator)
         finishRun(coordinator)
         await settle(coordinator)
+        #expect(coordinator.summary?.health == .saving)
 
+        gate.open()
+        await settle(coordinator)
         #expect(coordinator.summary?.health == .failed)
+        #expect(workout.endCount == 1)
+        // The iPhone hears the finish while the save is under way, and never hears Saved.
+        #expect(workout.mirrored.contains { $0.health == .saving })
+        #expect(!workout.mirrored.contains { $0.health == .saved })
     }
 
     @Test("A run without a workout session says nothing about Health")
